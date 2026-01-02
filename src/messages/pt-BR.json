@@ -1,0 +1,188 @@
+{
+  "common": {
+    "appName": "Apprutea",
+    "loading": "Carregando...",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "delete": "Excluir",
+    "edit": "Editar",
+    "create": "Criar",
+    "search": "Buscar",
+    "filter": "Filtrar",
+    "export": "Exportar",
+    "back": "Voltar",
+    "next": "Próximo",
+    "previous": "Anterior",
+    "yes": "Sim",
+    "no": "Não",
+    "confirm": "Confirmar",
+    "close": "Fechar",
+    "actions": "Ações",
+    "status": "Status",
+    "active": "Ativo",
+    "inactive": "Inativo",
+    "all": "Todos",
+    "none": "Nenhum",
+    "selectOption": "Selecione uma opção",
+    "noResults": "Nenhum resultado encontrado",
+    "error": "Erro",
+    "success": "Sucesso",
+    "warning": "Atenção"
+  },
+  "auth": {
+    "login": {
+      "title": "Entrar",
+      "subtitle": "Acesse sua conta para continuar",
+      "email": "E-mail",
+      "emailPlaceholder": "seu@email.com",
+      "password": "Senha",
+      "passwordPlaceholder": "••••••••",
+      "rememberMe": "Lembrar de mim",
+      "forgotPassword": "Esqueceu a senha?",
+      "submitButton": "Entrar",
+      "submitting": "Entrando...",
+      "noAccount": "Não tem uma conta?",
+      "register": "Registre-se",
+      "or": "ou",
+      "accessCode": "Código de Acesso",
+      "accessCodePlaceholder": "Digite seu código",
+      "loginWithCode": "Entrar com código",
+      "loginWithEmail": "Entrar com e-mail",
+      "errors": {
+        "invalidCredentials": "E-mail ou senha inválidos",
+        "invalidCode": "Código de acesso inválido",
+        "emailRequired": "E-mail é obrigatório",
+        "emailInvalid": "E-mail inválido",
+        "passwordRequired": "Senha é obrigatória",
+        "passwordMinLength": "Senha deve ter no mínimo 6 caracteres",
+        "codeRequired": "Código de acesso é obrigatório",
+        "serverError": "Erro no servidor. Tente novamente."
+      }
+    },
+    "register": {
+      "title": "Criar Conta",
+      "subtitle": "Preencha seus dados para começar",
+      "name": "Nome completo",
+      "namePlaceholder": "Seu nome",
+      "submitButton": "Criar conta",
+      "hasAccount": "Já tem uma conta?",
+      "login": "Entre aqui"
+    },
+    "forgotPassword": {
+      "title": "Recuperar Senha",
+      "subtitle": "Digite seu e-mail para receber o link de recuperação",
+      "submitButton": "Enviar link",
+      "backToLogin": "Voltar para login",
+      "emailSent": "E-mail enviado! Verifique sua caixa de entrada."
+    }
+  },
+  "dashboard": {
+    "title": "Dashboard",
+    "welcome": "Bem-vindo, {name}!",
+    "overview": "Visão Geral",
+    "todaySummary": "Resumo do Dia",
+    "openSessions": "Sessões Abertas",
+    "closedSessions": "Sessões Fechadas",
+    "pendingApproval": "Aguardando Aprovação",
+    "totalCollection": "Recaudo Total",
+    "expectedCollection": "Recaudo Esperado",
+    "collectionPercentage": "% Recaudo"
+  },
+  "liquidation": {
+    "title": "Liquidação Diária",
+    "daily": "Diária",
+    "byPeriod": "Por Período",
+    "vendor": "Vendedor",
+    "status": {
+      "open": "Aberto",
+      "closed": "Fechado",
+      "inProcess": "Em Processo"
+    },
+    "initialCash": "Caixa Inicial",
+    "finalCash": "Caixa Final",
+    "collection": "Recaudo",
+    "expected": "Pretendido",
+    "actual": "Atual",
+    "paid": "Pagos",
+    "unpaid": "Não Pagos",
+    "newSales": "Vendas Novas",
+    "expenses": "Gastos",
+    "income": "Ingresos"
+  },
+  "clients": {
+    "title": "Clientes",
+    "newClient": "Novo Cliente",
+    "search": "Buscar cliente...",
+    "document": "Documento",
+    "name": "Nome",
+    "phone": "Telefone",
+    "address": "Endereço",
+    "balance": "Saldo",
+    "loans": "Empréstimos",
+    "history": "Histórico"
+  },
+  "loans": {
+    "title": "Empréstimos",
+    "newLoan": "Novo Empréstimo",
+    "principal": "Valor Principal",
+    "interest": "Juros",
+    "installments": "Parcelas",
+    "frequency": "Frequência",
+    "frequencies": {
+      "daily": "Diário",
+      "weekly": "Semanal",
+      "biweekly": "Quinzenal",
+      "monthly": "Mensal"
+    },
+    "startDate": "Data Início",
+    "endDate": "Data Fim",
+    "balance": "Saldo Atual"
+  },
+  "payments": {
+    "title": "Pagamentos",
+    "newPayment": "Registrar Pagamento",
+    "amount": "Valor",
+    "type": "Tipo",
+    "types": {
+      "cash": "Dinheiro",
+      "transfer": "Transferência"
+    },
+    "installmentNumber": "Parcela Nº",
+    "date": "Data",
+    "observation": "Observação"
+  },
+  "settings": {
+    "title": "Configurações",
+    "general": "Geral",
+    "users": "Usuários",
+    "vendors": "Vendedores",
+    "hierarchy": "Hierarquia",
+    "permissions": "Permissões",
+    "language": "Idioma",
+    "theme": "Tema",
+    "themes": {
+      "light": "Claro",
+      "dark": "Escuro",
+      "system": "Sistema"
+    }
+  },
+  "navigation": {
+    "dashboard": "Dashboard",
+    "liquidation": "Liquidação",
+    "clients": "Clientes",
+    "loans": "Empréstimos",
+    "payments": "Pagamentos",
+    "reports": "Relatórios",
+    "settings": "Configurações",
+    "logout": "Sair"
+  },
+  "validation": {
+    "required": "Campo obrigatório",
+    "email": "E-mail inválido",
+    "minLength": "Mínimo {min} caracteres",
+    "maxLength": "Máximo {max} caracteres",
+    "number": "Deve ser um número",
+    "positive": "Deve ser positivo",
+    "date": "Data inválida"
+  }
+}
