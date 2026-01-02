@@ -115,7 +115,7 @@ export const authService = {
   async verificarStatus(userId: string) {
     const { data: profile, error } = await supabase
       .from('user_profiles')
-      .select('status, token_acesso, token_validado')
+      .select('status, token_acesso, token_validado, nome, tipo_usuario')
       .eq('user_id', userId)
       .single();
 

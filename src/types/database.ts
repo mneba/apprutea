@@ -8,6 +8,29 @@ export interface Hierarquia {
   created_at?: string;
 }
 
+export interface Empresa {
+  id: string;
+  hierarquia_id: string;
+  nome: string;
+  cnpj?: string;
+  telefone?: string;
+  email?: string;
+  endereco?: string;
+  tipo_empresa: 'PROPRIA' | 'PARCEIRA';
+  vendedores_ids?: string[];
+  rotas_ids?: string[];
+  status: 'ATIVA' | 'INATIVA';
+  created_at?: string;
+}
+
+export interface Rota {
+  id: string;
+  nome: string;
+  descricao?: string;
+  status: 'ATIVA' | 'INATIVA';
+  created_at?: string;
+}
+
 export interface UserProfile {
   id: string;
   user_id: string;
@@ -38,6 +61,33 @@ export interface UserProfile {
   updated_at?: string;
 }
 
+export interface ModuloSistema {
+  id: string;
+  codigo: string;
+  nome: string;
+  descricao?: string;
+  categoria?: string;
+  ativo: boolean;
+  ordem_exibicao: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface UserPermissao {
+  id?: string;
+  user_id: string;
+  modulo_id: string;
+  pode_todos: boolean;
+  pode_guardar: boolean;
+  pode_buscar: boolean;
+  pode_eliminar: boolean;
+  concedido_por?: string;
+  data_concessao?: string;
+  observacoes?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface MensagemSistema {
   id: string;
   usuario_origem_id?: string;
@@ -46,6 +96,64 @@ export interface MensagemSistema {
   lido: boolean;
   created_at?: string;
   updated_at?: string;
+}
+
+export interface Vendedor {
+  id: string;
+  nome: string;
+  codigo_vendedor: string;
+  telefone?: string;
+  documento?: string;
+  endereco?: string;
+  salario?: number;
+  percentual_recaudo?: number;
+  percentual_vendas?: number;
+  rotas_ids?: string[];
+  status: 'ATIVO' | 'INATIVO';
+  created_at?: string;
+}
+
+export interface Cliente {
+  id: string;
+  nome: string;
+  documento?: string;
+  telefone?: string;
+  endereco?: string;
+  hierarquia_id?: string;
+  empresa_id?: string;
+  vendedor_id?: string;
+  status: 'ATIVO' | 'INATIVO';
+  created_at?: string;
+}
+
+export interface LiquidacaoDiaria {
+  id: string;
+  vendedor_id: string;
+  rota_id: string;
+  empresa_id: string;
+  data_abertura: string;
+  data_fechamento?: string;
+  status: 'ABERTO' | 'FECHADO' | 'APROVADO';
+  caixa_inicial: number;
+  caixa_final: number;
+  carteira_inicial: number;
+  carteira_final: number;
+  valor_esperado_dia: number;
+  valor_recebido_dia: number;
+  percentual_recebimento: number;
+  clientes_iniciais: number;
+  clientes_sincronizados: number;
+  clientes_novos: number;
+  clientes_renovados: number;
+  clientes_cancelados: number;
+  pagamentos_pagos: number;
+  pagamentos_nao_pagos: number;
+  valor_dinheiro: number;
+  valor_transferencia: number;
+  observacoes?: string;
+  aprovado_por?: string;
+  data_aprovacao?: string;
+  created_at?: string;
 }
 
 // Tipos para formulários

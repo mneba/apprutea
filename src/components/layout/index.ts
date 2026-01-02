@@ -1,0 +1,1 @@
+export { SeletorLocalizacao } from './SeletorLocalizacao';
