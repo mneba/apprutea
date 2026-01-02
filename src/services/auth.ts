@@ -32,8 +32,8 @@ export const authService = {
         nome: dados.nome,
         telefone: dados.telefone,
         empresa_pretendida: dados.empresa_pretendida,
-        status: 'PENDENTE',
-        tipo_usuario: 'ADMIN', // Padrão para novos usuários web
+        status: 'APROVADO',
+        tipo_usuario: 'USUARIO_PADRAO',
         cidades_ids: hierarquia ? [dados.hierarquia_id] : [],
       })
       .select()
@@ -53,7 +53,7 @@ export const authService = {
       const mensagens = superAdmins.map((admin) => ({
         usuario_origem_id: userId,
         usuario_destino_id: admin.user_id,
-        mensagem: `🆕 Nova solicitação de acesso!\n\n👤 Nome: ${dados.nome}\n📱 Telefone: ${dados.telefone}\n🏢 Empresa Pretendida: ${dados.empresa_pretendida}\n📍 Localização: ${hierarquia?.estado}, ${hierarquia?.pais}\n\n⏳ Aguardando aprovação e geração de código de acesso.`,
+        mensagem: `🆕 Nova solicitação de acesso!\n\n👤 Nome: ${dados.nome}\n📱 Telefone: ${dados.telefone}\n🏢 Empresa Pretendida: ${dados.empresa_pretendida}\n📍 Localização: ${hierarquia?.estado}, ${hierarquia?.pais}\n\n⏳ Aguardando geração de código de acesso.`,
         lido: false,
       }));
 
@@ -72,7 +72,7 @@ export const authService = {
 
     if (error) throw error;
 
-    // Verificar se usuário tem perfil e está aprovado
+    // Verificar se usuário tem perfil
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('*')
@@ -102,8 +102,7 @@ export const authService = {
     const { error: updateError } = await supabase
       .from('user_profiles')
       .update({ 
-        token_validado: true,
-        status: 'APROVADO'
+        token_validado: true
       })
       .eq('user_id', userId);
 
