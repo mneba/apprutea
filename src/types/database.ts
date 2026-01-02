@@ -58,6 +58,7 @@ export interface UserProfile {
   token_gerado_em?: string;
   token_validado?: boolean;
   url_foto_usuario?: string;
+  Url_foto_usuario?: string; // Campo com maiúscula no banco
   pagina_atual?: string;
   ultima_empresa_id?: string;
   ultima_cidade_id?: string;

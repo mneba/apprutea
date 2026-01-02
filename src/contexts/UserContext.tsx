@@ -23,6 +23,10 @@ interface UserContextType {
   refreshProfile: () => Promise<void>;
 }
 
+// Debug helper
+const DEBUG = true;
+const log = (...args: any[]) => DEBUG && console.log('🔐 UserContext:', ...args);
+
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
@@ -44,21 +48,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   // Carregar usuário e perfil
   const loadUser = async () => {
+    log('Iniciando carregamento do usuário...');
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      log('Auth user:', user?.id);
       setUser(user);
 
       if (user) {
         // Buscar perfil completo
-        const { data: profileData } = await supabase
+        const { data: profileData, error } = await supabase
           .from('user_profiles')
           .select('*')
           .eq('user_id', user.id)
           .single();
 
+        log('Profile carregado:', profileData?.nome, 'Tipo:', profileData?.tipo_usuario);
+        if (error) log('Erro ao carregar profile:', error);
+        
         setProfile(profileData);
 
-        // Carregar localização salva
+        // Carregar localização salva (apenas se não for SUPER_ADMIN sem localização definida)
         if (profileData) {
           await loadLocalizacaoSalva(profileData);
         }
@@ -66,6 +75,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       console.error('Erro ao carregar usuário:', err);
     } finally {
+      log('Loading finalizado');
       setLoading(false);
     }
   };

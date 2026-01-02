@@ -14,6 +14,7 @@ import {
   Shield,
   User,
   Building2,
+  Loader2,
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
@@ -23,7 +24,7 @@ import { ModalGerarCodigo } from '@/components/usuarios/ModalGerarCodigo';
 import { ModalEditarUsuario } from '@/components/usuarios/ModalEditarUsuario';
 import type { UserProfile, Empresa } from '@/types/database';
 
-const statusConfig = {
+const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
   APROVADO: { label: 'Aprovado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
   PENDENTE: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
   REJEITADO: { label: 'Rejeitado', color: 'bg-red-100 text-red-700', icon: XCircle },
@@ -38,7 +39,7 @@ const tipoUsuarioConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function UsuariosPage() {
-  const { profile, isSuperAdmin, localizacao } = useUser();
+  const { profile, isSuperAdmin, localizacao, loading: loadingUser } = useUser();
   const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,31 +52,54 @@ export default function UsuariosPage() {
   const [modalCodigo, setModalCodigo] = useState(false);
   const [modalEditar, setModalEditar] = useState(false);
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
-  const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom');
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // Carregar usuários e empresas
+  // Debug - ver o que está acontecendo
   useEffect(() => {
-    carregarDados();
-  }, [isSuperAdmin, localizacao.empresa_id]);
+    console.log('🔍 Debug UsuariosPage:', {
+      loadingUser,
+      profile: profile?.nome,
+      tipo_usuario: profile?.tipo_usuario,
+      isSuperAdmin,
+      localizacao_empresa: localizacao.empresa_id,
+    });
+  }, [loadingUser, profile, isSuperAdmin, localizacao]);
+
+  // Carregar usuários e empresas - AGUARDAR perfil carregar
+  useEffect(() => {
+    // Só carregar quando o perfil do usuário estiver pronto
+    if (!loadingUser && profile) {
+      carregarDados();
+    }
+  }, [loadingUser, profile]);
 
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Carregar usuários
-      const usuariosData = await usuariosService.listarUsuarios({
-        isSuperAdmin,
-        empresaId: localizacao.empresa_id || undefined,
+      console.log('📥 Carregando usuários...', { 
+        isSuperAdmin, 
+        tipo_usuario: profile?.tipo_usuario,
+        empresaId: localizacao.empresa_id 
       });
+      
+      // SUPER_ADMIN sempre vê todos os usuários (isSuperAdmin = true, empresaId = undefined)
+      // Outros usuários veem apenas da sua empresa
+      const filtroIsSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+      
+      const usuariosData = await usuariosService.listarUsuarios({
+        isSuperAdmin: filtroIsSuperAdmin,
+        empresaId: filtroIsSuperAdmin ? undefined : (localizacao.empresa_id || undefined),
+      });
+      
+      console.log('✅ Usuários carregados:', usuariosData.length);
       setUsuarios(usuariosData);
 
-      // Carregar empresas (apenas se SUPER_ADMIN)
-      if (isSuperAdmin) {
-        const empresasData = await usuariosService.listarEmpresas();
-        setEmpresas(empresasData);
-      }
+      // Carregar todas as empresas para o filtro e para mostrar na tabela
+      const empresasData = await usuariosService.listarEmpresas();
+      setEmpresas(empresasData);
+      
     } catch (err) {
-      console.error('Erro ao carregar dados:', err);
+      console.error('❌ Erro ao carregar dados:', err);
     } finally {
       setLoading(false);
     }
@@ -101,23 +125,17 @@ export default function UsuariosPage() {
     const matchStatus = filtroStatus === 'todos' || usuario.status === filtroStatus;
     const matchTipo = filtroTipo === 'todos' || usuario.tipo_usuario === filtroTipo;
 
-    // Filtro por empresa (apenas SUPER_ADMIN)
+    // Filtro por empresa (apenas se selecionado)
     const matchEmpresa =
       filtroEmpresa === 'todos' ||
-      (usuario.empresas_ids && usuario.empresas_ids.includes(filtroEmpresa));
+      (usuario.empresas_ids && usuario.empresas_ids.includes(filtroEmpresa)) ||
+      (!usuario.empresas_ids?.length && filtroEmpresa === 'sem_empresa');
 
     return matchSearch && matchStatus && matchTipo && matchEmpresa;
   });
 
   // Abrir menu de ações com posicionamento inteligente
   const handleAbrirMenu = (usuarioId: string, event: React.MouseEvent) => {
-    const button = event.currentTarget;
-    const rect = button.getBoundingClientRect();
-    const windowHeight = window.innerHeight;
-    const spaceBelow = windowHeight - rect.bottom;
-
-    // Se tem menos de 200px abaixo, abrir para cima
-    setMenuPosition(spaceBelow < 200 ? 'top' : 'bottom');
     setMenuAberto(menuAberto === usuarioId ? null : usuarioId);
   };
 
@@ -139,13 +157,32 @@ export default function UsuariosPage() {
     setMenuAberto(null);
   };
 
+  // Se ainda está carregando o usuário do contexto, mostrar loading
+  if (loadingUser) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="w-8 h-8 text-blue-600 animate-spin mx-auto mb-4" />
+          <p className="text-gray-500">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Verificar se é SUPER_ADMIN diretamente do profile
+  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Usuários e Permissões</h1>
-          <p className="text-gray-500 mt-1">Gerencie os usuários e suas permissões no sistema</p>
+          <p className="text-gray-500 mt-1">
+            {ehSuperAdmin 
+              ? '👑 Visualizando todos os usuários do sistema' 
+              : 'Gerencie os usuários da sua empresa'}
+          </p>
         </div>
         <Button icon={<Plus className="w-4 h-4" />}>Novo Usuário</Button>
       </div>
@@ -219,14 +256,15 @@ export default function UsuariosPage() {
             />
           </div>
           <div className="flex flex-wrap gap-3">
-            {/* Filtro de Empresa - Apenas SUPER_ADMIN */}
-            {isSuperAdmin && (
+            {/* Filtro de Empresa - SUPER_ADMIN sempre vê este filtro */}
+            {ehSuperAdmin && (
               <select
                 className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={filtroEmpresa}
                 onChange={(e) => setFiltroEmpresa(e.target.value)}
               >
                 <option value="todos">Todas as Empresas</option>
+                <option value="sem_empresa">Sem Empresa Vinculada</option>
                 {empresas.map((empresa) => (
                   <option key={empresa.id} value={empresa.id}>
                     {empresa.nome}
@@ -295,7 +333,7 @@ export default function UsuariosPage() {
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
                     <div className="flex items-center justify-center gap-2">
-                      <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
                       Carregando usuários...
                     </div>
                   </td>
@@ -303,14 +341,18 @@ export default function UsuariosPage() {
               ) : usuariosFiltrados.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                    Nenhum usuário encontrado
+                    <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                    <p>Nenhum usuário encontrado</p>
+                    {!ehSuperAdmin && !localizacao.empresa_id && (
+                      <p className="text-sm mt-2">Selecione uma empresa na localização</p>
+                    )}
                   </td>
                 </tr>
               ) : (
                 usuariosFiltrados.map((usuario, index) => {
-                  const statusInfo = statusConfig[usuario.status];
+                  const statusInfo = statusConfig[usuario.status] || statusConfig.PENDENTE;
                   const tipoInfo = tipoUsuarioConfig[usuario.tipo_usuario] || tipoUsuarioConfig.USUARIO_PADRAO;
-                  const StatusIcon = statusInfo?.icon || Clock;
+                  const StatusIcon = statusInfo.icon;
                   const isLastRows = index >= usuariosFiltrados.length - 2;
 
                   return (
@@ -318,9 +360,9 @@ export default function UsuariosPage() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                            {usuario.url_foto_usuario ? (
+                            {usuario.Url_foto_usuario ? (
                               <img
-                                src={usuario.url_foto_usuario}
+                                src={usuario.Url_foto_usuario}
                                 alt={usuario.nome}
                                 className="w-10 h-10 rounded-full object-cover"
                               />
@@ -346,9 +388,9 @@ export default function UsuariosPage() {
                         </span>
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusInfo?.color}`}>
+                        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
                           <StatusIcon className="w-3.5 h-3.5" />
-                          {statusInfo?.label}
+                          {statusInfo.label}
                         </span>
                       </td>
                       <td className="px-6 py-4">
