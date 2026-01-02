@@ -1,10 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Fragment } from 'react';
 import { X, Shield, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
 import type { UserProfile, ModuloSistema, UserPermissao } from '@/types/database';
+
+type TipoUsuario = 'SUPER_ADMIN' | 'ADMIN' | 'MONITOR' | 'USUARIO_PADRAO' | 'VENDEDOR';
 
 interface Props {
   usuario: UserProfile;
@@ -17,7 +19,7 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
   const [modulos, setModulos] = useState<ModuloSistema[]>([]);
   const [permissoes, setPermissoes] = useState<Record<string, UserPermissao>>({});
-  const [tipoUsuario, setTipoUsuario] = useState(usuario.tipo_usuario);
+  const [tipoUsuario, setTipoUsuario] = useState<TipoUsuario>(usuario.tipo_usuario);
 
   // Carregar módulos e permissões
   useEffect(() => {
@@ -93,36 +95,6 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
     });
   };
 
-  // Marcar todas as permissões de um módulo
-  const marcarTodosModulo = (moduloId: string) => {
-    setPermissoes((prev) => ({
-      ...prev,
-      [moduloId]: {
-        modulo_id: moduloId,
-        user_id: usuario.user_id,
-        pode_todos: true,
-        pode_guardar: true,
-        pode_buscar: true,
-        pode_eliminar: true,
-      },
-    }));
-  };
-
-  // Desmarcar todas as permissões de um módulo
-  const desmarcarTodosModulo = (moduloId: string) => {
-    setPermissoes((prev) => ({
-      ...prev,
-      [moduloId]: {
-        modulo_id: moduloId,
-        user_id: usuario.user_id,
-        pode_todos: false,
-        pode_guardar: false,
-        pode_buscar: false,
-        pode_eliminar: false,
-      },
-    }));
-  };
-
   // Salvar permissões
   const handleSalvar = async () => {
     setSaving(true);
@@ -142,6 +114,11 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  // Handler para mudança de tipo de usuário
+  const handleTipoUsuarioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    setTipoUsuario(e.target.value as TipoUsuario);
   };
 
   // Agrupar módulos por categoria
@@ -190,7 +167,7 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
                 </label>
                 <select
                   value={tipoUsuario}
-                  onChange={(e) => setTipoUsuario(e.target.value)}
+                  onChange={handleTipoUsuarioChange}
                   className="w-full max-w-xs px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="SUPER_ADMIN">Super Admin</option>
@@ -226,9 +203,9 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {Object.entries(modulosPorCategoria).map(([categoria, modulosCategoria]) => (
-                        <>
+                        <Fragment key={categoria}>
                           {/* Categoria Header */}
-                          <tr key={categoria} className="bg-gray-100">
+                          <tr className="bg-gray-100">
                             <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
                               {categoria}
                             </td>
@@ -268,7 +245,7 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
                               </tr>
                             );
                           })}
-                        </>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
