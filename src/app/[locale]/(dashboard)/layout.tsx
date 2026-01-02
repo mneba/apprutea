@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useTranslations } from 'next-intl';
-import { usePathname } from 'next/navigation';
 import { 
   LayoutDashboard, 
   FileText, 
@@ -14,13 +12,14 @@ import {
   ChevronDown,
   Menu,
   X,
-  Bell,
   LogOut,
   User
 } from 'lucide-react';
-import { Logo } from '@/components/ui';
 import { Link, useRouter } from '@/i18n/routing';
-import { authService } from '@/services/auth';
+import { usePathname } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
+import { UserProvider, useUser } from '@/contexts/UserContext';
+import { MenuNotificacoes } from '@/components/layout/MenuNotificacoes';
 import { SeletorLocalizacao } from '@/components/layout/SeletorLocalizacao';
 
 interface MenuItem {
@@ -60,38 +59,25 @@ const menuGroups: MenuGroup[] = [
   },
 ];
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const t = useTranslations('navigation');
+// Componente interno que usa o contexto
+function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { user, profile } = useUser();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
-  const [userName, setUserName] = useState('');
   const [userEmail, setUserEmail] = useState('');
 
+  const supabase = createClient();
+
   useEffect(() => {
-    async function loadUser() {
-      try {
-        const user = await authService.getUsuarioAtual();
-        if (user) {
-          setUserEmail(user.email || '');
-          // Buscar nome do perfil
-          const status = await authService.verificarStatus(user.id);
-          // Por enquanto usar o email
-        }
-      } catch (err) {
-        console.error('Erro ao carregar usuário:', err);
-      }
+    if (user) {
+      setUserEmail(user.email || '');
     }
-    loadUser();
-  }, []);
+  }, [user]);
 
   const handleLogout = async () => {
-    await authService.logout();
+    await supabase.auth.signOut();
     router.push('/login');
   };
 
@@ -119,7 +105,9 @@ export default function DashboardLayout({
         {/* Logo */}
         <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
           <div className="flex items-center gap-2">
-            <Logo size="sm" showText={false} />
+            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">A</span>
+            </div>
             <span className="text-xl font-bold">Apprutea</span>
           </div>
           <button 
@@ -185,10 +173,7 @@ export default function DashboardLayout({
             {/* Right side */}
             <div className="flex items-center gap-3">
               {/* Notificações */}
-              <button className="relative p-2 hover:bg-gray-100 rounded-lg">
-                <Bell className="w-5 h-5 text-gray-600" />
-                <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-              </button>
+              <MenuNotificacoes />
 
               {/* User Menu */}
               <div className="relative">
@@ -210,6 +195,10 @@ export default function DashboardLayout({
                       onClick={() => setUserMenuOpen(false)}
                     />
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                      <div className="px-4 py-2 border-b border-gray-100">
+                        <p className="text-sm font-medium text-gray-900">{profile?.nome || 'Usuário'}</p>
+                        <p className="text-xs text-gray-500">{profile?.tipo_usuario}</p>
+                      </div>
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -231,5 +220,18 @@ export default function DashboardLayout({
         </main>
       </div>
     </div>
+  );
+}
+
+// Layout principal que envolve com o Provider
+export default function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <UserProvider>
+      <DashboardContent>{children}</DashboardContent>
+    </UserProvider>
   );
 }
