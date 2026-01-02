@@ -8,8 +8,8 @@ export const routing = defineRouting({
   // Locale padrão
   defaultLocale: 'pt-BR',
 
-  // Prefixo de locale na URL
-  localePrefix: 'as-needed'
+  // Sempre mostra o prefixo na URL (evita loops)
+  localePrefix: 'always'
 });
 
 // Exporta funções de navegação tipadas
