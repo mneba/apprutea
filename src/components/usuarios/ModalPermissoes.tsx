@@ -31,8 +31,7 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
           usuariosService.listarPermissoesUsuario(usuario.user_id),
         ]);
         setModulos(modulosData);
-        
-        // Converter array de permissões para objeto indexado por modulo_id
+
         const permissoesMap: Record<string, UserPermissao> = {};
         permissoesData.forEach((p) => {
           permissoesMap[p.modulo_id] = p;
@@ -48,7 +47,10 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
   }, [usuario.user_id]);
 
   // Toggle de permissão
-  const togglePermissao = (moduloId: string, campo: 'pode_todos' | 'pode_guardar' | 'pode_buscar' | 'pode_eliminar') => {
+  const togglePermissao = (
+    moduloId: string,
+    campo: 'pode_todos' | 'pode_guardar' | 'pode_buscar' | 'pode_eliminar'
+  ) => {
     setPermissoes((prev) => {
       const permissao = prev[moduloId] || {
         modulo_id: moduloId,
@@ -59,7 +61,6 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
         pode_eliminar: false,
       };
 
-      // Se marcar "pode_todos", marca todas as outras
       if (campo === 'pode_todos' && !permissao.pode_todos) {
         return {
           ...prev,
@@ -73,7 +74,6 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
         };
       }
 
-      // Se desmarcar "pode_todos", desmarca apenas ele
       if (campo === 'pode_todos' && permissao.pode_todos) {
         return {
           ...prev,
@@ -84,7 +84,6 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
         };
       }
 
-      // Para outros campos, apenas alterna
       return {
         ...prev,
         [moduloId]: {
@@ -99,14 +98,11 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
   const handleSalvar = async () => {
     setSaving(true);
     try {
-      // Atualizar tipo de usuário se mudou
       if (tipoUsuario !== usuario.tipo_usuario) {
         await usuariosService.atualizarTipoUsuario(usuario.user_id, tipoUsuario);
       }
 
-      // Salvar permissões
       await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
-      
       onSave();
     } catch (err) {
       console.error('Erro ao salvar permissões:', err);
@@ -116,7 +112,6 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
     }
   };
 
-  // Handler para mudança de tipo de usuário
   const handleTipoUsuarioChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setTipoUsuario(e.target.value as TipoUsuario);
   };
@@ -131,10 +126,8 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Overlay */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
-      {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -204,13 +197,14 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
                     <tbody className="divide-y divide-gray-200">
                       {Object.entries(modulosPorCategoria).map(([categoria, modulosCategoria]) => (
                         <Fragment key={categoria}>
-                          {/* Categoria Header */}
                           <tr className="bg-gray-100">
-                            <td colSpan={5} className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                            <td
+                              colSpan={5}
+                              className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase"
+                            >
                               {categoria}
                             </td>
                           </tr>
-                          {/* Módulos da Categoria */}
                           {modulosCategoria.map((modulo) => {
                             const permissao = permissoes[modulo.id];
                             return (
@@ -269,16 +263,16 @@ export function ModalPermissoes({ usuario, onClose, onSave }: Props) {
   );
 }
 
-// Componente Checkbox
 function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
   return (
     <button
       onClick={onChange}
       className={`
         w-6 h-6 rounded border-2 flex items-center justify-center transition-all
-        ${checked 
-          ? 'bg-blue-600 border-blue-600 text-white' 
-          : 'bg-white border-gray-300 hover:border-blue-400'
+        ${
+          checked
+            ? 'bg-blue-600 border-blue-600 text-white'
+            : 'bg-white border-gray-300 hover:border-blue-400'
         }
       `}
     >

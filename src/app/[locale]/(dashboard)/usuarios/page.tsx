@@ -1,25 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Plus, 
-  MoreVertical, 
-  Edit, 
-  Trash2, 
+import { useState, useEffect, useRef } from 'react';
+import {
+  Search,
+  Plus,
+  MoreVertical,
+  Edit,
+  Trash2,
   Key,
   CheckCircle,
   XCircle,
   Clock,
   Shield,
   User,
-  Filter
+  Building2,
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
+import { useUser } from '@/contexts/UserContext';
 import { ModalPermissoes } from '@/components/usuarios/ModalPermissoes';
 import { ModalGerarCodigo } from '@/components/usuarios/ModalGerarCodigo';
-import type { UserProfile } from '@/types/database';
+import { ModalEditarUsuario } from '@/components/usuarios/ModalEditarUsuario';
+import type { UserProfile, Empresa } from '@/types/database';
 
 const statusConfig = {
   APROVADO: { label: 'Aprovado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -36,42 +38,88 @@ const tipoUsuarioConfig: Record<string, { label: string; color: string }> = {
 };
 
 export default function UsuariosPage() {
+  const { profile, isSuperAdmin, localizacao } = useUser();
   const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>('todos');
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<UserProfile | null>(null);
   const [modalPermissoes, setModalPermissoes] = useState(false);
   const [modalCodigo, setModalCodigo] = useState(false);
+  const [modalEditar, setModalEditar] = useState(false);
   const [menuAberto, setMenuAberto] = useState<string | null>(null);
+  const [menuPosition, setMenuPosition] = useState<'top' | 'bottom'>('bottom');
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  // Carregar usuários
+  // Carregar usuários e empresas
   useEffect(() => {
-    carregarUsuarios();
-  }, []);
+    carregarDados();
+  }, [isSuperAdmin, localizacao.empresa_id]);
 
-  const carregarUsuarios = async () => {
+  const carregarDados = async () => {
     setLoading(true);
     try {
-      const data = await usuariosService.listarUsuarios();
-      setUsuarios(data);
+      // Carregar usuários
+      const usuariosData = await usuariosService.listarUsuarios({
+        isSuperAdmin,
+        empresaId: localizacao.empresa_id || undefined,
+      });
+      setUsuarios(usuariosData);
+
+      // Carregar empresas (apenas se SUPER_ADMIN)
+      if (isSuperAdmin) {
+        const empresasData = await usuariosService.listarEmpresas();
+        setEmpresas(empresasData);
+      }
     } catch (err) {
-      console.error('Erro ao carregar usuários:', err);
+      console.error('Erro ao carregar dados:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  // Obter nome da empresa do usuário
+  const getEmpresaNome = (usuario: UserProfile) => {
+    if (!usuario.empresas_ids || usuario.empresas_ids.length === 0) {
+      return usuario.empresa_pretendida || '-';
+    }
+    const empresaId = usuario.empresas_ids[0];
+    const empresa = empresas.find((e) => e.id === empresaId);
+    return empresa?.nome || usuario.empresa_pretendida || '-';
+  };
+
   // Filtrar usuários
-  const usuariosFiltrados = usuarios.filter(usuario => {
-    const matchSearch = usuario.nome.toLowerCase().includes(search.toLowerCase()) ||
-                       usuario.telefone?.toLowerCase().includes(search.toLowerCase()) ||
-                       usuario.empresa_pretendida?.toLowerCase().includes(search.toLowerCase());
+  const usuariosFiltrados = usuarios.filter((usuario) => {
+    const matchSearch =
+      usuario.nome?.toLowerCase().includes(search.toLowerCase()) ||
+      usuario.telefone?.toLowerCase().includes(search.toLowerCase()) ||
+      usuario.empresa_pretendida?.toLowerCase().includes(search.toLowerCase());
+
     const matchStatus = filtroStatus === 'todos' || usuario.status === filtroStatus;
     const matchTipo = filtroTipo === 'todos' || usuario.tipo_usuario === filtroTipo;
-    return matchSearch && matchStatus && matchTipo;
+
+    // Filtro por empresa (apenas SUPER_ADMIN)
+    const matchEmpresa =
+      filtroEmpresa === 'todos' ||
+      (usuario.empresas_ids && usuario.empresas_ids.includes(filtroEmpresa));
+
+    return matchSearch && matchStatus && matchTipo && matchEmpresa;
   });
+
+  // Abrir menu de ações com posicionamento inteligente
+  const handleAbrirMenu = (usuarioId: string, event: React.MouseEvent) => {
+    const button = event.currentTarget;
+    const rect = button.getBoundingClientRect();
+    const windowHeight = window.innerHeight;
+    const spaceBelow = windowHeight - rect.bottom;
+
+    // Se tem menos de 200px abaixo, abrir para cima
+    setMenuPosition(spaceBelow < 200 ? 'top' : 'bottom');
+    setMenuAberto(menuAberto === usuarioId ? null : usuarioId);
+  };
 
   const handleGerarCodigo = (usuario: UserProfile) => {
     setUsuarioSelecionado(usuario);
@@ -85,6 +133,12 @@ export default function UsuariosPage() {
     setMenuAberto(null);
   };
 
+  const handleEditar = (usuario: UserProfile) => {
+    setUsuarioSelecionado(usuario);
+    setModalEditar(true);
+    setMenuAberto(null);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -93,9 +147,7 @@ export default function UsuariosPage() {
           <h1 className="text-2xl font-bold text-gray-900">Usuários e Permissões</h1>
           <p className="text-gray-500 mt-1">Gerencie os usuários e suas permissões no sistema</p>
         </div>
-        <Button icon={<Plus className="w-4 h-4" />}>
-          Novo Usuário
-        </Button>
+        <Button icon={<Plus className="w-4 h-4" />}>Novo Usuário</Button>
       </div>
 
       {/* Cards de Resumo */}
@@ -119,7 +171,7 @@ export default function UsuariosPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {usuarios.filter(u => u.status === 'APROVADO').length}
+                {usuarios.filter((u) => u.status === 'APROVADO').length}
               </p>
               <p className="text-sm text-gray-500">Aprovados</p>
             </div>
@@ -133,7 +185,7 @@ export default function UsuariosPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {usuarios.filter(u => u.status === 'PENDENTE').length}
+                {usuarios.filter((u) => u.status === 'PENDENTE').length}
               </p>
               <p className="text-sm text-gray-500">Pendentes</p>
             </div>
@@ -147,7 +199,7 @@ export default function UsuariosPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {usuarios.filter(u => u.tipo_usuario === 'SUPER_ADMIN' || u.tipo_usuario === 'ADMIN').length}
+                {usuarios.filter((u) => u.tipo_usuario === 'SUPER_ADMIN' || u.tipo_usuario === 'ADMIN').length}
               </p>
               <p className="text-sm text-gray-500">Administradores</p>
             </div>
@@ -157,7 +209,7 @@ export default function UsuariosPage() {
 
       {/* Filtros e Busca */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1">
             <Input
               placeholder="Buscar por nome, telefone ou empresa..."
@@ -166,7 +218,23 @@ export default function UsuariosPage() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            {/* Filtro de Empresa - Apenas SUPER_ADMIN */}
+            {isSuperAdmin && (
+              <select
+                className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                value={filtroEmpresa}
+                onChange={(e) => setFiltroEmpresa(e.target.value)}
+              >
+                <option value="todos">Todas as Empresas</option>
+                {empresas.map((empresa) => (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome}
+                  </option>
+                ))}
+              </select>
+            )}
+
             <select
               className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={filtroStatus}
@@ -177,6 +245,7 @@ export default function UsuariosPage() {
               <option value="PENDENTE">Pendentes</option>
               <option value="REJEITADO">Rejeitados</option>
             </select>
+
             <select
               className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               value={filtroTipo}
@@ -187,7 +256,6 @@ export default function UsuariosPage() {
               <option value="ADMIN">Admin</option>
               <option value="MONITOR">Monitor</option>
               <option value="USUARIO_PADRAO">Usuário Padrão</option>
-              <option value="VENDEDOR">Vendedor</option>
             </select>
           </div>
         </div>
@@ -217,7 +285,7 @@ export default function UsuariosPage() {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   Cadastro
                 </th>
-                <th className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">
                   Ações
                 </th>
               </tr>
@@ -239,19 +307,20 @@ export default function UsuariosPage() {
                   </td>
                 </tr>
               ) : (
-                usuariosFiltrados.map((usuario) => {
+                usuariosFiltrados.map((usuario, index) => {
                   const statusInfo = statusConfig[usuario.status];
                   const tipoInfo = tipoUsuarioConfig[usuario.tipo_usuario] || tipoUsuarioConfig.USUARIO_PADRAO;
                   const StatusIcon = statusInfo?.icon || Clock;
+                  const isLastRows = index >= usuariosFiltrados.length - 2;
 
                   return (
                     <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
+                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
                             {usuario.url_foto_usuario ? (
-                              <img 
-                                src={usuario.url_foto_usuario} 
+                              <img
+                                src={usuario.url_foto_usuario}
                                 alt={usuario.nome}
                                 className="w-10 h-10 rounded-full object-cover"
                               />
@@ -266,7 +335,10 @@ export default function UsuariosPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <p className="text-gray-700">{usuario.empresa_pretendida || '-'}</p>
+                        <div className="flex items-center gap-2">
+                          <Building2 className="w-4 h-4 text-gray-400" />
+                          <span className="text-gray-700">{getEmpresaNome(usuario)}</span>
+                        </div>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${tipoInfo.color}`}>
@@ -295,13 +367,15 @@ export default function UsuariosPage() {
                       </td>
                       <td className="px-6 py-4">
                         <p className="text-sm text-gray-500">
-                          {usuario.created_at ? new Date(usuario.created_at).toLocaleDateString('pt-BR') : '-'}
+                          {usuario.created_at
+                            ? new Date(usuario.created_at).toLocaleDateString('pt-BR')
+                            : '-'}
                         </p>
                       </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="relative">
+                      <td className="px-6 py-4 text-center">
+                        <div className="relative" ref={menuAberto === usuario.id ? menuRef : null}>
                           <button
-                            onClick={() => setMenuAberto(menuAberto === usuario.id ? null : usuario.id)}
+                            onClick={(e) => handleAbrirMenu(usuario.id, e)}
                             className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
                           >
                             <MoreVertical className="w-5 h-5 text-gray-400" />
@@ -309,11 +383,15 @@ export default function UsuariosPage() {
 
                           {menuAberto === usuario.id && (
                             <>
-                              <div 
+                              <div
                                 className="fixed inset-0 z-40"
                                 onClick={() => setMenuAberto(null)}
                               />
-                              <div className="absolute right-0 mt-1 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                              <div
+                                className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 ${
+                                  isLastRows ? 'bottom-full mb-1' : 'top-full mt-1'
+                                }`}
+                              >
                                 <button
                                   onClick={() => handleGerarCodigo(usuario)}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -329,7 +407,7 @@ export default function UsuariosPage() {
                                   Permissões
                                 </button>
                                 <button
-                                  onClick={() => setMenuAberto(null)}
+                                  onClick={() => handleEditar(usuario)}
                                   className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                                 >
                                   <Edit className="w-4 h-4" />
@@ -357,7 +435,7 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Modal de Permissões */}
+      {/* Modais */}
       {modalPermissoes && usuarioSelecionado && (
         <ModalPermissoes
           usuario={usuarioSelecionado}
@@ -366,14 +444,13 @@ export default function UsuariosPage() {
             setUsuarioSelecionado(null);
           }}
           onSave={() => {
-            carregarUsuarios();
+            carregarDados();
             setModalPermissoes(false);
             setUsuarioSelecionado(null);
           }}
         />
       )}
 
-      {/* Modal de Gerar Código */}
       {modalCodigo && usuarioSelecionado && (
         <ModalGerarCodigo
           usuario={usuarioSelecionado}
@@ -382,8 +459,23 @@ export default function UsuariosPage() {
             setUsuarioSelecionado(null);
           }}
           onSave={() => {
-            carregarUsuarios();
+            carregarDados();
             setModalCodigo(false);
+            setUsuarioSelecionado(null);
+          }}
+        />
+      )}
+
+      {modalEditar && usuarioSelecionado && (
+        <ModalEditarUsuario
+          usuario={usuarioSelecionado}
+          onClose={() => {
+            setModalEditar(false);
+            setUsuarioSelecionado(null);
+          }}
+          onSave={() => {
+            carregarDados();
+            setModalEditar(false);
             setUsuarioSelecionado(null);
           }}
         />

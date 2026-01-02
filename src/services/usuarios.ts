@@ -1,30 +1,63 @@
 import { createClient } from '@/lib/supabase/client';
-import type { UserProfile, ModuloSistema, UserPermissao } from '@/types/database';
+import type { UserProfile, ModuloSistema, UserPermissao, Hierarquia, Empresa, Rota } from '@/types/database';
 
 const supabase = createClient();
 
 export const usuariosService = {
-  // Listar todos os usuários
-  async listarUsuarios(): Promise<UserProfile[]> {
-    const { data, error } = await supabase
+  // ============================================
+  // USUÁRIOS
+  // ============================================
+
+  // Listar usuários (com filtro por empresa para não-admins)
+  async listarUsuarios(filtros?: {
+    empresaId?: string;
+    isSuperAdmin?: boolean;
+  }): Promise<UserProfile[]> {
+    let query = supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        *,
+        auth_user:user_id (
+          email
+        )
+      `)
       .order('created_at', { ascending: false });
 
+    // Se não for SUPER_ADMIN, filtrar por empresa
+    if (!filtros?.isSuperAdmin && filtros?.empresaId) {
+      query = query.contains('empresas_ids', [filtros.empresaId]);
+    }
+
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   },
 
-  // Buscar usuário por ID
-  async buscarUsuario(userId: string): Promise<UserProfile | null> {
+  // Buscar usuário por ID com dados completos
+  async buscarUsuarioCompleto(userId: string): Promise<any> {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        *,
+        auth_user:user_id (
+          email
+        )
+      `)
       .eq('user_id', userId)
       .single();
 
-    if (error) return null;
+    if (error) throw error;
     return data;
+  },
+
+  // Atualizar dados do usuário
+  async atualizarUsuario(userId: string, dados: Partial<UserProfile>): Promise<void> {
+    const { error } = await supabase
+      .from('user_profiles')
+      .update(dados)
+      .eq('user_id', userId);
+
+    if (error) throw error;
   },
 
   // Atualizar tipo de usuário
@@ -37,39 +70,150 @@ export const usuariosService = {
     if (error) throw error;
   },
 
-  // Atualizar status do usuário
-  async atualizarStatus(userId: string, status: string, observacoes?: string): Promise<void> {
-    const user = await supabase.auth.getUser();
-    
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({ 
-        status,
-        observacoes_aprovacao: observacoes,
-        aprovado_por: status === 'APROVADO' ? user.data.user?.id : null,
-        data_aprovacao: status === 'APROVADO' ? new Date().toISOString() : null,
-      })
-      .eq('user_id', userId);
+  // ============================================
+  // TOKEN DE ACESSO - Usando RPC do Supabase
+  // ============================================
 
-    if (error) throw error;
+  // Gerar código de acesso usando function existente do Supabase
+  // Function: gerar_token_acesso(p_user_id uuid, p_admin_que_gera uuid)
+  // Retorna: TABLE(sucesso boolean, token_gerado varchar, mensagem text)
+  async gerarCodigoAcesso(userId: string): Promise<string> {
+    const user = await supabase.auth.getUser();
+    const adminQueGera = user.data.user?.id;
+
+    if (!adminQueGera) {
+      throw new Error('Usuário não autenticado');
+    }
+
+    // Chamar RPC com os parâmetros corretos
+    const { data, error } = await supabase.rpc('gerar_token_acesso', {
+      p_user_id: userId,
+      p_admin_que_gera: adminQueGera,
+    });
+
+    if (error) {
+      console.error('Erro ao gerar token:', error);
+      throw error;
+    }
+
+    // A function retorna um array com um objeto { sucesso, token_gerado, mensagem }
+    if (data && data.length > 0) {
+      const resultado = data[0];
+      if (resultado.sucesso) {
+        return resultado.token_gerado;
+      } else {
+        throw new Error(resultado.mensagem || 'Erro ao gerar token');
+      }
+    }
+
+    throw new Error('Resposta inválida da function');
   },
 
-  // Salvar código de acesso
-  async salvarCodigoAcesso(userId: string, codigo: string): Promise<void> {
-    const user = await supabase.auth.getUser();
+  // Validar token de acesso usando function existente do Supabase
+  // Function: fn_validar_token_acesso(p_user_id uuid, p_token varchar)
+  // Retorna: jsonb
+  async validarTokenAcesso(userId: string, token: string): Promise<boolean> {
+    const { data, error } = await supabase.rpc('fn_validar_token_acesso', {
+      p_user_id: userId,
+      p_token: token,
+    });
 
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({ 
-        token_acesso: codigo,
-        token_gerado_por: user.data.user?.id,
-        token_gerado_em: new Date().toISOString(),
-        token_validado: false, // Reset validação ao gerar novo código
-      })
-      .eq('user_id', userId);
+    if (error) {
+      console.error('Erro ao validar token:', error);
+      throw error;
+    }
+
+    // Verificar resultado do jsonb retornado
+    return data?.sucesso === true || data?.valido === true;
+  },
+
+  // ============================================
+  // HIERARQUIA E EMPRESAS
+  // ============================================
+
+  // Listar hierarquias (países e estados)
+  async listarHierarquias(): Promise<Hierarquia[]> {
+    const { data, error } = await supabase
+      .from('hierarquias')
+      .select('*')
+      .order('pais')
+      .order('estado');
 
     if (error) throw error;
+    return data || [];
   },
+
+  // Listar empresas por hierarquia
+  async listarEmpresasPorHierarquia(hierarquiaId: string): Promise<Empresa[]> {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('*')
+      .eq('hierarquia_id', hierarquiaId)
+      .eq('status', 'ATIVA')
+      .order('nome');
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Listar todas as empresas ativas
+  async listarEmpresas(): Promise<Empresa[]> {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select(`
+        *,
+        hierarquia:hierarquia_id (
+          id,
+          pais,
+          estado
+        )
+      `)
+      .eq('status', 'ATIVA')
+      .order('nome');
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Listar rotas de uma empresa
+  async listarRotasPorEmpresa(empresaId: string): Promise<Rota[]> {
+    // Buscar empresa para pegar rotas_ids
+    const { data: empresa } = await supabase
+      .from('empresas')
+      .select('rotas_ids')
+      .eq('id', empresaId)
+      .single();
+
+    if (!empresa?.rotas_ids || empresa.rotas_ids.length === 0) {
+      return [];
+    }
+
+    const { data, error } = await supabase
+      .from('rotas')
+      .select('*')
+      .in('id', empresa.rotas_ids)
+      .eq('status', 'ATIVA')
+      .order('nome');
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Listar todas as rotas
+  async listarRotas(): Promise<Rota[]> {
+    const { data, error } = await supabase
+      .from('rotas')
+      .select('*')
+      .eq('status', 'ATIVA')
+      .order('nome');
+
+    if (error) throw error;
+    return data || [];
+  },
+
+  // ============================================
+  // PERMISSÕES
+  // ============================================
 
   // Listar módulos do sistema
   async listarModulos(): Promise<ModuloSistema[]> {
@@ -100,16 +244,13 @@ export const usuariosService = {
     const user = await supabase.auth.getUser();
     const concedidoPor = user.data.user?.id;
 
-    // Para cada permissão, fazer upsert
     for (const permissao of permissoes) {
       if (!permissao.modulo_id) continue;
 
-      // Verificar se alguma permissão está marcada
-      const temPermissao = permissao.pode_todos || permissao.pode_guardar || 
+      const temPermissao = permissao.pode_todos || permissao.pode_guardar ||
                           permissao.pode_buscar || permissao.pode_eliminar;
 
       if (temPermissao) {
-        // Upsert (inserir ou atualizar)
         const { error } = await supabase
           .from('user_permissoes')
           .upsert({
@@ -127,7 +268,6 @@ export const usuariosService = {
 
         if (error) throw error;
       } else {
-        // Se não tem nenhuma permissão, deletar o registro (se existir)
         await supabase
           .from('user_permissoes')
           .delete()
@@ -137,58 +277,47 @@ export const usuariosService = {
     }
   },
 
-  // Verificar permissão específica
-  async verificarPermissao(userId: string, moduloCodigo: string, tipoPermissao: string): Promise<boolean> {
-    // Primeiro buscar o módulo pelo código
-    const { data: modulo } = await supabase
-      .from('modulos_sistema')
-      .select('id')
-      .eq('codigo', moduloCodigo)
-      .single();
+  // ============================================
+  // MENSAGENS DO SISTEMA
+  // ============================================
 
-    if (!modulo) return false;
-
-    // Buscar permissão do usuário
-    const { data: permissao } = await supabase
-      .from('user_permissoes')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('modulo_id', modulo.id)
-      .single();
-
-    if (!permissao) return false;
-
-    // Verificar tipo de permissão
-    switch (tipoPermissao) {
-      case 'todos':
-        return permissao.pode_todos;
-      case 'guardar':
-        return permissao.pode_todos || permissao.pode_guardar;
-      case 'buscar':
-        return permissao.pode_todos || permissao.pode_buscar;
-      case 'eliminar':
-        return permissao.pode_todos || permissao.pode_eliminar;
-      default:
-        return false;
-    }
-  },
-
-  // Excluir usuário
-  async excluirUsuario(userId: string): Promise<void> {
-    // Primeiro deletar permissões
-    await supabase
-      .from('user_permissoes')
-      .delete()
-      .eq('user_id', userId);
-
-    // Depois deletar perfil
-    const { error } = await supabase
-      .from('user_profiles')
-      .delete()
-      .eq('user_id', userId);
+  // Listar mensagens não lidas
+  async listarMensagensNaoLidas(userId: string): Promise<any[]> {
+    const { data, error } = await supabase
+      .from('mensagens_sistema')
+      .select(`
+        *,
+        origem:usuario_origem_id (
+          nome
+        )
+      `)
+      .eq('usuario_destino_id', userId)
+      .eq('lido', false)
+      .order('created_at', { ascending: false })
+      .limit(10);
 
     if (error) throw error;
+    return data || [];
+  },
 
-    // Nota: O usuário em auth.users será deletado pelo CASCADE da FK
+  // Marcar mensagem como lida
+  async marcarMensagemLida(mensagemId: string): Promise<void> {
+    const { error } = await supabase
+      .from('mensagens_sistema')
+      .update({ lido: true })
+      .eq('id', mensagemId);
+
+    if (error) throw error;
+  },
+
+  // Marcar todas como lidas
+  async marcarTodasLidas(userId: string): Promise<void> {
+    const { error } = await supabase
+      .from('mensagens_sistema')
+      .update({ lido: true })
+      .eq('usuario_destino_id', userId)
+      .eq('lido', false);
+
+    if (error) throw error;
   },
 };

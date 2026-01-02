@@ -18,18 +18,19 @@ export function ModalGerarCodigo({ usuario, onClose, onSave }: Props) {
   const [gerando, setGerando] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
-  // Gerar código aleatório
-  const gerarCodigo = () => {
+  // Gerar código usando RPC do Supabase
+  const gerarCodigo = async () => {
     setGerando(true);
-    // Gerar código de 8 caracteres alfanumérico
-    const caracteres = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    let novoCodigo = '';
-    for (let i = 0; i < 8; i++) {
-      novoCodigo += caracteres.charAt(Math.floor(Math.random() * caracteres.length));
+    try {
+      const novoCodigo = await usuariosService.gerarCodigoAcesso(usuario.user_id);
+      setCodigo(novoCodigo);
+      setCopiado(false);
+    } catch (err) {
+      console.error('Erro ao gerar código:', err);
+      alert('Erro ao gerar código. Tente novamente.');
+    } finally {
+      setGerando(false);
     }
-    setCodigo(novoCodigo);
-    setGerando(false);
-    setCopiado(false);
   };
 
   // Copiar para clipboard
@@ -43,31 +44,20 @@ export function ModalGerarCodigo({ usuario, onClose, onSave }: Props) {
     }
   };
 
-  // Salvar código
-  const handleSalvar = async () => {
+  // O código já é salvo automaticamente pela function gerarCodigoAcesso
+  // Este botão apenas fecha o modal após gerar
+  const handleConcluir = () => {
     if (!codigo) {
       alert('Gere um código primeiro');
       return;
     }
-
-    setSalvando(true);
-    try {
-      await usuariosService.salvarCodigoAcesso(usuario.user_id, codigo);
-      onSave();
-    } catch (err) {
-      console.error('Erro ao salvar código:', err);
-      alert('Erro ao salvar código. Tente novamente.');
-    } finally {
-      setSalvando(false);
-    }
+    onSave();
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      {/* Overlay */}
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
 
-      {/* Modal */}
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
@@ -91,18 +81,27 @@ export function ModalGerarCodigo({ usuario, onClose, onSave }: Props) {
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Telefone:</span>
-              <span className="text-sm font-medium text-gray-700">{usuario.telefone || '-'}</span>
+              <span className="text-sm font-medium text-gray-700">
+                {usuario.telefone || '-'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Empresa:</span>
-              <span className="text-sm font-medium text-gray-700">{usuario.empresa_pretendida || '-'}</span>
+              <span className="text-sm font-medium text-gray-700">
+                {usuario.empresa_pretendida || '-'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-gray-500">Status:</span>
-              <span className={`text-sm font-medium ${
-                usuario.status === 'APROVADO' ? 'text-green-600' : 
-                usuario.status === 'PENDENTE' ? 'text-yellow-600' : 'text-red-600'
-              }`}>
+              <span
+                className={`text-sm font-medium ${
+                  usuario.status === 'APROVADO'
+                    ? 'text-green-600'
+                    : usuario.status === 'PENDENTE'
+                    ? 'text-yellow-600'
+                    : 'text-red-600'
+                }`}
+              >
                 {usuario.status}
               </span>
             </div>
@@ -118,19 +117,22 @@ export function ModalGerarCodigo({ usuario, onClose, onSave }: Props) {
                 <input
                   type="text"
                   value={codigo}
-                  onChange={(e) => setCodigo(e.target.value.toUpperCase())}
-                  placeholder="Gere ou digite um código"
-                  className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-white text-gray-900 text-center text-xl tracking-widest font-mono uppercase focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  maxLength={8}
+                  readOnly
+                  placeholder="Clique em gerar"
+                  className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-900 text-center text-xl tracking-widest font-mono uppercase"
                 />
               </div>
               <button
                 onClick={gerarCodigo}
                 disabled={gerando}
-                className="px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                className="px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
                 title="Gerar novo código"
               >
-                <RefreshCw className={`w-5 h-5 text-gray-600 ${gerando ? 'animate-spin' : ''}`} />
+                {gerando ? (
+                  <Loader2 className="w-5 h-5 text-gray-600 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-5 h-5 text-gray-600" />
+                )}
               </button>
               <button
                 onClick={copiarCodigo}
@@ -145,14 +147,24 @@ export function ModalGerarCodigo({ usuario, onClose, onSave }: Props) {
                 )}
               </button>
             </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Formato: TK + 6 dígitos (gerado automaticamente pelo sistema)
+            </p>
           </div>
 
           {/* Aviso */}
-          {usuario.token_acesso && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <p className="text-sm text-yellow-700">
-                <strong>Atenção:</strong> Este usuário já possui um código de acesso. 
-                Ao salvar um novo código, o anterior será substituído.
+          {usuario.token_acesso && codigo !== usuario.token_acesso && (
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <p className="text-sm text-green-700">
+                ✓ Novo código gerado e salvo com sucesso!
+              </p>
+            </div>
+          )}
+
+          {usuario.token_acesso && codigo === usuario.token_acesso && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <p className="text-sm text-blue-700">
+                Este é o código atual do usuário. Clique no botão de refresh para gerar um novo.
               </p>
             </div>
           )}
@@ -172,13 +184,12 @@ export function ModalGerarCodigo({ usuario, onClose, onSave }: Props) {
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>
-          <Button 
-            onClick={handleSalvar} 
-            loading={salvando}
+          <Button
+            onClick={handleConcluir}
             disabled={!codigo}
             icon={<Key className="w-4 h-4" />}
           >
-            Salvar Código
+            Concluir
           </Button>
         </div>
       </div>

@@ -1,4 +1,6 @@
-// Tipos do banco de dados
+// ============================================
+// TIPOS DO BANCO DE DADOS - APPRUTEA
+// ============================================
 
 export interface Hierarquia {
   id: string;
@@ -20,7 +22,10 @@ export interface Empresa {
   vendedores_ids?: string[];
   rotas_ids?: string[];
   status: 'ATIVA' | 'INATIVA';
+  timezone?: string;
   created_at?: string;
+  // Join
+  hierarquia?: Hierarquia;
 }
 
 export interface Rota {
@@ -59,6 +64,10 @@ export interface UserProfile {
   ultima_rota_id?: string;
   created_at?: string;
   updated_at?: string;
+  // Join com auth.users
+  auth_user?: {
+    email: string;
+  };
 }
 
 export interface ModuloSistema {
@@ -96,6 +105,10 @@ export interface MensagemSistema {
   lido: boolean;
   created_at?: string;
   updated_at?: string;
+  // Join
+  origem?: {
+    nome: string;
+  };
 }
 
 export interface Vendedor {
@@ -105,11 +118,13 @@ export interface Vendedor {
   telefone?: string;
   documento?: string;
   endereco?: string;
+  email?: string;
   salario?: number;
   percentual_recaudo?: number;
   percentual_vendas?: number;
   rotas_ids?: string[];
   status: 'ATIVO' | 'INATIVO';
+  data_admissao?: string;
   created_at?: string;
 }
 
@@ -156,7 +171,10 @@ export interface LiquidacaoDiaria {
   created_at?: string;
 }
 
-// Tipos para formulários
+// ============================================
+// TIPOS PARA FORMULÁRIOS
+// ============================================
+
 export interface RegistroEtapa1 {
   email: string;
   password: string;
@@ -172,4 +190,17 @@ export interface RegistroEtapa2 {
 
 export interface ValidarCodigo {
   codigo: string;
+}
+
+// ============================================
+// TIPOS PARA CONTEXTO
+// ============================================
+
+export interface LocalizacaoAtual {
+  hierarquia_id: string | null;
+  hierarquia?: Hierarquia | null;
+  empresa_id: string | null;
+  empresa?: Empresa | null;
+  rota_id: string | null;
+  rota?: Rota | null;
 }

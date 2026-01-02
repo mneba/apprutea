@@ -1,1 +1,1 @@
-export { SeletorLocalizacao } from './SeletorLocalizacao';
+export { MenuNotificacoes } from './MenuNotificacoes';
