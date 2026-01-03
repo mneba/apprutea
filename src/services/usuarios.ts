@@ -59,26 +59,48 @@ export const usuariosService = {
 
   // Atualizar dados do usuário
   async atualizarUsuario(userId: string, dados: Partial<UserProfile>): Promise<void> {
-    // Se estiver aprovando, adicionar campos obrigatórios
-    if (dados.status === 'APROVADO') {
-      const user = await supabase.auth.getUser();
-      const adminId = user.data.user?.id;
+    const user = await supabase.auth.getUser();
+    const adminId = user.data.user?.id;
+
+    // Clonar dados para não modificar original
+    const dadosParaSalvar: any = { ...dados };
+    
+    // Sempre enviar quem alterou e quando
+    if (adminId) {
+      // Para APROVADO - campos obrigatórios do trigger
+      if (dadosParaSalvar.status === 'APROVADO') {
+        dadosParaSalvar.aprovado_por = adminId;
+        dadosParaSalvar.data_aprovacao = new Date().toISOString();
+      }
       
-      if (adminId) {
-        (dados as any).aprovado_por = adminId;
-        (dados as any).data_aprovacao = new Date().toISOString();
+      // Para REJEITADO - alguns triggers também exigem aprovado_por
+      if (dadosParaSalvar.status === 'REJEITADO') {
+        dadosParaSalvar.aprovado_por = adminId;
+        dadosParaSalvar.data_aprovacao = new Date().toISOString();
+        dadosParaSalvar.observacoes_aprovacao = dadosParaSalvar.observacoes_aprovacao || 'Rejeitado pelo administrador';
+      }
+      
+      // Para PENDENTE - limpar campos de aprovação
+      if (dadosParaSalvar.status === 'PENDENTE') {
+        dadosParaSalvar.aprovado_por = null;
+        dadosParaSalvar.data_aprovacao = null;
+        dadosParaSalvar.observacoes_aprovacao = null;
       }
     }
 
+    console.log('📤 Atualizando usuário:', userId, dadosParaSalvar);
+
     const { error } = await supabase
       .from('user_profiles')
-      .update(dados)
+      .update(dadosParaSalvar)
       .eq('user_id', userId);
 
     if (error) {
-      console.error('Erro ao atualizar usuário:', error);
+      console.error('❌ Erro ao atualizar usuário:', error);
       throw error;
     }
+    
+    console.log('✅ Usuário atualizado com sucesso');
   },
 
   // Atualizar tipo de usuário
@@ -315,21 +337,27 @@ export const usuariosService = {
 
   // Listar mensagens não lidas
   async listarMensagensNaoLidas(userId: string): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('mensagens_sistema')
-      .select(`
-        *,
-        origem:usuario_origem_id (
-          nome
-        )
-      `)
-      .eq('usuario_destino_id', userId)
-      .eq('lido', false)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    try {
+      // Query simplificada sem join (o join estava causando erro PGRST200)
+      const { data, error } = await supabase
+        .from('mensagens_sistema')
+        .select('*')
+        .eq('usuario_destino_id', userId)
+        .eq('lido', false)
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        console.error('Erro ao carregar mensagens:', error);
+        // Retornar array vazio em vez de quebrar
+        return [];
+      }
+      
+      return data || [];
+    } catch (err) {
+      console.error('Erro ao carregar mensagens:', err);
+      return [];
+    }
   },
 
   // Marcar mensagem como lida
