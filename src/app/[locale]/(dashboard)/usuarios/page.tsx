@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import {
   Search,
-  Plus,
   Settings,
   CheckCircle,
   XCircle,
@@ -13,7 +12,7 @@ import {
   Loader2,
   Smartphone,
 } from 'lucide-react';
-import { Button, Input } from '@/components/ui';
+import { Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
 import { useUser } from '@/contexts/UserContext';
 import { ModalGerenciarUsuario } from '@/components/usuarios';
@@ -124,7 +123,7 @@ export default function UsuariosPage() {
             Gerencie os usuários e suas permissões
           </p>
         </div>
-        <Button icon={<Plus className="w-4 h-4" />}>Novo Usuário</Button>
+        {/* Botão removido - usuários se cadastram pelo app/web */}
       </div>
 
       {/* Cards de Resumo */}
