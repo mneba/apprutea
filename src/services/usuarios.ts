@@ -92,28 +92,39 @@ export const usuariosService = {
       throw new Error('Usuário não autenticado');
     }
 
+    console.log('🔑 Gerando código para:', userId, 'por:', adminQueGera);
+
     // Chamar RPC com os parâmetros corretos
     const { data, error } = await supabase.rpc('gerar_token_acesso', {
       p_user_id: userId,
       p_admin_que_gera: adminQueGera,
     });
 
+    console.log('📤 Resposta RPC:', { data, error });
+
     if (error) {
-      console.error('Erro ao gerar token:', error);
-      throw error;
+      console.error('❌ Erro RPC:', error);
+      throw new Error(error.message || 'Erro ao gerar token');
     }
 
-    // A function retorna um array com um objeto { sucesso, token_gerado, mensagem }
-    if (data && data.length > 0) {
-      const resultado = data[0];
-      if (resultado.sucesso) {
+    // A function retorna TABLE, pode vir como array ou objeto único
+    if (data) {
+      // Se for array, pegar primeiro elemento
+      const resultado = Array.isArray(data) ? data[0] : data;
+      
+      console.log('📋 Resultado:', resultado);
+      
+      if (resultado?.sucesso) {
+        return resultado.token_gerado;
+      } else if (resultado?.token_gerado) {
+        // Às vezes retorna direto o token sem campo sucesso
         return resultado.token_gerado;
       } else {
-        throw new Error(resultado.mensagem || 'Erro ao gerar token');
+        throw new Error(resultado?.mensagem || 'Erro ao gerar token');
       }
     }
 
-    throw new Error('Resposta inválida da function');
+    throw new Error('Resposta vazia da function');
   },
 
   // Validar token de acesso usando function existente do Supabase
