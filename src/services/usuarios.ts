@@ -59,12 +59,26 @@ export const usuariosService = {
 
   // Atualizar dados do usuário
   async atualizarUsuario(userId: string, dados: Partial<UserProfile>): Promise<void> {
+    // Se estiver aprovando, adicionar campos obrigatórios
+    if (dados.status === 'APROVADO') {
+      const user = await supabase.auth.getUser();
+      const adminId = user.data.user?.id;
+      
+      if (adminId) {
+        (dados as any).aprovado_por = adminId;
+        (dados as any).data_aprovacao = new Date().toISOString();
+      }
+    }
+
     const { error } = await supabase
       .from('user_profiles')
       .update(dados)
       .eq('user_id', userId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Erro ao atualizar usuário:', error);
+      throw error;
+    }
   },
 
   // Atualizar tipo de usuário
