@@ -352,14 +352,26 @@ export default function OrganizacaoPage() {
           )}
         </div>
         
-        {viewMode === 'empresas' && isSuperAdmin && (
-          <button
-            onClick={handleAbrirModalNovaEmpresa}
-            className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
-          >
-            <Plus className="w-5 h-5" />
-            Adicionar
-          </button>
+        {/* Botões de ação - SUPER_ADMIN sempre pode adicionar empresa */}
+        {isSuperAdmin && (
+          <div className="flex items-center gap-2">
+            {viewMode === 'rotas' && empresaSelecionada && (
+              <button
+                onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+              >
+                <Plus className="w-5 h-5" />
+                Nova Rota
+              </button>
+            )}
+            <button
+              onClick={handleAbrirModalNovaEmpresa}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+            >
+              <Building2 className="w-5 h-5" />
+              Nova Empresa
+            </button>
+          </div>
         )}
       </div>
 
@@ -554,18 +566,7 @@ export default function OrganizacaoPage() {
             )}
           </div>
 
-          {/* Botão adicionar rota (quando já tem rotas) */}
-          {rotas.length > 0 && empresaSelecionada && (
-            <div className="flex justify-center">
-              <button
-                onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
-                className="flex items-center gap-2 px-4 py-2 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Adicionar nova Rota
-              </button>
-            </div>
-          )}
+          {/* Botão adicionar rota já está no header */}
         </>
       )}
 
