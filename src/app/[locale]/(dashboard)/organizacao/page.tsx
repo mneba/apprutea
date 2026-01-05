@@ -9,12 +9,16 @@ import {
   Plus,
   Loader2,
   ChevronLeft,
-  User,
   AlertTriangle,
+  X,
+  UserCheck,
+  Percent,
+  Trash2,
+  Edit,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { organizacaoService } from '@/services/organizacao';
-import type { EmpresaResumo, RotaResumo, ResumoGeral } from '@/types/organizacao';
+import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio } from '@/types/organizacao';
 
 type ViewMode = 'empresas' | 'rotas';
 
@@ -34,16 +38,36 @@ export default function OrganizacaoPage() {
   const [rotas, setRotas] = useState<RotaResumo[]>([]);
   const [empresaSelecionada, setEmpresaSelecionada] = useState<EmpresaResumo | null>(null);
   
-  // Modal de nova rota
-  const [modalNovaRota, setModalNovaRota] = useState(false);
-  const [nomeNovaRota, setNomeNovaRota] = useState('');
-  const [empresaParaNovaRota, setEmpresaParaNovaRota] = useState<string | null>(null);
+  // Modal de nova/editar rota
+  const [modalRota, setModalRota] = useState(false);
+  const [nomeRota, setNomeRota] = useState('');
+  const [descricaoRota, setDescricaoRota] = useState('');
+  const [vendedorRotaId, setVendedorRotaId] = useState('');
+  const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState<VendedorDisponivel[]>([]);
+  const [empresaParaRota, setEmpresaParaRota] = useState<EmpresaResumo | null>(null);
   const [salvandoRota, setSalvandoRota] = useState(false);
+
+  // Modal de nova/editar empresa
+  const [modalEmpresa, setModalEmpresa] = useState(false);
+  const [empresaEditando, setEmpresaEditando] = useState<EmpresaResumo | null>(null);
+  const [nomeEmpresa, setNomeEmpresa] = useState('');
+  const [cnpjEmpresa, setCnpjEmpresa] = useState('');
+  const [telefoneEmpresa, setTelefoneEmpresa] = useState('');
+  const [emailEmpresa, setEmailEmpresa] = useState('');
+  const [enderecoEmpresa, setEnderecoEmpresa] = useState('');
+  const [sociosEmpresa, setSociosEmpresa] = useState<Socio[]>([]);
+  const [salvandoEmpresa, setSalvandoEmpresa] = useState(false);
+
+  // Novo sócio inline
+  const [novoSocioNome, setNovoSocioNome] = useState('');
+  const [novoSocioDocumento, setNovoSocioDocumento] = useState('');
+  const [novoSocioPercentual, setNovoSocioPercentual] = useState('');
 
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
   const hierarquiaId = localizacao?.hierarquia_id;
-  const empresaUnica = localizacao?.empresa_id;
+  const empresaIdSelecionada = localizacao?.empresa_id;
+  const rotaIdSelecionada = localizacao?.rota_id;
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -59,20 +83,17 @@ export default function OrganizacaoPage() {
       const resumo = await organizacaoService.buscarResumoGeral(hierarquiaId || undefined);
       setResumoGeral(resumo);
 
-      // Se não é super admin e tem empresa única, ir direto para rotas
-      if (!isSuperAdmin && empresaUnica) {
-        const rotasData = await organizacaoService.listarRotasPorEmpresa(empresaUnica);
-        setRotas(rotasData);
-        setEmpresaSelecionada({
-          id: empresaUnica,
-          nome: localizacao?.empresa?.nome || 'Empresa',
-          total_rotas: rotasData.length,
-          total_clientes: 0,
-          total_emprestimos: 0,
-        });
-        setViewMode('rotas');
+      // Se tem empresa selecionada no seletor master → ir para rotas
+      if (empresaIdSelecionada) {
+        const empresa = await organizacaoService.buscarEmpresa(empresaIdSelecionada);
+        if (empresa) {
+          setEmpresaSelecionada(empresa);
+          const rotasData = await organizacaoService.listarRotasPorEmpresa(empresaIdSelecionada);
+          setRotas(rotasData);
+          setViewMode('rotas');
+        }
       } else if (hierarquiaId) {
-        // Super admin ou usuário com múltiplas empresas
+        // Sem empresa selecionada → mostrar lista de empresas
         const empresasData = await organizacaoService.listarEmpresasPorHierarquia(hierarquiaId);
         setEmpresas(empresasData);
         setViewMode('empresas');
@@ -84,7 +105,7 @@ export default function OrganizacaoPage() {
     }
   };
 
-  // Selecionar empresa e ver rotas
+  // Selecionar empresa e ver rotas (clicando no card)
   const handleSelecionarEmpresa = async (empresa: EmpresaResumo) => {
     setLoading(true);
     try {
@@ -106,25 +127,37 @@ export default function OrganizacaoPage() {
     setRotas([]);
   };
 
-  // Abrir modal de nova rota
-  const handleAbrirModalNovaRota = (empresaId: string) => {
-    setEmpresaParaNovaRota(empresaId);
-    setNomeNovaRota('');
-    setModalNovaRota(true);
+  // ============================================
+  // MODAL DE ROTA
+  // ============================================
+
+  const handleAbrirModalNovaRota = async (empresa: EmpresaResumo) => {
+    setEmpresaParaRota(empresa);
+    setNomeRota('');
+    setDescricaoRota('');
+    setVendedorRotaId('');
+    
+    // Carregar vendedores disponíveis
+    const vendedores = await organizacaoService.buscarVendedoresDisponiveis(empresa.id);
+    setVendedoresDisponiveis(vendedores);
+    
+    setModalRota(true);
   };
 
-  // Criar nova rota
   const handleCriarRota = async () => {
-    if (!nomeNovaRota.trim() || !empresaParaNovaRota) {
+    if (!nomeRota.trim() || !empresaParaRota) {
       alert('Digite o nome da rota');
       return;
     }
 
     setSalvandoRota(true);
     try {
-      await organizacaoService.criarRota(empresaParaNovaRota, nomeNovaRota.trim());
-      setModalNovaRota(false);
-      setNomeNovaRota('');
+      await organizacaoService.criarRota(empresaParaRota.id, {
+        nome: nomeRota.trim(),
+        descricao: descricaoRota.trim() || undefined,
+        vendedor_id: vendedorRotaId || undefined,
+      });
+      setModalRota(false);
       
       // Recarregar dados
       if (viewMode === 'rotas' && empresaSelecionada) {
@@ -141,6 +174,138 @@ export default function OrganizacaoPage() {
     }
   };
 
+  // ============================================
+  // MODAL DE EMPRESA
+  // ============================================
+
+  const handleAbrirModalNovaEmpresa = () => {
+    setEmpresaEditando(null);
+    setNomeEmpresa('');
+    setCnpjEmpresa('');
+    setTelefoneEmpresa('');
+    setEmailEmpresa('');
+    setEnderecoEmpresa('');
+    setSociosEmpresa([]);
+    setModalEmpresa(true);
+  };
+
+  const handleAbrirModalEditarEmpresa = async (empresa: EmpresaResumo) => {
+    setEmpresaEditando(empresa);
+    setNomeEmpresa(empresa.nome);
+    setCnpjEmpresa(empresa.cnpj || '');
+    setTelefoneEmpresa(empresa.telefone || '');
+    setEmailEmpresa(empresa.email || '');
+    setEnderecoEmpresa(empresa.endereco || '');
+    
+    // Carregar sócios
+    const socios = await organizacaoService.listarSocios(empresa.id);
+    setSociosEmpresa(socios);
+    
+    setModalEmpresa(true);
+  };
+
+  const handleAdicionarSocio = () => {
+    if (!novoSocioNome.trim() || !novoSocioDocumento.trim() || !novoSocioPercentual) {
+      alert('Preencha nome, documento e percentual do sócio');
+      return;
+    }
+
+    const percentual = parseFloat(novoSocioPercentual);
+    if (isNaN(percentual) || percentual <= 0 || percentual > 100) {
+      alert('Percentual deve ser entre 0 e 100');
+      return;
+    }
+
+    // Verificar se soma não passa de 100%
+    const somaAtual = sociosEmpresa.reduce((acc, s) => acc + s.percentual_participacao, 0);
+    if (somaAtual + percentual > 100) {
+      alert(`A soma dos percentuais não pode ultrapassar 100%. Disponível: ${(100 - somaAtual).toFixed(2)}%`);
+      return;
+    }
+
+    const novoSocio: Socio = {
+      empresa_id: empresaEditando?.id || '',
+      nome: novoSocioNome.trim(),
+      documento: novoSocioDocumento.trim(),
+      percentual_participacao: percentual,
+      status: 'ATIVO',
+    };
+
+    setSociosEmpresa([...sociosEmpresa, novoSocio]);
+    setNovoSocioNome('');
+    setNovoSocioDocumento('');
+    setNovoSocioPercentual('');
+  };
+
+  const handleRemoverSocio = (index: number) => {
+    const novosSocios = [...sociosEmpresa];
+    novosSocios.splice(index, 1);
+    setSociosEmpresa(novosSocios);
+  };
+
+  const handleSalvarEmpresa = async () => {
+    if (!nomeEmpresa.trim()) {
+      alert('Nome da empresa é obrigatório');
+      return;
+    }
+
+    if (!hierarquiaId) {
+      alert('Selecione uma localização no seletor acima');
+      return;
+    }
+
+    setSalvandoEmpresa(true);
+    try {
+      if (empresaEditando) {
+        // Atualizar empresa
+        await organizacaoService.atualizarEmpresa(empresaEditando.id, {
+          nome: nomeEmpresa.trim(),
+          cnpj: cnpjEmpresa.trim() || undefined,
+          telefone: telefoneEmpresa.trim() || undefined,
+          email: emailEmpresa.trim() || undefined,
+          endereco: enderecoEmpresa.trim() || undefined,
+        });
+
+        // Salvar sócios
+        for (const socio of sociosEmpresa) {
+          if (!socio.id) {
+            // Novo sócio
+            await organizacaoService.salvarSocio({
+              ...socio,
+              empresa_id: empresaEditando.id,
+            });
+          }
+        }
+      } else {
+        // Criar empresa
+        const novaEmpresa = await organizacaoService.criarEmpresa({
+          nome: nomeEmpresa.trim(),
+          hierarquia_id: hierarquiaId,
+          cnpj: cnpjEmpresa.trim() || undefined,
+          telefone: telefoneEmpresa.trim() || undefined,
+          email: emailEmpresa.trim() || undefined,
+          endereco: enderecoEmpresa.trim() || undefined,
+        });
+
+        // Salvar sócios
+        for (const socio of sociosEmpresa) {
+          await organizacaoService.salvarSocio({
+            ...socio,
+            empresa_id: novaEmpresa.id,
+          });
+        }
+      }
+
+      setModalEmpresa(false);
+      carregarDados();
+    } catch (err: any) {
+      console.error('Erro ao salvar empresa:', err);
+      alert(`Erro ao salvar empresa: ${err.message}`);
+    } finally {
+      setSalvandoEmpresa(false);
+    }
+  };
+
   // Loading
   if (loadingUser || loading) {
     return (
@@ -154,7 +319,7 @@ export default function OrganizacaoPage() {
   }
 
   // Sem hierarquia selecionada
-  if (!hierarquiaId && !empresaUnica) {
+  if (!hierarquiaId && !empresaIdSelecionada) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center">
         <div className="w-20 h-20 rounded-full bg-yellow-100 flex items-center justify-center mb-6">
@@ -169,6 +334,9 @@ export default function OrganizacaoPage() {
       </div>
     );
   }
+
+  // Calcular soma de percentuais dos sócios
+  const somaPercentuais = sociosEmpresa.reduce((acc, s) => acc + s.percentual_participacao, 0);
 
   return (
     <div className="space-y-6">
@@ -186,6 +354,7 @@ export default function OrganizacaoPage() {
         
         {viewMode === 'empresas' && isSuperAdmin && (
           <button
+            onClick={handleAbrirModalNovaEmpresa}
             className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
           >
             <Plus className="w-5 h-5" />
@@ -241,25 +410,42 @@ export default function OrganizacaoPage() {
               <div className="col-span-full text-center py-12 text-gray-500">
                 <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                 <p>Nenhuma empresa encontrada</p>
+                {isSuperAdmin && (
+                  <button
+                    onClick={handleAbrirModalNovaEmpresa}
+                    className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Criar primeira empresa
+                  </button>
+                )}
               </div>
             ) : (
               empresas.map((empresa) => (
                 <div
                   key={empresa.id}
-                  className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow"
+                  onClick={() => handleSelecionarEmpresa(empresa)}
+                  className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md hover:border-blue-300 transition-all cursor-pointer"
                 >
-                  {/* Nome da Empresa - Clicável */}
-                  <button
-                    onClick={() => handleSelecionarEmpresa(empresa)}
-                    className="text-left w-full"
-                  >
-                    <h3 className="text-lg font-semibold text-gray-900 hover:text-blue-600 transition-colors">
+                  {/* Header com nome e botão editar */}
+                  <div className="flex items-start justify-between mb-4">
+                    <h3 className="text-lg font-semibold text-gray-900">
                       {empresa.nome}
                     </h3>
-                  </button>
+                    {isSuperAdmin && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAbrirModalEditarEmpresa(empresa);
+                        }}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
 
                   {/* Estatísticas */}
-                  <div className="mt-4 space-y-2">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-500">Rotas</span>
                       <span className="font-medium text-blue-600">{empresa.total_rotas}</span>
@@ -276,8 +462,11 @@ export default function OrganizacaoPage() {
 
                   {/* Botão Adicionar Rota */}
                   <button
-                    onClick={() => handleAbrirModalNovaRota(empresa.id)}
-                    className="mt-4 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleAbrirModalNovaRota(empresa);
+                    }}
+                    className="mt-4 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors w-full justify-center"
                   >
                     <Plus className="w-4 h-4" />
                     Adicionar nova Rota
@@ -291,7 +480,7 @@ export default function OrganizacaoPage() {
         <>
           {/* Botão Voltar + Título */}
           <div>
-            {isSuperAdmin && (
+            {isSuperAdmin && !empresaIdSelecionada && (
               <button
                 onClick={handleVoltar}
                 className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-2"
@@ -311,12 +500,14 @@ export default function OrganizacaoPage() {
               <div className="col-span-full text-center py-12 text-gray-500">
                 <MapPin className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                 <p>Nenhuma rota cadastrada</p>
-                <button
-                  onClick={() => empresaSelecionada && handleAbrirModalNovaRota(empresaSelecionada.id)}
-                  className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Criar primeira rota
-                </button>
+                {empresaSelecionada && (
+                  <button
+                    onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
+                    className="mt-4 text-blue-600 hover:text-blue-700 font-medium"
+                  >
+                    Criar primeira rota
+                  </button>
+                )}
               </div>
             ) : (
               rotas.map((rota) => (
@@ -367,7 +558,7 @@ export default function OrganizacaoPage() {
           {rotas.length > 0 && empresaSelecionada && (
             <div className="flex justify-center">
               <button
-                onClick={() => handleAbrirModalNovaRota(empresaSelecionada.id)}
+                onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
                 className="flex items-center gap-2 px-4 py-2 text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -378,42 +569,298 @@ export default function OrganizacaoPage() {
         </>
       )}
 
-      {/* Modal Nova Rota */}
-      {modalNovaRota && (
+      {/* ============================================ */}
+      {/* MODAL NOVA ROTA */}
+      {/* ============================================ */}
+      {modalRota && empresaParaRota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setModalNovaRota(false)} />
+          <div className="absolute inset-0 bg-black/50" onClick={() => setModalRota(false)} />
           
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Nova Rota</h3>
-            
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                Nome da Rota *
-              </label>
-              <input
-                type="text"
-                value={nomeNovaRota}
-                onChange={(e) => setNomeNovaRota(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Ex: Rota Centro Norte"
-                autoFocus
-              />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Nova Rota</h3>
+              <button
+                onClick={() => setModalRota(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="flex items-center justify-end gap-3">
+            {/* Body */}
+            <div className="p-6 space-y-4">
+              {/* Badge empresa */}
+              <div className="px-4 py-2.5 bg-green-100 border border-green-300 rounded-xl text-green-800 font-medium">
+                Nova Rota para : {empresaParaRota.nome}
+              </div>
+
+              {/* Nome */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nome da Rota
+                </label>
+                <input
+                  type="text"
+                  value={nomeRota}
+                  onChange={(e) => setNomeRota(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder=""
+                />
+              </div>
+
+              {/* Descrição */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Descrição da Rota
+                </label>
+                <input
+                  type="text"
+                  value={descricaoRota}
+                  onChange={(e) => setDescricaoRota(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder=""
+                />
+              </div>
+
+              {/* Vendedor */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Vendedor Responsável
+                </label>
+                <select
+                  value={vendedorRotaId}
+                  onChange={(e) => setVendedorRotaId(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Selecione Um Vendedor</option>
+                  {vendedoresDisponiveis.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.nome} ({v.codigo_vendedor})
+                    </option>
+                  ))}
+                </select>
+                {vendedoresDisponiveis.length === 0 && (
+                  <p className="text-xs text-orange-600 mt-1">
+                    Nenhum vendedor disponível (todos já têm rotas ou não há vendedores nesta empresa)
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
               <button
-                onClick={() => setModalNovaRota(false)}
+                onClick={() => setModalRota(false)}
                 className="px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
               >
                 Cancelar
               </button>
               <button
                 onClick={handleCriarRota}
-                disabled={salvandoRota || !nomeNovaRota.trim()}
+                disabled={salvandoRota || !nomeRota.trim()}
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {salvandoRota && <Loader2 className="w-4 h-4 animate-spin" />}
                 Criar Rota
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* MODAL NOVA/EDITAR EMPRESA */}
+      {/* ============================================ */}
+      {modalEmpresa && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setModalEmpresa(false)} />
+          
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {empresaEditando ? 'Editar Empresa' : 'Nova Empresa'}
+              </h3>
+              <button
+                onClick={() => setModalEmpresa(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Nome */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Nome da Empresa
+                </label>
+                <input
+                  type="text"
+                  value={nomeEmpresa}
+                  onChange={(e) => setNomeEmpresa(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder=""
+                />
+              </div>
+
+              {/* CNPJ e Telefone */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    CNPJ / RUC
+                  </label>
+                  <input
+                    type="text"
+                    value={cnpjEmpresa}
+                    onChange={(e) => setCnpjEmpresa(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder=""
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                    Telefone
+                  </label>
+                  <input
+                    type="text"
+                    value={telefoneEmpresa}
+                    onChange={(e) => setTelefoneEmpresa(e.target.value)}
+                    className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    placeholder=""
+                  />
+                </div>
+              </div>
+
+              {/* Email */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={emailEmpresa}
+                  onChange={(e) => setEmailEmpresa(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder=""
+                />
+              </div>
+
+              {/* Endereço */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Endereço
+                </label>
+                <textarea
+                  value={enderecoEmpresa}
+                  onChange={(e) => setEnderecoEmpresa(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                  rows={2}
+                  placeholder=""
+                />
+              </div>
+
+              {/* Seção de Sócios */}
+              <div className="pt-4 border-t border-gray-200">
+                <div className="flex items-center justify-between mb-3">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-gray-500" />
+                    Sócios
+                  </h4>
+                  <span className="text-sm text-gray-500">
+                    Total: {somaPercentuais.toFixed(2)}%
+                  </span>
+                </div>
+
+                {/* Lista de sócios */}
+                {sociosEmpresa.length > 0 && (
+                  <div className="space-y-2 mb-4">
+                    {sociosEmpresa.map((socio, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-900">{socio.nome}</p>
+                          <p className="text-sm text-gray-500">{socio.documento}</p>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
+                            {socio.percentual_participacao}%
+                          </span>
+                          <button
+                            onClick={() => handleRemoverSocio(index)}
+                            className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Adicionar novo sócio */}
+                <div className="space-y-2 p-3 bg-gray-50 rounded-xl">
+                  <p className="text-sm font-medium text-gray-700">Adicionar Sócio</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      value={novoSocioNome}
+                      onChange={(e) => setNovoSocioNome(e.target.value)}
+                      className="px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                      placeholder="Nome"
+                    />
+                    <input
+                      type="text"
+                      value={novoSocioDocumento}
+                      onChange={(e) => setNovoSocioDocumento(e.target.value)}
+                      className="px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                      placeholder="Documento"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1 relative">
+                      <input
+                        type="number"
+                        value={novoSocioPercentual}
+                        onChange={(e) => setNovoSocioPercentual(e.target.value)}
+                        className="w-full px-3 py-2 pr-8 rounded-lg border border-gray-200 text-sm"
+                        placeholder="Percentual"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                      />
+                      <Percent className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    </div>
+                    <button
+                      onClick={handleAdicionarSocio}
+                      className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm"
+                    >
+                      Adicionar
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setModalEmpresa(false)}
+                className="px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleSalvarEmpresa}
+                disabled={salvandoEmpresa || !nomeEmpresa.trim()}
+                className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
+              >
+                {salvandoEmpresa && <Loader2 className="w-4 h-4 animate-spin" />}
+                {empresaEditando ? 'Salvar Alterações' : 'Criar Empresa'}
               </button>
             </div>
           </div>

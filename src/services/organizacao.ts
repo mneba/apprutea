@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
-import type { EmpresaResumo, RotaResumo, ResumoGeral } from '@/types/organizacao';
+import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio } from '@/types/organizacao';
 
 const supabase = createClient();
 
@@ -82,7 +82,7 @@ export const organizacaoService = {
     // Buscar empresas
     const { data: empresas, error } = await supabase
       .from('empresas')
-      .select('id, nome')
+      .select('id, nome, cnpj, telefone, email, endereco')
       .eq('hierarquia_id', hierarquiaId)
       .eq('status', 'ATIVA')
       .order('nome');
@@ -123,6 +123,10 @@ export const organizacaoService = {
         return {
           id: empresa.id,
           nome: empresa.nome,
+          cnpj: empresa.cnpj,
+          telefone: empresa.telefone,
+          email: empresa.email,
+          endereco: empresa.endereco,
           total_rotas: totalRotas || 0,
           total_clientes: totalClientes || 0,
           total_emprestimos: totalEmprestimos || 0,
@@ -131,6 +135,100 @@ export const organizacaoService = {
     );
 
     return empresasComResumo;
+  },
+
+  async buscarEmpresa(empresaId: string): Promise<EmpresaResumo | null> {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('id, nome, cnpj, telefone, email, endereco')
+      .eq('id', empresaId)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar empresa:', error);
+      return null;
+    }
+
+    // Contar rotas
+    const { count: totalRotas } = await supabase
+      .from('rotas')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ATIVA');
+
+    // Contar clientes
+    const { count: totalClientes } = await supabase
+      .from('clientes')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ATIVO');
+
+    // Contar empréstimos
+    const { count: totalEmprestimos } = await supabase
+      .from('emprestimos')
+      .select('id', { count: 'exact', head: true })
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ATIVO');
+
+    return {
+      ...data,
+      total_rotas: totalRotas || 0,
+      total_clientes: totalClientes || 0,
+      total_emprestimos: totalEmprestimos || 0,
+    };
+  },
+
+  async criarEmpresa(dados: {
+    nome: string;
+    hierarquia_id: string;
+    cnpj?: string;
+    telefone?: string;
+    email?: string;
+    endereco?: string;
+  }): Promise<EmpresaResumo> {
+    const { data, error } = await supabase
+      .from('empresas')
+      .insert({
+        ...dados,
+        status: 'ATIVA',
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Erro ao criar empresa:', error);
+      throw error;
+    }
+
+    return {
+      id: data.id,
+      nome: data.nome,
+      cnpj: data.cnpj,
+      telefone: data.telefone,
+      email: data.email,
+      endereco: data.endereco,
+      total_rotas: 0,
+      total_clientes: 0,
+      total_emprestimos: 0,
+    };
+  },
+
+  async atualizarEmpresa(empresaId: string, dados: {
+    nome?: string;
+    cnpj?: string;
+    telefone?: string;
+    email?: string;
+    endereco?: string;
+  }): Promise<void> {
+    const { error } = await supabase
+      .from('empresas')
+      .update(dados)
+      .eq('id', empresaId);
+
+    if (error) {
+      console.error('Erro ao atualizar empresa:', error);
+      throw error;
+    }
   },
 
   // ============================================
@@ -144,6 +242,7 @@ export const organizacaoService = {
       .select(`
         id,
         nome,
+        descricao,
         status,
         vendedor_id,
         vendedores (
@@ -183,6 +282,7 @@ export const organizacaoService = {
         return {
           id: rota.id,
           nome: rota.nome,
+          descricao: rota.descricao,
           status: rota.status,
           vendedor_id: rota.vendedor_id,
           vendedor_nome: rota.vendedores?.nome || undefined,
@@ -195,15 +295,48 @@ export const organizacaoService = {
     return rotasComResumo;
   },
 
-  // ============================================
-  // CRIAR ROTA
-  // ============================================
+  // Buscar vendedores disponíveis (mesma empresa, sem rota atribuída)
+  async buscarVendedoresDisponiveis(empresaId: string): Promise<VendedorDisponivel[]> {
+    // Buscar IDs de vendedores que já têm rotas
+    const { data: rotasComVendedor } = await supabase
+      .from('rotas')
+      .select('vendedor_id')
+      .eq('empresa_id', empresaId)
+      .not('vendedor_id', 'is', null);
 
-  async criarRota(empresaId: string, nome: string): Promise<RotaResumo> {
+    const vendedoresComRota = rotasComVendedor?.map(r => r.vendedor_id) || [];
+
+    // Buscar vendedores da empresa que não têm rota
+    let query = supabase
+      .from('vendedores')
+      .select('id, nome, codigo_vendedor')
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ATIVO')
+      .order('nome');
+
+    if (vendedoresComRota.length > 0) {
+      query = query.not('id', 'in', `(${vendedoresComRota.join(',')})`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar vendedores disponíveis:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  async criarRota(empresaId: string, dados: {
+    nome: string;
+    descricao?: string;
+    vendedor_id?: string;
+  }): Promise<RotaResumo> {
     const { data, error } = await supabase
       .from('rotas')
       .insert({
-        nome,
+        ...dados,
         empresa_id: empresaId,
         status: 'ATIVA',
       })
@@ -218,11 +351,105 @@ export const organizacaoService = {
     return {
       id: data.id,
       nome: data.nome,
+      descricao: data.descricao,
       status: data.status,
-      vendedor_id: undefined,
+      vendedor_id: data.vendedor_id,
       vendedor_nome: undefined,
       total_clientes: 0,
       total_emprestimos: 0,
     };
+  },
+
+  // ============================================
+  // SÓCIOS
+  // ============================================
+
+  async listarSocios(empresaId: string): Promise<Socio[]> {
+    const { data, error } = await supabase
+      .from('socios')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ATIVO')
+      .order('nome');
+
+    if (error) {
+      console.error('Erro ao listar sócios:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  async salvarSocio(socio: Socio): Promise<Socio> {
+    if (socio.id) {
+      // Atualizar
+      const { data, error } = await supabase
+        .from('socios')
+        .update({
+          nome: socio.nome,
+          documento: socio.documento,
+          telefone: socio.telefone,
+          email: socio.email,
+          endereco: socio.endereco,
+          percentual_participacao: socio.percentual_participacao,
+          user_id: socio.user_id,
+        })
+        .eq('id', socio.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    } else {
+      // Criar
+      const { data, error } = await supabase
+        .from('socios')
+        .insert({
+          empresa_id: socio.empresa_id,
+          nome: socio.nome,
+          documento: socio.documento,
+          telefone: socio.telefone,
+          email: socio.email,
+          endereco: socio.endereco,
+          percentual_participacao: socio.percentual_participacao,
+          user_id: socio.user_id,
+          status: 'ATIVO',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    }
+  },
+
+  async removerSocio(socioId: string): Promise<void> {
+    const { error } = await supabase
+      .from('socios')
+      .update({ status: 'INATIVO' })
+      .eq('id', socioId);
+
+    if (error) throw error;
+  },
+
+  // Buscar usuários da empresa para selecionar como sócio
+  async buscarUsuariosEmpresa(empresaId: string): Promise<{ id: string; nome: string; email: string }[]> {
+    const { data, error } = await supabase
+      .from('user_profiles')
+      .select('user_id, nome')
+      .contains('empresas_ids', [empresaId])
+      .eq('status', 'APROVADO')
+      .order('nome');
+
+    if (error) {
+      console.error('Erro ao buscar usuários da empresa:', error);
+      return [];
+    }
+
+    return (data || []).map(u => ({
+      id: u.user_id,
+      nome: u.nome,
+      email: '',
+    }));
   },
 };
