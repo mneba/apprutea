@@ -242,7 +242,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         documento,
         telefone: telefoneCompleto,
         endereco,
-        foto_url: fotoUrl || null,
+        foto_url: fotoUrl || undefined,
         empresa_id: empresaId,
         status: 'ATIVO',
       };
