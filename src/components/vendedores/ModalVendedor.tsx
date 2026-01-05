@@ -361,6 +361,9 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
     try {
       const telefoneCompleto = telefoneNumero ? `${ddi}${telefoneNumero.replace(/\D/g, '')}` : '';
 
+      // Buscar hierarquia_id da empresa
+      const hierarquiaId = await vendedoresService.buscarHierarquiaEmpresa(empresaId);
+
       const dadosVendedor: Partial<Vendedor> = {
         codigo_vendedor: codigoVendedor,
         nome,
@@ -371,6 +374,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         endereco,
         foto_url: fotoUrl || undefined,
         empresa_id: empresaId,
+        hierarquia_id: hierarquiaId || undefined,
         status: 'ATIVO',
       };
 
@@ -494,10 +498,12 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                             </span>
                           )}
                         </div>
+                        {/* Botão alterar foto */}
                         <button
                           onClick={() => fileInputRef.current?.click()}
                           disabled={uploadingFoto}
                           className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 disabled:opacity-50"
+                          title="Alterar foto"
                         >
                           {uploadingFoto ? (
                             <Loader2 className="w-4 h-4 animate-spin" />
@@ -505,6 +511,16 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                             <Camera className="w-4 h-4" />
                           )}
                         </button>
+                        {/* Botão excluir foto */}
+                        {fotoUrl && (
+                          <button
+                            onClick={() => setFotoUrl('')}
+                            className="absolute -bottom-1 -left-1 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600"
+                            title="Remover foto"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                         <input
                           ref={fileInputRef}
                           type="file"
@@ -513,7 +529,9 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           className="hidden"
                         />
                       </div>
-                      <span className="text-xs text-gray-500">Clique para alterar</span>
+                      <span className="text-xs text-gray-500">
+                        {fotoUrl ? 'Alterar ou remover' : 'Clique para adicionar'}
+                      </span>
                     </div>
 
                     {/* Código e Acesso */}

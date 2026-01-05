@@ -91,6 +91,22 @@ export const vendedoresService = {
     return data;
   },
 
+  // Buscar hierarquia_id de uma empresa
+  async buscarHierarquiaEmpresa(empresaId: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('hierarquia_id')
+      .eq('id', empresaId)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar hierarquia da empresa:', error);
+      return null;
+    }
+
+    return data?.hierarquia_id || null;
+  },
+
   async buscarVendedor(vendedorId: string): Promise<Vendedor | null> {
     const { data, error } = await supabase
       .from('vendedores')
