@@ -179,8 +179,9 @@ export default function OrganizacaoPage() {
           {localizacao && (
             <p className="text-gray-500 mt-1 flex items-center gap-2">
               <MapPin className="w-4 h-4" />
-              {localizacao.pais} &gt; {localizacao.estado}
-              {empresaSelecionada && ` > ${empresaSelecionada.nome}`}
+              {localizacao.hierarquia?.nome || 'Hierarquia'}
+              {localizacao.empresa && ` > ${localizacao.empresa.nome}`}
+              {empresaSelecionada && !localizacao.empresa && ` > ${empresaSelecionada.nome}`}
             </p>
           )}
         </div>
