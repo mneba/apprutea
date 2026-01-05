@@ -227,48 +227,66 @@ export function SeletorLocalizacao() {
                     {/* Estados do País */}
                     {paisSelecionado === pais && (
                       <div className="ml-4 mt-1 space-y-1">
-                        {estadosDoPais.map((hierarquia) => (
-                          <div key={hierarquia.id}>
-                            <button
-                              onClick={() => {
-                                setHierarquiaIdSelecionada(
-                                  hierarquiaIdSelecionada === hierarquia.id ? null : hierarquia.id
-                                );
-                                setEmpresaIdSelecionada(null);
-                              }}
-                              className={`
-                                w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
-                                ${hierarquiaIdSelecionada === hierarquia.id 
-                                  ? 'bg-blue-600 text-white' 
-                                  : 'hover:bg-gray-100 text-gray-600'}
-                              `}
-                            >
-                              <ChevronRight className={`w-3 h-3 transition-transform ${hierarquiaIdSelecionada === hierarquia.id ? 'rotate-90' : ''}`} />
-                              {hierarquia.estado}
-                            </button>
+                        {estadosDoPais.map((hierarquia) => {
+                          // Quantidade de empresas ativas deste estado
+                          const totalEmpresas = (hierarquia as any).total_empresas_ativas || 0;
+                          
+                          return (
+                            <div key={hierarquia.id}>
+                              <button
+                                onClick={() => {
+                                  setHierarquiaIdSelecionada(
+                                    hierarquiaIdSelecionada === hierarquia.id ? null : hierarquia.id
+                                  );
+                                  setEmpresaIdSelecionada(null);
+                                }}
+                                className={`
+                                  w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors
+                                  ${hierarquiaIdSelecionada === hierarquia.id 
+                                    ? 'bg-blue-600 text-white' 
+                                    : 'hover:bg-gray-100 text-gray-600'}
+                                `}
+                              >
+                                <span className="flex items-center gap-2">
+                                  <ChevronRight className={`w-3 h-3 transition-transform ${hierarquiaIdSelecionada === hierarquia.id ? 'rotate-90' : ''}`} />
+                                  {hierarquia.estado}
+                                </span>
+                                {/* Badge com quantidade de empresas */}
+                                {totalEmpresas > 0 && (
+                                  <span className={`
+                                    px-2 py-0.5 rounded-full text-xs font-medium
+                                    ${hierarquiaIdSelecionada === hierarquia.id 
+                                      ? 'bg-blue-500 text-white' 
+                                      : 'bg-gray-200 text-gray-600'}
+                                  `}>
+                                    {totalEmpresas} {totalEmpresas === 1 ? 'empresa' : 'empresas'}
+                                  </span>
+                                )}
+                              </button>
 
-                            {/* Empresas da Hierarquia */}
-                            {hierarquiaIdSelecionada === hierarquia.id && empresasDaHierarquia.length > 0 && (
-                              <div className="ml-4 mt-1 space-y-1">
-                                {empresasDaHierarquia.map((empresa) => (
-                                  <button
-                                    key={empresa.id}
-                                    onClick={() => handleSelecionarEmpresa(empresa)}
-                                    className={`
-                                      w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
-                                      ${localizacao.empresa_id === empresa.id
-                                        ? 'bg-green-100 text-green-700 border border-green-300'
-                                        : 'hover:bg-gray-100 text-gray-600'}
-                                    `}
-                                  >
-                                    <Building2 className="w-3 h-3" />
-                                    {empresa.nome}
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        ))}
+                              {/* Empresas da Hierarquia */}
+                              {hierarquiaIdSelecionada === hierarquia.id && empresasDaHierarquia.length > 0 && (
+                                <div className="ml-4 mt-1 space-y-1">
+                                  {empresasDaHierarquia.map((empresa) => (
+                                    <button
+                                      key={empresa.id}
+                                      onClick={() => handleSelecionarEmpresa(empresa)}
+                                      className={`
+                                        w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                                        ${localizacao.empresa_id === empresa.id
+                                          ? 'bg-green-100 text-green-700 border border-green-300'
+                                          : 'hover:bg-gray-100 text-gray-600'}
+                                      `}
+                                    >
+                                      <Building2 className="w-3 h-3" />
+                                      {empresa.nome}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>

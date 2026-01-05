@@ -91,6 +91,9 @@ const RESTRICOES_PADRAO: Omit<RestricaoVendedor, 'vendedor_id'> = {
   validar_clientes_outros_vendedores: false,
   numero_whatsapp_aprovacoes: '',
   taxas_juros_permitidas: [],
+  // Campos migrados da tabela vendedores
+  saldo_inicial: 0,
+  data_vencimento: undefined,
 };
 
 // Valores padrão - configuracoes_recibos
@@ -120,6 +123,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   const [ddi, setDdi] = useState('+55');
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [endereco, setEndereco] = useState('');
+  const [fotoUrl, setFotoUrl] = useState('');
 
   // === ABA CONFIGURAÇÕES ===
   const [configuracoes, setConfiguracoes] = useState<Omit<ConfiguracaoVendedor, 'vendedor_id'>>(CONFIGURACOES_PADRAO);
@@ -141,6 +145,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       setEmail(vendedor.email || '');
       setDocumento(vendedor.documento || '');
       setEndereco(vendedor.endereco || '');
+      setFotoUrl(vendedor.foto_url || '');
       
       // Extrair DDI do telefone
       if (vendedor.telefone) {
@@ -237,6 +242,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         documento,
         telefone: telefoneCompleto,
         endereco,
+        foto_url: fotoUrl || null,
         empresa_id: empresaId,
         status: 'ATIVO',
       };
@@ -426,16 +432,41 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       <label className="block text-sm font-medium text-purple-700 mb-1.5">
                         Código de Acesso (App Móvel)
                       </label>
-                      <div className="flex items-center gap-3">
-                        <code className="px-4 py-2 bg-white rounded-lg text-xl font-mono text-purple-700 border border-purple-200">
-                          {vendedor.codigo_acesso}
-                        </code>
-                        <span className="text-sm text-purple-600">
-                          Login: {vendedor.codigo_acesso}@apprutea.internal
-                        </span>
-                      </div>
+                      <code className="px-4 py-2 bg-white rounded-lg text-xl font-mono text-purple-700 border border-purple-200">
+                        {vendedor.codigo_acesso}
+                      </code>
                     </div>
                   )}
+
+                  {/* Foto do Vendedor */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Foto do Vendedor (URL)
+                    </label>
+                    <div className="flex items-center gap-4">
+                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center overflow-hidden border-2 border-gray-200">
+                        {fotoUrl ? (
+                          <img
+                            src={fotoUrl}
+                            alt="Foto"
+                            className="w-16 h-16 object-cover"
+                            onError={() => setFotoUrl('')}
+                          />
+                        ) : (
+                          <span className="text-white font-semibold text-xl">
+                            {nome?.charAt(0).toUpperCase() || 'V'}
+                          </span>
+                        )}
+                      </div>
+                      <input
+                        type="url"
+                        value={fotoUrl}
+                        onChange={(e) => setFotoUrl(e.target.value)}
+                        className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        placeholder="https://exemplo.com/foto.jpg"
+                      />
+                    </div>
+                  </div>
 
                   <div className="flex items-start gap-3 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
                     <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
@@ -502,6 +533,45 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
               {/* ABA RESTRIÇÕES */}
               {activeTab === 'restricoes' && (
                 <div className="space-y-6">
+                  {/* Seção: Configurações do Vendedor (campos migrados) */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Configurações do Vendedor
+                    </h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Saldo Inicial (Caixa)
+                        </label>
+                        <input
+                          type="number"
+                          value={restricoes.saldo_inicial}
+                          onChange={(e) => updateRestricao('saldo_inicial', parseFloat(e.target.value) || 0)}
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Valor inicial do caixa do vendedor</p>
+                      </div>
+
+                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Data de Vencimento do Acesso
+                        </label>
+                        <input
+                          type="date"
+                          value={restricoes.data_vencimento || ''}
+                          onChange={(e) => updateRestricao('data_vencimento', e.target.value || null)}
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                          min="2020-01-01"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Deixe vazio para acesso ilimitado</p>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Seção: Validações de Valores */}
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">

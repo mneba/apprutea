@@ -4,6 +4,7 @@
 // ============================================
 
 // Vendedor principal (tabela: vendedores)
+// Campos básicos apenas - valores/restrições estão em restricoes_vendedor
 export interface Vendedor {
   id: string;
   nome: string;
@@ -18,9 +19,6 @@ export interface Vendedor {
   empresa_id?: string;
   hierarquia_id?: string;
   user_id?: string;
-  data_vencimento?: string;
-  valor_venda_maxima?: number;
-  saldo_inicial?: number;
   codigo_acesso?: string;
   estado_acesso?: 'ATIVO' | 'INATIVO';
   foto_url?: string;
@@ -87,6 +85,13 @@ export interface RestricaoVendedor {
   
   // Taxas de Juros Permitidas (JSONB array)
   taxas_juros_permitidas?: number[];
+  
+  // === CAMPOS MIGRADOS DA TABELA VENDEDORES ===
+  // Saldo inicial do vendedor (valor que começa o dia)
+  saldo_inicial: number;
+  
+  // Data de vencimento do acesso
+  data_vencimento?: string;
   
   created_at?: string;
   updated_at?: string;
