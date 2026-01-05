@@ -176,12 +176,10 @@ export default function OrganizacaoPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Organização</h1>
-          {localizacao && (
+          {(localizacao?.empresa || empresaSelecionada) && (
             <p className="text-gray-500 mt-1 flex items-center gap-2">
               <MapPin className="w-4 h-4" />
-              {localizacao.hierarquia?.nome || 'Hierarquia'}
-              {localizacao.empresa && ` > ${localizacao.empresa.nome}`}
-              {empresaSelecionada && !localizacao.empresa && ` > ${empresaSelecionada.nome}`}
+              {localizacao?.empresa?.nome || empresaSelecionada?.nome || 'Empresa'}
             </p>
           )}
         </div>
