@@ -1,27 +1,21 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Search,
-  Plus,
-  MoreVertical,
-  Edit,
-  Trash2,
-  Key,
+  Settings,
   CheckCircle,
   XCircle,
   Clock,
-  Shield,
   User,
   Building2,
   Loader2,
+  Smartphone,
 } from 'lucide-react';
-import { Button, Input } from '@/components/ui';
+import { Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
 import { useUser } from '@/contexts/UserContext';
-import { ModalPermissoes } from '@/components/usuarios/ModalPermissoes';
-import { ModalGerarCodigo } from '@/components/usuarios/ModalGerarCodigo';
-import { ModalEditarUsuario } from '@/components/usuarios/ModalEditarUsuario';
+import { ModalGerenciarUsuario } from '@/components/usuarios';
 import type { UserProfile, Empresa } from '@/types/database';
 
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
@@ -30,44 +24,22 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
   REJEITADO: { label: 'Rejeitado', color: 'bg-red-100 text-red-700', icon: XCircle },
 };
 
-const tipoUsuarioConfig: Record<string, { label: string; color: string }> = {
-  SUPER_ADMIN: { label: 'Super Admin', color: 'bg-purple-100 text-purple-700' },
-  ADMIN: { label: 'Admin', color: 'bg-blue-100 text-blue-700' },
-  MONITOR: { label: 'Monitor', color: 'bg-cyan-100 text-cyan-700' },
-  USUARIO_PADRAO: { label: 'Usuário Padrão', color: 'bg-gray-100 text-gray-700' },
-  VENDEDOR: { label: 'Vendedor', color: 'bg-orange-100 text-orange-700' },
-};
-
 export default function UsuariosPage() {
-  const { profile, isSuperAdmin, localizacao, loading: loadingUser } = useUser();
+  const { profile, localizacao, loading: loadingUser } = useUser();
   const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
-  const [filtroTipo, setFiltroTipo] = useState<string>('todos');
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>('todos');
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<UserProfile | null>(null);
-  const [modalPermissoes, setModalPermissoes] = useState(false);
-  const [modalCodigo, setModalCodigo] = useState(false);
-  const [modalEditar, setModalEditar] = useState(false);
-  const [menuAberto, setMenuAberto] = useState<string | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [modalAberto, setModalAberto] = useState(false);
 
-  // Debug - ver o que está acontecendo
-  useEffect(() => {
-    console.log('🔍 Debug UsuariosPage:', {
-      loadingUser,
-      profile: profile?.nome,
-      tipo_usuario: profile?.tipo_usuario,
-      isSuperAdmin,
-      localizacao_empresa: localizacao.empresa_id,
-    });
-  }, [loadingUser, profile, isSuperAdmin, localizacao]);
+  // Verificar se é SUPER_ADMIN (interno)
+  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
 
-  // Carregar usuários e empresas - AGUARDAR perfil carregar
+  // Carregar dados quando perfil estiver pronto
   useEffect(() => {
-    // Só carregar quando o perfil do usuário estiver pronto
     if (!loadingUser && profile) {
       carregarDados();
     }
@@ -76,36 +48,24 @@ export default function UsuariosPage() {
   const carregarDados = async () => {
     setLoading(true);
     try {
-      console.log('📥 Carregando usuários...', { 
-        isSuperAdmin, 
-        tipo_usuario: profile?.tipo_usuario,
-        empresaId: localizacao.empresa_id 
-      });
-      
-      // SUPER_ADMIN sempre vê todos os usuários (isSuperAdmin = true, empresaId = undefined)
-      // Outros usuários veem apenas da sua empresa
-      const filtroIsSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
-      
+      // SUPER_ADMIN vê todos, outros veem apenas da sua empresa
       const usuariosData = await usuariosService.listarUsuarios({
-        isSuperAdmin: filtroIsSuperAdmin,
-        empresaId: filtroIsSuperAdmin ? undefined : (localizacao.empresa_id || undefined),
+        isSuperAdmin: ehSuperAdmin,
+        empresaId: ehSuperAdmin ? undefined : (localizacao.empresa_id || undefined),
       });
-      
-      console.log('✅ Usuários carregados:', usuariosData.length);
       setUsuarios(usuariosData);
 
-      // Carregar todas as empresas para o filtro e para mostrar na tabela
+      // Carregar todas as empresas para exibição
       const empresasData = await usuariosService.listarEmpresas();
       setEmpresas(empresasData);
-      
     } catch (err) {
-      console.error('❌ Erro ao carregar dados:', err);
+      console.error('Erro ao carregar dados:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // Obter nome da empresa do usuário
+  // Obter nome da empresa
   const getEmpresaNome = (usuario: UserProfile) => {
     if (!usuario.empresas_ids || usuario.empresas_ids.length === 0) {
       return usuario.empresa_pretendida || '-';
@@ -115,6 +75,9 @@ export default function UsuariosPage() {
     return empresa?.nome || usuario.empresa_pretendida || '-';
   };
 
+  // Verificar se é monitor (apenas app móvel)
+  const ehMonitor = (usuario: UserProfile) => usuario.tipo_usuario === 'MONITOR';
+
   // Filtrar usuários
   const usuariosFiltrados = usuarios.filter((usuario) => {
     const matchSearch =
@@ -123,41 +86,22 @@ export default function UsuariosPage() {
       usuario.empresa_pretendida?.toLowerCase().includes(search.toLowerCase());
 
     const matchStatus = filtroStatus === 'todos' || usuario.status === filtroStatus;
-    const matchTipo = filtroTipo === 'todos' || usuario.tipo_usuario === filtroTipo;
 
-    // Filtro por empresa (apenas se selecionado)
     const matchEmpresa =
       filtroEmpresa === 'todos' ||
       (usuario.empresas_ids && usuario.empresas_ids.includes(filtroEmpresa)) ||
       (!usuario.empresas_ids?.length && filtroEmpresa === 'sem_empresa');
 
-    return matchSearch && matchStatus && matchTipo && matchEmpresa;
+    return matchSearch && matchStatus && matchEmpresa;
   });
 
-  // Abrir menu de ações com posicionamento inteligente
-  const handleAbrirMenu = (usuarioId: string, event: React.MouseEvent) => {
-    setMenuAberto(menuAberto === usuarioId ? null : usuarioId);
-  };
-
-  const handleGerarCodigo = (usuario: UserProfile) => {
+  // Abrir modal
+  const handleGerenciar = (usuario: UserProfile) => {
     setUsuarioSelecionado(usuario);
-    setModalCodigo(true);
-    setMenuAberto(null);
+    setModalAberto(true);
   };
 
-  const handleEditarPermissoes = (usuario: UserProfile) => {
-    setUsuarioSelecionado(usuario);
-    setModalPermissoes(true);
-    setMenuAberto(null);
-  };
-
-  const handleEditar = (usuario: UserProfile) => {
-    setUsuarioSelecionado(usuario);
-    setModalEditar(true);
-    setMenuAberto(null);
-  };
-
-  // Se ainda está carregando o usuário do contexto, mostrar loading
+  // Se carregando
   if (loadingUser) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -169,22 +113,17 @@ export default function UsuariosPage() {
     );
   }
 
-  // Verificar se é SUPER_ADMIN diretamente do profile
-  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
-
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Usuários e Permissões</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Usuários</h1>
           <p className="text-gray-500 mt-1">
-            {ehSuperAdmin 
-              ? '👑 Visualizando todos os usuários do sistema' 
-              : 'Gerencie os usuários da sua empresa'}
+            Gerencie os usuários e suas permissões
           </p>
         </div>
-        <Button icon={<Plus className="w-4 h-4" />}>Novo Usuário</Button>
+        {/* Botão removido - usuários se cadastram pelo app/web */}
       </div>
 
       {/* Cards de Resumo */}
@@ -196,7 +135,7 @@ export default function UsuariosPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">{usuarios.length}</p>
-              <p className="text-sm text-gray-500">Total de Usuários</p>
+              <p className="text-sm text-gray-500">Total</p>
             </div>
           </div>
         </div>
@@ -231,20 +170,20 @@ export default function UsuariosPage() {
 
         <div className="bg-white rounded-xl p-4 border border-gray-200">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center">
-              <Shield className="w-5 h-5 text-purple-600" />
+            <div className="w-10 h-10 rounded-lg bg-orange-100 flex items-center justify-center">
+              <Smartphone className="w-5 h-5 text-orange-600" />
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {usuarios.filter((u) => u.tipo_usuario === 'SUPER_ADMIN' || u.tipo_usuario === 'ADMIN').length}
+                {usuarios.filter((u) => u.tipo_usuario === 'MONITOR').length}
               </p>
-              <p className="text-sm text-gray-500">Administradores</p>
+              <p className="text-sm text-gray-500">Apenas Móvel</p>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Filtros e Busca */}
+      {/* Filtros */}
       <div className="bg-white rounded-xl border border-gray-200 p-4">
         <div className="flex flex-col lg:flex-row gap-4">
           <div className="flex-1">
@@ -256,15 +195,15 @@ export default function UsuariosPage() {
             />
           </div>
           <div className="flex flex-wrap gap-3">
-            {/* Filtro de Empresa - SUPER_ADMIN sempre vê este filtro */}
+            {/* Filtro de Empresa - só SUPER_ADMIN vê */}
             {ehSuperAdmin && (
               <select
-                className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500"
                 value={filtroEmpresa}
                 onChange={(e) => setFiltroEmpresa(e.target.value)}
               >
                 <option value="todos">Todas as Empresas</option>
-                <option value="sem_empresa">Sem Empresa Vinculada</option>
+                <option value="sem_empresa">Sem Empresa</option>
                 {empresas.map((empresa) => (
                   <option key={empresa.id} value={empresa.id}>
                     {empresa.nome}
@@ -274,7 +213,7 @@ export default function UsuariosPage() {
             )}
 
             <select
-              className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500"
               value={filtroStatus}
               onChange={(e) => setFiltroStatus(e.target.value)}
             >
@@ -283,91 +222,77 @@ export default function UsuariosPage() {
               <option value="PENDENTE">Pendentes</option>
               <option value="REJEITADO">Rejeitados</option>
             </select>
-
-            <select
-              className="px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-            >
-              <option value="todos">Todos os Tipos</option>
-              <option value="SUPER_ADMIN">Super Admin</option>
-              <option value="ADMIN">Admin</option>
-              <option value="MONITOR">Monitor</option>
-              <option value="USUARIO_PADRAO">Usuário Padrão</option>
-            </select>
           </div>
         </div>
       </div>
 
-      {/* Tabela de Usuários */}
+      {/* Tabela */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Usuário
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Empresa
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Tipo
-                </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Status
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Código
                 </th>
-                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Cadastro
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider w-20">
-                  Ações
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase w-24">
+                  Gerenciar
                 </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
-                    <div className="flex items-center justify-center gap-2">
-                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
-                      Carregando usuários...
-                    </div>
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
+                    <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto mb-2" />
+                    Carregando usuários...
                   </td>
                 </tr>
               ) : usuariosFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-12 text-center text-gray-500">
                     <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p>Nenhum usuário encontrado</p>
-                    {!ehSuperAdmin && !localizacao.empresa_id && (
-                      <p className="text-sm mt-2">Selecione uma empresa na localização</p>
-                    )}
                   </td>
                 </tr>
               ) : (
-                usuariosFiltrados.map((usuario, index) => {
+                usuariosFiltrados.map((usuario) => {
                   const statusInfo = statusConfig[usuario.status] || statusConfig.PENDENTE;
-                  const tipoInfo = tipoUsuarioConfig[usuario.tipo_usuario] || tipoUsuarioConfig.USUARIO_PADRAO;
                   const StatusIcon = statusInfo.icon;
-                  const isLastRows = index >= usuariosFiltrados.length - 2;
 
                   return (
                     <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
-                            {usuario.Url_foto_usuario ? (
-                              <img
-                                src={usuario.Url_foto_usuario}
-                                alt={usuario.nome}
-                                className="w-10 h-10 rounded-full object-cover"
-                              />
-                            ) : (
-                              <User className="w-5 h-5 text-gray-500" />
+                          <div className="relative">
+                            <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center overflow-hidden">
+                              {usuario.Url_foto_usuario ? (
+                                <img
+                                  src={usuario.Url_foto_usuario}
+                                  alt={usuario.nome}
+                                  className="w-10 h-10 object-cover"
+                                />
+                              ) : (
+                                <User className="w-5 h-5 text-gray-500" />
+                              )}
+                            </div>
+                            {/* Indicador apenas app móvel */}
+                            {ehMonitor(usuario) && (
+                              <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center border-2 border-white">
+                                <Smartphone className="w-3 h-3 text-white" />
+                              </div>
                             )}
                           </div>
                           <div>
@@ -381,11 +306,6 @@ export default function UsuariosPage() {
                           <Building2 className="w-4 h-4 text-gray-400" />
                           <span className="text-gray-700">{getEmpresaNome(usuario)}</span>
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${tipoInfo.color}`}>
-                          {tipoInfo.label}
-                        </span>
                       </td>
                       <td className="px-6 py-4">
                         <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${statusInfo.color}`}>
@@ -404,7 +324,7 @@ export default function UsuariosPage() {
                             )}
                           </div>
                         ) : (
-                          <span className="text-gray-400 text-sm">Não gerado</span>
+                          <span className="text-gray-400 text-sm">-</span>
                         )}
                       </td>
                       <td className="px-6 py-4">
@@ -415,58 +335,13 @@ export default function UsuariosPage() {
                         </p>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <div className="relative" ref={menuAberto === usuario.id ? menuRef : null}>
-                          <button
-                            onClick={(e) => handleAbrirMenu(usuario.id, e)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                          >
-                            <MoreVertical className="w-5 h-5 text-gray-400" />
-                          </button>
-
-                          {menuAberto === usuario.id && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-40"
-                                onClick={() => setMenuAberto(null)}
-                              />
-                              <div
-                                className={`absolute right-0 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50 ${
-                                  isLastRows ? 'bottom-full mb-1' : 'top-full mt-1'
-                                }`}
-                              >
-                                <button
-                                  onClick={() => handleGerarCodigo(usuario)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                >
-                                  <Key className="w-4 h-4" />
-                                  {usuario.token_acesso ? 'Regenerar Código' : 'Gerar Código'}
-                                </button>
-                                <button
-                                  onClick={() => handleEditarPermissoes(usuario)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                >
-                                  <Shield className="w-4 h-4" />
-                                  Permissões
-                                </button>
-                                <button
-                                  onClick={() => handleEditar(usuario)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                  Editar
-                                </button>
-                                <hr className="my-1" />
-                                <button
-                                  onClick={() => setMenuAberto(null)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  Excluir
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => handleGerenciar(usuario)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                        >
+                          <Settings className="w-4 h-4" />
+                          Gerenciar
+                        </button>
                       </td>
                     </tr>
                   );
@@ -477,47 +352,17 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Modais */}
-      {modalPermissoes && usuarioSelecionado && (
-        <ModalPermissoes
+      {/* Modal */}
+      {modalAberto && usuarioSelecionado && (
+        <ModalGerenciarUsuario
           usuario={usuarioSelecionado}
           onClose={() => {
-            setModalPermissoes(false);
+            setModalAberto(false);
             setUsuarioSelecionado(null);
           }}
           onSave={() => {
             carregarDados();
-            setModalPermissoes(false);
-            setUsuarioSelecionado(null);
-          }}
-        />
-      )}
-
-      {modalCodigo && usuarioSelecionado && (
-        <ModalGerarCodigo
-          usuario={usuarioSelecionado}
-          onClose={() => {
-            setModalCodigo(false);
-            setUsuarioSelecionado(null);
-          }}
-          onSave={() => {
-            carregarDados();
-            setModalCodigo(false);
-            setUsuarioSelecionado(null);
-          }}
-        />
-      )}
-
-      {modalEditar && usuarioSelecionado && (
-        <ModalEditarUsuario
-          usuario={usuarioSelecionado}
-          onClose={() => {
-            setModalEditar(false);
-            setUsuarioSelecionado(null);
-          }}
-          onSave={() => {
-            carregarDados();
-            setModalEditar(false);
+            setModalAberto(false);
             setUsuarioSelecionado(null);
           }}
         />

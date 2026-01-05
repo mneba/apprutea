@@ -59,12 +59,48 @@ export const usuariosService = {
 
   // Atualizar dados do usuário
   async atualizarUsuario(userId: string, dados: Partial<UserProfile>): Promise<void> {
+    const user = await supabase.auth.getUser();
+    const adminId = user.data.user?.id;
+
+    // Clonar dados para não modificar original
+    const dadosParaSalvar: any = { ...dados };
+    
+    // Sempre enviar quem alterou e quando
+    if (adminId) {
+      // Para APROVADO - campos obrigatórios do trigger
+      if (dadosParaSalvar.status === 'APROVADO') {
+        dadosParaSalvar.aprovado_por = adminId;
+        dadosParaSalvar.data_aprovacao = new Date().toISOString();
+      }
+      
+      // Para REJEITADO - alguns triggers também exigem aprovado_por
+      if (dadosParaSalvar.status === 'REJEITADO') {
+        dadosParaSalvar.aprovado_por = adminId;
+        dadosParaSalvar.data_aprovacao = new Date().toISOString();
+        dadosParaSalvar.observacoes_aprovacao = dadosParaSalvar.observacoes_aprovacao || 'Rejeitado pelo administrador';
+      }
+      
+      // Para PENDENTE - limpar campos de aprovação
+      if (dadosParaSalvar.status === 'PENDENTE') {
+        dadosParaSalvar.aprovado_por = null;
+        dadosParaSalvar.data_aprovacao = null;
+        dadosParaSalvar.observacoes_aprovacao = null;
+      }
+    }
+
+    console.log('📤 Atualizando usuário:', userId, dadosParaSalvar);
+
     const { error } = await supabase
       .from('user_profiles')
-      .update(dados)
+      .update(dadosParaSalvar)
       .eq('user_id', userId);
 
-    if (error) throw error;
+    if (error) {
+      console.error('❌ Erro ao atualizar usuário:', error);
+      throw error;
+    }
+    
+    console.log('✅ Usuário atualizado com sucesso');
   },
 
   // Atualizar tipo de usuário
@@ -92,28 +128,39 @@ export const usuariosService = {
       throw new Error('Usuário não autenticado');
     }
 
+    console.log('🔑 Gerando código para:', userId, 'por:', adminQueGera);
+
     // Chamar RPC com os parâmetros corretos
     const { data, error } = await supabase.rpc('gerar_token_acesso', {
       p_user_id: userId,
       p_admin_que_gera: adminQueGera,
     });
 
+    console.log('📤 Resposta RPC:', { data, error });
+
     if (error) {
-      console.error('Erro ao gerar token:', error);
-      throw error;
+      console.error('❌ Erro RPC:', error);
+      throw new Error(error.message || 'Erro ao gerar token');
     }
 
-    // A function retorna um array com um objeto { sucesso, token_gerado, mensagem }
-    if (data && data.length > 0) {
-      const resultado = data[0];
-      if (resultado.sucesso) {
+    // A function retorna TABLE, pode vir como array ou objeto único
+    if (data) {
+      // Se for array, pegar primeiro elemento
+      const resultado = Array.isArray(data) ? data[0] : data;
+      
+      console.log('📋 Resultado:', resultado);
+      
+      if (resultado?.sucesso) {
+        return resultado.token_gerado;
+      } else if (resultado?.token_gerado) {
+        // Às vezes retorna direto o token sem campo sucesso
         return resultado.token_gerado;
       } else {
-        throw new Error(resultado.mensagem || 'Erro ao gerar token');
+        throw new Error(resultado?.mensagem || 'Erro ao gerar token');
       }
     }
 
-    throw new Error('Resposta inválida da function');
+    throw new Error('Resposta vazia da function');
   },
 
   // Validar token de acesso usando function existente do Supabase
@@ -290,21 +337,27 @@ export const usuariosService = {
 
   // Listar mensagens não lidas
   async listarMensagensNaoLidas(userId: string): Promise<any[]> {
-    const { data, error } = await supabase
-      .from('mensagens_sistema')
-      .select(`
-        *,
-        origem:usuario_origem_id (
-          nome
-        )
-      `)
-      .eq('usuario_destino_id', userId)
-      .eq('lido', false)
-      .order('created_at', { ascending: false })
-      .limit(10);
+    try {
+      // Query simplificada sem join (o join estava causando erro PGRST200)
+      const { data, error } = await supabase
+        .from('mensagens_sistema')
+        .select('*')
+        .eq('usuario_destino_id', userId)
+        .eq('lido', false)
+        .order('created_at', { ascending: false })
+        .limit(10);
 
-    if (error) throw error;
-    return data || [];
+      if (error) {
+        console.error('Erro ao carregar mensagens:', error);
+        // Retornar array vazio em vez de quebrar
+        return [];
+      }
+      
+      return data || [];
+    } catch (err) {
+      console.error('Erro ao carregar mensagens:', err);
+      return [];
+    }
   },
 
   // Marcar mensagem como lida
