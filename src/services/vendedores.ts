@@ -1,5 +1,7 @@
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@/lib/supabase/client';
 import type { Vendedor, VendedorConfiguracao, VendedorRestricao, VendedorRecibo } from '@/types/vendedores';
+
+const supabase = createClient();
 
 export const vendedoresService = {
   // ============================================
