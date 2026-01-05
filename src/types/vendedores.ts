@@ -21,7 +21,7 @@ export interface Vendedor {
   user_id?: string;
   codigo_acesso?: string;
   estado_acesso?: 'ATIVO' | 'INATIVO';
-  foto_url?: string;
+  foto_url?: string | null;
   created_at?: string;
   updated_at?: string;
 }

@@ -372,7 +372,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         documento,
         telefone: telefoneCompleto,
         endereco,
-        foto_url: fotoUrl || undefined,
+        foto_url: fotoUrl || null,  // null para remover, não undefined
         empresa_id: empresaId,
         hierarquia_id: hierarquiaId || undefined,
         status: 'ATIVO',
