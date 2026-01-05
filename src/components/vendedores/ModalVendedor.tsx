@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   X, 
   User, 
@@ -23,8 +23,12 @@ import {
   Info,
   Users,
   Percent,
-  MessageSquare,
+  Camera,
+  Upload,
+  Plus,
+  Check,
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import { vendedoresService } from '@/services/vendedores';
 import type { 
   Vendedor, 
@@ -55,6 +59,9 @@ const DDIS = [
   { codigo: '+593', pais: 'Equador', bandeira: '🇪🇨' },
   { codigo: '+58', pais: 'Venezuela', bandeira: '🇻🇪' },
 ];
+
+// Taxas de juros padrão
+const TAXAS_PADRAO = [5, 10, 15, 20, 25];
 
 // Valores padrão - configuracoes_vendedor
 const CONFIGURACOES_PADRAO: Omit<ConfiguracaoVendedor, 'vendedor_id'> = {
@@ -91,7 +98,6 @@ const RESTRICOES_PADRAO: Omit<RestricaoVendedor, 'vendedor_id'> = {
   validar_clientes_outros_vendedores: false,
   numero_whatsapp_aprovacoes: '',
   taxas_juros_permitidas: [],
-  // Campos migrados da tabela vendedores
   saldo_inicial: 0,
   data_vencimento: undefined,
 };
@@ -113,6 +119,8 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [uploadingFoto, setUploadingFoto] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // === ABA DADOS PESSOAIS ===
   const [codigoVendedor, setCodigoVendedor] = useState('');
@@ -124,12 +132,16 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [endereco, setEndereco] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
+  const [dataVencimento, setDataVencimento] = useState('');
 
   // === ABA CONFIGURAÇÕES ===
   const [configuracoes, setConfiguracoes] = useState<Omit<ConfiguracaoVendedor, 'vendedor_id'>>(CONFIGURACOES_PADRAO);
 
   // === ABA RESTRIÇÕES ===
   const [restricoes, setRestricoes] = useState<Omit<RestricaoVendedor, 'vendedor_id'>>(RESTRICOES_PADRAO);
+  const [taxasPersonalizadas, setTaxasPersonalizadas] = useState<number[]>([]);
+  const [novaTaxa, setNovaTaxa] = useState('');
+  const [todasTaxas, setTodasTaxas] = useState(false);
 
   // === ABA RECIBOS ===
   const [recibos, setRecibos] = useState<Partial<ConfiguracaoRecibo>>(RECIBOS_PADRAO);
@@ -184,12 +196,77 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       ]);
 
       if (configData) setConfiguracoes({ ...CONFIGURACOES_PADRAO, ...configData });
-      if (restricoesData) setRestricoes({ ...RESTRICOES_PADRAO, ...restricoesData });
+      
+      if (restricoesData) {
+        setRestricoes({ ...RESTRICOES_PADRAO, ...restricoesData });
+        setDataVencimento(restricoesData.data_vencimento || '');
+        
+        // Processar taxas de juros
+        const taxas = restricoesData.taxas_juros_permitidas || [];
+        if (taxas.length === 0) {
+          setTodasTaxas(false);
+          setTaxasPersonalizadas([]);
+        } else {
+          const taxasPadrao = taxas.filter((t: number) => TAXAS_PADRAO.includes(t));
+          const taxasCustom = taxas.filter((t: number) => !TAXAS_PADRAO.includes(t));
+          setTaxasPersonalizadas(taxasCustom);
+          
+          // Se tem todas as taxas padrão, marca "todas"
+          if (TAXAS_PADRAO.every(t => taxas.includes(t))) {
+            setTodasTaxas(true);
+          }
+        }
+      }
+      
       if (recibosData) setRecibos({ ...RECIBOS_PADRAO, ...recibosData });
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Upload de foto
+  const handleUploadFoto = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo
+    if (!file.type.startsWith('image/')) {
+      alert('Por favor, selecione uma imagem válida.');
+      return;
+    }
+
+    // Validar tamanho (max 2MB)
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 2MB.');
+      return;
+    }
+
+    setUploadingFoto(true);
+    try {
+      const supabase = createClient();
+      const fileExt = file.name.split('.').pop();
+      const fileName = `vendedor_${Date.now()}.${fileExt}`;
+      const filePath = `vendedores/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('fotos')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('fotos')
+        .getPublicUrl(filePath);
+
+      setFotoUrl(publicUrl);
+    } catch (err: any) {
+      console.error('Erro ao fazer upload:', err);
+      alert(`Erro ao fazer upload: ${err.message}`);
+    } finally {
+      setUploadingFoto(false);
     }
   };
 
@@ -215,6 +292,56 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       ...prev,
       [campo]: valor,
     }));
+  };
+
+  // Toggle taxa de juros
+  const toggleTaxa = (taxa: number) => {
+    const taxasAtuais = restricoes.taxas_juros_permitidas || [];
+    if (taxasAtuais.includes(taxa)) {
+      updateRestricao('taxas_juros_permitidas', taxasAtuais.filter(t => t !== taxa));
+    } else {
+      updateRestricao('taxas_juros_permitidas', [...taxasAtuais, taxa].sort((a, b) => a - b));
+    }
+  };
+
+  // Toggle todas as taxas
+  const toggleTodasTaxas = () => {
+    if (todasTaxas) {
+      // Desmarcar todas
+      setTodasTaxas(false);
+      updateRestricao('taxas_juros_permitidas', taxasPersonalizadas);
+    } else {
+      // Marcar todas
+      setTodasTaxas(true);
+      const todasAsTaxas = [...TAXAS_PADRAO, ...taxasPersonalizadas].sort((a, b) => a - b);
+      updateRestricao('taxas_juros_permitidas', todasAsTaxas);
+    }
+  };
+
+  // Adicionar taxa personalizada
+  const adicionarTaxaPersonalizada = () => {
+    const valor = parseFloat(novaTaxa);
+    if (isNaN(valor) || valor <= 0 || valor > 100) {
+      alert('Digite um valor válido entre 0 e 100');
+      return;
+    }
+    
+    const taxasAtuais = restricoes.taxas_juros_permitidas || [];
+    if (taxasAtuais.includes(valor)) {
+      alert('Esta taxa já foi adicionada');
+      return;
+    }
+
+    setTaxasPersonalizadas(prev => [...prev, valor].sort((a, b) => a - b));
+    updateRestricao('taxas_juros_permitidas', [...taxasAtuais, valor].sort((a, b) => a - b));
+    setNovaTaxa('');
+  };
+
+  // Remover taxa personalizada
+  const removerTaxaPersonalizada = (taxa: number) => {
+    setTaxasPersonalizadas(prev => prev.filter(t => t !== taxa));
+    const taxasAtuais = restricoes.taxas_juros_permitidas || [];
+    updateRestricao('taxas_juros_permitidas', taxasAtuais.filter(t => t !== taxa));
   };
 
   // Salvar vendedor
@@ -260,7 +387,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       // Salvar configurações, restrições e recibos
       await Promise.all([
         vendedoresService.salvarConfiguracoes(vendedorId, configuracoes),
-        vendedoresService.salvarRestricoes(vendedorId, restricoes),
+        vendedoresService.salvarRestricoes(vendedorId, {
+          ...restricoes,
+          data_vencimento: dataVencimento || undefined,
+        }),
         vendedoresService.salvarRecibos(vendedorId, recibos),
       ]);
 
@@ -345,20 +475,117 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
               {/* ABA DADOS PESSOAIS */}
               {activeTab === 'dados' && (
                 <div className="space-y-6">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Código Vendedor
-                    </label>
-                    <input
-                      type="text"
-                      value={codigoVendedor}
-                      onChange={(e) => setCodigoVendedor(e.target.value.toUpperCase())}
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono text-lg"
-                      placeholder="V000001"
-                      disabled={isEdicao}
-                    />
+                  {/* Header com foto */}
+                  <div className="flex items-start gap-6 p-4 bg-gray-50 rounded-xl">
+                    {/* Foto */}
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="relative">
+                        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg">
+                          {fotoUrl ? (
+                            <img
+                              src={fotoUrl}
+                              alt="Foto"
+                              className="w-24 h-24 object-cover"
+                              onError={() => setFotoUrl('')}
+                            />
+                          ) : (
+                            <span className="text-white font-bold text-3xl">
+                              {nome?.charAt(0).toUpperCase() || 'V'}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => fileInputRef.current?.click()}
+                          disabled={uploadingFoto}
+                          className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 disabled:opacity-50"
+                        >
+                          {uploadingFoto ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Camera className="w-4 h-4" />
+                          )}
+                        </button>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept="image/*"
+                          onChange={handleUploadFoto}
+                          className="hidden"
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500">Clique para alterar</span>
+                    </div>
+
+                    {/* Código e Acesso */}
+                    <div className="flex-1 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Código Vendedor
+                          </label>
+                          <input
+                            type="text"
+                            value={codigoVendedor}
+                            onChange={(e) => setCodigoVendedor(e.target.value.toUpperCase())}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 font-mono text-lg focus:ring-2 focus:ring-blue-500"
+                            placeholder="V000001"
+                            disabled={isEdicao}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Data Vencimento do Acesso
+                          </label>
+                          <input
+                            type="date"
+                            value={dataVencimento}
+                            onChange={(e) => setDataVencimento(e.target.value)}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                            min="2020-01-01"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Código de Acesso (somente leitura) */}
+                      {isEdicao && vendedor?.codigo_acesso && (
+                        <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <label className="block text-xs font-medium text-purple-700 mb-1">
+                                Código de Acesso (App Móvel)
+                              </label>
+                              <code className="text-xl font-mono text-purple-700 font-bold">
+                                {vendedor.codigo_acesso}
+                              </code>
+                            </div>
+                            {dataVencimento && (
+                              <div className="text-right">
+                                <span className="text-xs text-purple-600">Válido até</span>
+                                <p className="text-sm font-medium text-purple-700">
+                                  {new Date(dataVencimento).toLocaleDateString('pt-BR')}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
 
+                  {/* Nota sobre associação de rota */}
+                  <div className="flex items-start gap-3 p-4 bg-orange-50 rounded-xl border border-orange-200">
+                    <MapPin className="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-orange-800">
+                        Associação de Rota
+                      </p>
+                      <p className="text-sm text-orange-700 mt-0.5">
+                        Para vincular ou alterar a rota deste vendedor, acesse o <strong>módulo de Rotas</strong>.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Dados pessoais */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -426,54 +653,14 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                     </div>
                   </div>
 
-                  {/* Código de Acesso (somente leitura) */}
-                  {isEdicao && vendedor?.codigo_acesso && (
-                    <div className="p-4 bg-purple-50 rounded-xl border border-purple-200">
-                      <label className="block text-sm font-medium text-purple-700 mb-1.5">
-                        Código de Acesso (App Móvel)
-                      </label>
-                      <code className="px-4 py-2 bg-white rounded-lg text-xl font-mono text-purple-700 border border-purple-200">
-                        {vendedor.codigo_acesso}
-                      </code>
+                  {!isEdicao && (
+                    <div className="flex items-start gap-3 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
+                      <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-sm text-yellow-800">
+                        Após criar, o código de acesso será gerado automaticamente.
+                      </p>
                     </div>
                   )}
-
-                  {/* Foto do Vendedor */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                      Foto do Vendedor (URL)
-                    </label>
-                    <div className="flex items-center gap-4">
-                      <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center overflow-hidden border-2 border-gray-200">
-                        {fotoUrl ? (
-                          <img
-                            src={fotoUrl}
-                            alt="Foto"
-                            className="w-16 h-16 object-cover"
-                            onError={() => setFotoUrl('')}
-                          />
-                        ) : (
-                          <span className="text-white font-semibold text-xl">
-                            {nome?.charAt(0).toUpperCase() || 'V'}
-                          </span>
-                        )}
-                      </div>
-                      <input
-                        type="url"
-                        value={fotoUrl}
-                        onChange={(e) => setFotoUrl(e.target.value)}
-                        className="flex-1 px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="https://exemplo.com/foto.jpg"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex items-start gap-3 p-4 bg-yellow-50 rounded-xl border border-yellow-200">
-                    <AlertCircle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                    <p className="text-sm text-yellow-800">
-                      Após criar, o código de acesso será gerado automaticamente.
-                    </p>
-                  </div>
                 </div>
               )}
 
@@ -533,41 +720,86 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
               {/* ABA RESTRIÇÕES */}
               {activeTab === 'restricoes' && (
                 <div className="space-y-6">
-                  {/* Seção: Configurações do Vendedor (campos migrados) */}
+                  {/* Seção: Taxas de Juros Permitidas */}
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-                      <User className="w-4 h-4" />
-                      Configurações do Vendedor
+                      <Percent className="w-4 h-4" />
+                      Taxas de Juros Permitidas
                     </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Saldo Inicial (Caixa)
-                        </label>
+                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white space-y-4">
+                      {/* Opção "Todas" */}
+                      <label className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-gray-50">
                         <input
-                          type="number"
-                          value={restricoes.saldo_inicial}
-                          onChange={(e) => updateRestricao('saldo_inicial', parseFloat(e.target.value) || 0)}
-                          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                          placeholder="0.00"
-                          step="0.01"
-                          min="0"
+                          type="checkbox"
+                          checked={todasTaxas}
+                          onChange={toggleTodasTaxas}
+                          className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Valor inicial do caixa do vendedor</p>
+                        <span className="text-sm font-medium text-gray-700">Permitir todas as taxas</span>
+                      </label>
+
+                      {/* Taxas padrão */}
+                      <div className="flex flex-wrap gap-2">
+                        {TAXAS_PADRAO.map((taxa) => {
+                          const isSelected = (restricoes.taxas_juros_permitidas || []).includes(taxa);
+                          return (
+                            <button
+                              key={taxa}
+                              onClick={() => toggleTaxa(taxa)}
+                              disabled={todasTaxas}
+                              className={`
+                                px-4 py-2 rounded-lg text-sm font-medium transition-all
+                                ${isSelected || todasTaxas
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
+                                ${todasTaxas ? 'opacity-50 cursor-not-allowed' : ''}
+                              `}
+                            >
+                              {taxa}%
+                            </button>
+                          );
+                        })}
                       </div>
 
-                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          Data de Vencimento do Acesso
-                        </label>
+                      {/* Taxas personalizadas */}
+                      {taxasPersonalizadas.length > 0 && (
+                        <div className="flex flex-wrap gap-2">
+                          {taxasPersonalizadas.map((taxa) => (
+                            <span
+                              key={taxa}
+                              className="inline-flex items-center gap-1 px-3 py-1.5 bg-purple-100 text-purple-700 rounded-lg text-sm font-medium"
+                            >
+                              {taxa}%
+                              <button
+                                onClick={() => removerTaxaPersonalizada(taxa)}
+                                className="ml-1 hover:text-purple-900"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Adicionar taxa personalizada */}
+                      <div className="flex items-center gap-2">
                         <input
-                          type="date"
-                          value={restricoes.data_vencimento || ''}
-                          onChange={(e) => updateRestricao('data_vencimento', e.target.value || null)}
-                          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                          min="2020-01-01"
+                          type="number"
+                          value={novaTaxa}
+                          onChange={(e) => setNovaTaxa(e.target.value)}
+                          placeholder="Outra taxa..."
+                          className="w-32 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500"
+                          min="0"
+                          max="100"
+                          step="0.5"
                         />
-                        <p className="text-xs text-gray-500 mt-1">Deixe vazio para acesso ilimitado</p>
+                        <button
+                          onClick={adicionarTaxaPersonalizada}
+                          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-medium flex items-center gap-1"
+                        >
+                          <Plus className="w-4 h-4" />
+                          Adicionar
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -908,27 +1140,21 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <p className="text-sm text-gray-500 flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-yellow-500" />
-            Após criar, você poderá configurar opções avançadas
-          </p>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={onClose}
-              className="px-5 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors font-medium"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={handleSalvar}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
-            >
-              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-              {isEdicao ? 'Salvar Alterações' : 'Criar Vendedor'}
-            </button>
-          </div>
+        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors font-medium"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSalvar}
+            disabled={saving}
+            className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors font-medium"
+          >
+            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+            {isEdicao ? 'Salvar Alterações' : 'Criar Vendedor'}
+          </button>
         </div>
       </div>
     </div>

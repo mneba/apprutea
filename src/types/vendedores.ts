@@ -26,6 +26,14 @@ export interface Vendedor {
   updated_at?: string;
 }
 
+// Vendedor com informação da rota associada
+export interface VendedorComRota extends Vendedor {
+  rota: {
+    id: string;
+    nome: string;
+  } | null;
+}
+
 // Configurações operacionais (tabela: configuracoes_vendedor)
 // 13 campos boolean
 export interface ConfiguracaoVendedor {
@@ -84,13 +92,12 @@ export interface RestricaoVendedor {
   numero_whatsapp_aprovacoes: string;
   
   // Taxas de Juros Permitidas (JSONB array)
-  taxas_juros_permitidas?: number[];
+  taxas_juros_permitidas: number[];
   
-  // === CAMPOS MIGRADOS DA TABELA VENDEDORES ===
-  // Saldo inicial do vendedor (valor que começa o dia)
+  // Saldo inicial (mantido no banco mas não exibido na interface)
   saldo_inicial: number;
   
-  // Data de vencimento do acesso
+  // Data de vencimento do acesso (exibida junto ao código de acesso)
   data_vencimento?: string;
   
   created_at?: string;

@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/client';
 import type { 
   Vendedor, 
+  VendedorComRota,
   ConfiguracaoVendedor, 
   RestricaoVendedor, 
   ConfiguracaoRecibo 
@@ -12,6 +13,52 @@ export const vendedoresService = {
   // ============================================
   // CRUD DE VENDEDORES
   // ============================================
+
+  // Listar vendedores COM informação da rota associada
+  async listarVendedoresComRota(empresaId: string): Promise<VendedorComRota[]> {
+    // Buscar vendedores
+    const { data: vendedores, error: errVendedores } = await supabase
+      .from('vendedores')
+      .select('*')
+      .eq('empresa_id', empresaId)
+      .order('nome');
+
+    if (errVendedores) {
+      console.error('Erro ao listar vendedores:', errVendedores);
+      throw errVendedores;
+    }
+
+    if (!vendedores || vendedores.length === 0) {
+      return [];
+    }
+
+    // Buscar rotas que têm esses vendedores
+    const vendedorIds = vendedores.map(v => v.id);
+    const { data: rotas, error: errRotas } = await supabase
+      .from('rotas')
+      .select('id, nome, vendedor_id')
+      .in('vendedor_id', vendedorIds);
+
+    if (errRotas) {
+      console.error('Erro ao buscar rotas:', errRotas);
+    }
+
+    // Mapear rota para cada vendedor
+    const rotasPorVendedor = new Map<string, { id: string; nome: string }>();
+    if (rotas) {
+      rotas.forEach(r => {
+        if (r.vendedor_id) {
+          rotasPorVendedor.set(r.vendedor_id, { id: r.id, nome: r.nome });
+        }
+      });
+    }
+
+    // Combinar dados
+    return vendedores.map(v => ({
+      ...v,
+      rota: rotasPorVendedor.get(v.id) || null,
+    }));
+  },
 
   async listarVendedores(empresaId: string): Promise<Vendedor[]> {
     const { data, error } = await supabase
@@ -26,6 +73,22 @@ export const vendedoresService = {
     }
 
     return data || [];
+  },
+
+  // Buscar rota de um vendedor específico
+  async buscarRotaDoVendedor(vendedorId: string): Promise<{ id: string; nome: string } | null> {
+    const { data, error } = await supabase
+      .from('rotas')
+      .select('id, nome')
+      .eq('vendedor_id', vendedorId)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Erro ao buscar rota do vendedor:', error);
+      return null;
+    }
+
+    return data;
   },
 
   async buscarVendedor(vendedorId: string): Promise<Vendedor | null> {

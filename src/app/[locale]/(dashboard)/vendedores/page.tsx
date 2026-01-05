@@ -14,12 +14,13 @@ import {
   AlertTriangle,
   Building2,
   Settings,
+  MapPin,
 } from 'lucide-react';
 import { Input } from '@/components/ui';
 import { vendedoresService } from '@/services/vendedores';
 import { useUser } from '@/contexts/UserContext';
 import { ModalVendedor } from '@/components/vendedores';
-import type { Vendedor } from '@/types/vendedores';
+import type { VendedorComRota } from '@/types/vendedores';
 
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
   ATIVO: { label: 'Ativo', color: 'bg-green-100 text-green-700', icon: CheckCircle },
@@ -28,14 +29,14 @@ const statusConfig: Record<string, { label: string; color: string; icon: any }> 
 
 export default function VendedoresPage() {
   const { profile, localizacao, loading: loadingUser } = useUser();
-  const [vendedores, setVendedores] = useState<Vendedor[]>([]);
+  const [vendedores, setVendedores] = useState<VendedorComRota[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   
   // Modal
   const [modalAberto, setModalAberto] = useState(false);
-  const [vendedorSelecionado, setVendedorSelecionado] = useState<Vendedor | null>(null);
+  const [vendedorSelecionado, setVendedorSelecionado] = useState<VendedorComRota | null>(null);
 
   // Verificar se tem empresa selecionada
   const empresaSelecionada = localizacao?.empresa_id;
@@ -56,7 +57,7 @@ export default function VendedoresPage() {
     
     setLoading(true);
     try {
-      const data = await vendedoresService.listarVendedores(empresaSelecionada);
+      const data = await vendedoresService.listarVendedoresComRota(empresaSelecionada);
       setVendedores(data);
     } catch (err) {
       console.error('Erro ao carregar vendedores:', err);
@@ -85,7 +86,7 @@ export default function VendedoresPage() {
   };
 
   // Abrir modal para gerenciar vendedor
-  const handleGerenciarVendedor = (vendedor: Vendedor) => {
+  const handleGerenciarVendedor = (vendedor: VendedorComRota) => {
     setVendedorSelecionado(vendedor);
     setModalAberto(true);
   };
@@ -250,6 +251,9 @@ export default function VendedoresPage() {
                   Código
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
+                  Rota
+                </th>
+                <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Contato
                 </th>
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
@@ -269,14 +273,14 @@ export default function VendedoresPage() {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                     <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto mb-2" />
                     Carregando vendedores...
                   </td>
                 </tr>
               ) : vendedoresFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-6 py-12 text-center text-gray-500">
+                  <td colSpan={8} className="px-6 py-12 text-center text-gray-500">
                     <User className="w-12 h-12 mx-auto mb-4 text-gray-300" />
                     <p>Nenhum vendedor encontrado</p>
                     <button
@@ -321,6 +325,18 @@ export default function VendedoresPage() {
                         <code className="px-2 py-1 bg-gray-100 rounded text-sm font-mono">
                           {vendedor.codigo_vendedor}
                         </code>
+                      </td>
+                      <td className="px-6 py-4">
+                        {vendedor.rota ? (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-4 h-4 text-orange-500" />
+                            <span className="text-sm font-medium text-gray-700">
+                              {vendedor.rota.nome}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">Sem rota</span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex flex-col gap-1">
