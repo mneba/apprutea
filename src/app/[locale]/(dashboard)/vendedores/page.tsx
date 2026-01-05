@@ -10,12 +10,10 @@ import {
   Loader2,
   Phone,
   Calendar,
-  MoreVertical,
-  Edit,
-  Trash2,
   Key,
   AlertTriangle,
   Building2,
+  Settings,
 } from 'lucide-react';
 import { Input } from '@/components/ui';
 import { vendedoresService } from '@/services/vendedores';
@@ -38,9 +36,6 @@ export default function VendedoresPage() {
   // Modal
   const [modalAberto, setModalAberto] = useState(false);
   const [vendedorSelecionado, setVendedorSelecionado] = useState<Vendedor | null>(null);
-
-  // Menu de ações
-  const [menuAberto, setMenuAberto] = useState<string | null>(null);
 
   // Verificar se tem empresa selecionada
   const empresaSelecionada = localizacao?.empresa_id;
@@ -89,11 +84,10 @@ export default function VendedoresPage() {
     setModalAberto(true);
   };
 
-  // Abrir modal para editar vendedor
-  const handleEditarVendedor = (vendedor: Vendedor) => {
+  // Abrir modal para gerenciar vendedor
+  const handleGerenciarVendedor = (vendedor: Vendedor) => {
     setVendedorSelecionado(vendedor);
     setModalAberto(true);
-    setMenuAberto(null);
   };
 
   // Fechar modal
@@ -106,23 +100,6 @@ export default function VendedoresPage() {
   const handleSalvar = () => {
     carregarDados();
     handleFecharModal();
-  };
-
-  // Gerar código de acesso
-  const handleGerarCodigo = async (vendedor: Vendedor) => {
-    try {
-      const codigo = await vendedoresService.gerarCodigoAcesso(vendedor.id);
-      alert(`Código de acesso gerado: ${codigo}`);
-      carregarDados();
-    } catch (err: any) {
-      alert(`Erro ao gerar código: ${err.message}`);
-    }
-    setMenuAberto(null);
-  };
-
-  // Toggle menu de ações
-  const toggleMenu = (vendedorId: string) => {
-    setMenuAberto(menuAberto === vendedorId ? null : vendedorId);
   };
 
   // Se carregando usuário
@@ -284,7 +261,7 @@ export default function VendedoresPage() {
                 <th className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase">
                   Cadastro
                 </th>
-                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase w-24">
+                <th className="px-6 py-4 text-center text-xs font-semibold text-gray-500 uppercase w-32">
                   Ações
                 </th>
               </tr>
@@ -384,54 +361,13 @@ export default function VendedoresPage() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-center">
-                        <div className="relative">
-                          <button
-                            onClick={() => toggleMenu(vendedor.id)}
-                            className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
-                          >
-                            <MoreVertical className="w-5 h-5 text-gray-500" />
-                          </button>
-
-                          {menuAberto === vendedor.id && (
-                            <>
-                              <div
-                                className="fixed inset-0 z-10"
-                                onClick={() => setMenuAberto(null)}
-                              />
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-200 py-1 z-20">
-                                <button
-                                  onClick={() => handleEditarVendedor(vendedor)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                >
-                                  <Edit className="w-4 h-4" />
-                                  Editar Vendedor
-                                </button>
-                                <button
-                                  onClick={() => handleGerarCodigo(vendedor)}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-                                >
-                                  <Key className="w-4 h-4" />
-                                  Gerar Código Acesso
-                                </button>
-                                <hr className="my-1" />
-                                <button
-                                  onClick={() => {
-                                    if (confirm('Tem certeza que deseja inativar este vendedor?')) {
-                                      vendedoresService.excluirVendedor(vendedor.id).then(() => {
-                                        carregarDados();
-                                      });
-                                    }
-                                    setMenuAberto(null);
-                                  }}
-                                  className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                  Inativar
-                                </button>
-                              </div>
-                            </>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => handleGerenciarVendedor(vendedor)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
+                        >
+                          <Settings className="w-4 h-4" />
+                          Gerenciar
+                        </button>
                       </td>
                     </tr>
                   );

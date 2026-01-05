@@ -1,9 +1,9 @@
 // ============================================
 // TIPOS DO MÓDULO DE VENDEDORES
-// TODO: Ajustar conforme estrutura real do banco
+// Baseado nas tabelas reais do Supabase
 // ============================================
 
-// Vendedor principal (baseado na tabela existente)
+// Vendedor principal (tabela: vendedores)
 export interface Vendedor {
   id: string;
   nome: string;
@@ -11,8 +11,10 @@ export interface Vendedor {
   codigo_vendedor: string;
   telefone?: string;
   documento?: string;
+  endereco?: string;
   email?: string;
   status: 'ATIVO' | 'INATIVO';
+  data_admissao?: string;
   empresa_id?: string;
   hierarquia_id?: string;
   user_id?: string;
@@ -26,11 +28,11 @@ export interface Vendedor {
   updated_at?: string;
 }
 
-// Configurações operacionais (13 opções - baseado nas telas)
-// TODO: Ajustar nomes dos campos conforme tabela do banco
-export interface VendedorConfiguracao {
+// Configurações operacionais (tabela: configuracoes_vendedor)
+// 13 campos boolean
+export interface ConfiguracaoVendedor {
   id?: string;
-  vendedor_id?: string;
+  vendedor_id: string;
   ativar_gps: boolean;
   ativar_sem_pagamentos: boolean;
   ativar_adiar_parcelas: boolean;
@@ -38,41 +40,76 @@ export interface VendedorConfiguracao {
   abertura_caixa_manual: boolean;
   validar_endereco: boolean;
   carregar_imagens_wifi: boolean;
-  atualizar_cel_renovacao: boolean;
-  informacao_resumida: boolean;
-  imprimir_recibos: boolean;
-  so_frequencia_diaria: boolean;
-  inativar_info_cliente: boolean;
-  permitir_exclusao: boolean;
+  atualizar_movel_renovacao: boolean;
+  informacao_resumida_movel: boolean;
+  imprimir_compartilhar_recibo: boolean;
+  somente_frequencia_diaria: boolean;
+  inativar_info_cliente_renovar: boolean;
+  permitir_exclusao_parcelas: boolean;
   created_at?: string;
   updated_at?: string;
 }
 
-// Restrições e validações (6 campos - baseado nas telas)
-// TODO: Ajustar nomes dos campos conforme tabela do banco
-export interface VendedorRestricao {
+// Restrições do vendedor (tabela: restricoes_vendedor)
+// Campos com validação e valores
+export interface RestricaoVendedor {
   id?: string;
-  vendedor_id?: string;
-  valor_maximo_vendas: number;
-  valor_maximo_gastos: number;
-  valor_maximo_receitas: number;
-  max_parcelas_dia: number;
-  limite_parcelas: number;
-  whatsapp_aprovacoes: string;
+  vendedor_id: string;
+  
+  // Validações de Vendas
+  validar_valor_max_vendas: boolean;
+  valor_max_vendas: number;
+  
+  // Validações de Gastos
+  validar_valor_gastos: boolean;
+  valor_max_gastos: number;
+  
+  // Validações de Entradas/Ingresos
+  validar_valor_entradas: boolean;
+  valor_max_entradas: number;
+  
+  // Validações de Renovações
+  validar_valor_max_renovacoes: boolean;
+  valor_max_renovacoes: number;
+  renovacao_dia_seguinte_se_exceder: boolean;
+  
+  // Limites de Parcelas
+  numero_max_parcelas_por_dia: number;
+  numero_parcelas_limite: number;
+  numero_max_parcelas_cancelar_venda: number;
+  parcelas_permitidas_cancelar: number;
+  
+  // Validações de Clientes
+  validar_clientes_outros_vendedores: boolean;
+  
+  // WhatsApp para Aprovações
+  numero_whatsapp_aprovacoes: string;
+  
+  // Taxas de Juros Permitidas (JSONB array)
+  taxas_juros_permitidas?: number[];
+  
   created_at?: string;
   updated_at?: string;
 }
 
-// Configurações de recibos (5 campos - baseado nas telas)
-// TODO: Ajustar nomes dos campos conforme tabela do banco
-export interface VendedorRecibo {
+// Configurações de Recibos (tabela: configuracoes_recibos)
+// Pode ser por vendedor_id OU empresa_id
+export interface ConfiguracaoRecibo {
   id?: string;
   vendedor_id?: string;
-  logo_url: string;
-  tipo_recaudo: string;
+  empresa_id?: string;
+  logo_url?: string;
+  mensagem_personalizada?: string;
+  aplicar_todos_vendedores: boolean;
+  periodo_pago?: string; // DIARIO, SEMANAL, QUINZENAL, MENSAL
   percentual_recaudo: number;
   percentual_vendas: number;
   valor_pensao: number;
+  valor_saude: number;
+  ativo: boolean;
   created_at?: string;
   updated_at?: string;
 }
+
+// Constantes
+export const DOMINIO_INTERNO = '@apprutea.internal';

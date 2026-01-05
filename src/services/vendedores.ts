@@ -1,5 +1,10 @@
 import { createClient } from '@/lib/supabase/client';
-import type { Vendedor, VendedorConfiguracao, VendedorRestricao, VendedorRecibo } from '@/types/vendedores';
+import type { 
+  Vendedor, 
+  ConfiguracaoVendedor, 
+  RestricaoVendedor, 
+  ConfiguracaoRecibo 
+} from '@/types/vendedores';
 
 const supabase = createClient();
 
@@ -39,6 +44,9 @@ export const vendedoresService = {
   },
 
   async criarVendedor(dados: Partial<Vendedor>): Promise<Vendedor> {
+    // O trigger tr_gerar_codigo_acesso gera automaticamente o codigo_acesso
+    // Os triggers tr_criar_configuracoes_padrao e tr_criar_restricoes_padrao
+    // criam os registros nas tabelas auxiliares
     const { data, error } = await supabase
       .from('vendedores')
       .insert(dados)
@@ -56,10 +64,7 @@ export const vendedoresService = {
   async atualizarVendedor(vendedorId: string, dados: Partial<Vendedor>): Promise<void> {
     const { error } = await supabase
       .from('vendedores')
-      .update({
-        ...dados,
-        updated_at: new Date().toISOString(),
-      })
+      .update(dados)
       .eq('id', vendedorId);
 
     if (error) {
@@ -68,22 +73,22 @@ export const vendedoresService = {
     }
   },
 
-  async excluirVendedor(vendedorId: string): Promise<void> {
+  async inativarVendedor(vendedorId: string): Promise<void> {
     const { error } = await supabase
       .from('vendedores')
       .update({
         status: 'INATIVO',
         estado_acesso: 'INATIVO',
-        updated_at: new Date().toISOString(),
       })
       .eq('id', vendedorId);
 
     if (error) {
-      console.error('Erro ao excluir vendedor:', error);
+      console.error('Erro ao inativar vendedor:', error);
       throw error;
     }
   },
 
+  // Gerar novo código de vendedor (sequencial V000001)
   async gerarCodigoVendedor(): Promise<string> {
     const { data } = await supabase
       .from('vendedores')
@@ -104,51 +109,14 @@ export const vendedoresService = {
     return `V${proximoNumero.toString().padStart(6, '0')}`;
   },
 
-  async gerarCodigoAcesso(vendedorId: string): Promise<string> {
-    let codigo: string = '';
-    let existe = true;
-    let tentativas = 0;
-
-    while (existe && tentativas < 10) {
-      codigo = Math.floor(10000 + Math.random() * 90000).toString();
-      const { data } = await supabase
-        .from('vendedores')
-        .select('id')
-        .eq('codigo_acesso', codigo)
-        .maybeSingle();
-      existe = !!data;
-      tentativas++;
-    }
-
-    if (existe) {
-      throw new Error('Não foi possível gerar um código único');
-    }
-
-    const { error } = await supabase
-      .from('vendedores')
-      .update({
-        codigo_acesso: codigo,
-        estado_acesso: 'ATIVO',
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', vendedorId);
-
-    if (error) {
-      console.error('Erro ao gerar código de acesso:', error);
-      throw error;
-    }
-
-    return codigo;
-  },
-
   // ============================================
   // CONFIGURAÇÕES DO VENDEDOR
-  // TODO: Ajustar nome da tabela conforme estrutura do banco
+  // Tabela: configuracoes_vendedor
   // ============================================
 
-  async buscarConfiguracoes(vendedorId: string): Promise<VendedorConfiguracao | null> {
+  async buscarConfiguracoes(vendedorId: string): Promise<ConfiguracaoVendedor | null> {
     const { data, error } = await supabase
-      .from('vendedor_configuracoes') // TODO: ajustar nome da tabela
+      .from('configuracoes_vendedor')
       .select('*')
       .eq('vendedor_id', vendedorId)
       .maybeSingle();
@@ -161,16 +129,11 @@ export const vendedoresService = {
     return data;
   },
 
-  async salvarConfiguracoes(vendedorId: string, configuracoes: VendedorConfiguracao): Promise<void> {
+  async salvarConfiguracoes(vendedorId: string, configuracoes: Partial<ConfiguracaoVendedor>): Promise<void> {
     const { error } = await supabase
-      .from('vendedor_configuracoes') // TODO: ajustar nome da tabela
-      .upsert({
-        vendedor_id: vendedorId,
-        ...configuracoes,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'vendedor_id',
-      });
+      .from('configuracoes_vendedor')
+      .update(configuracoes)
+      .eq('vendedor_id', vendedorId);
 
     if (error) {
       console.error('Erro ao salvar configurações:', error);
@@ -180,12 +143,12 @@ export const vendedoresService = {
 
   // ============================================
   // RESTRIÇÕES DO VENDEDOR
-  // TODO: Ajustar nome da tabela conforme estrutura do banco
+  // Tabela: restricoes_vendedor
   // ============================================
 
-  async buscarRestricoes(vendedorId: string): Promise<VendedorRestricao | null> {
+  async buscarRestricoes(vendedorId: string): Promise<RestricaoVendedor | null> {
     const { data, error } = await supabase
-      .from('vendedor_restricoes') // TODO: ajustar nome da tabela
+      .from('restricoes_vendedor')
       .select('*')
       .eq('vendedor_id', vendedorId)
       .maybeSingle();
@@ -198,16 +161,11 @@ export const vendedoresService = {
     return data;
   },
 
-  async salvarRestricoes(vendedorId: string, restricoes: VendedorRestricao): Promise<void> {
+  async salvarRestricoes(vendedorId: string, restricoes: Partial<RestricaoVendedor>): Promise<void> {
     const { error } = await supabase
-      .from('vendedor_restricoes') // TODO: ajustar nome da tabela
-      .upsert({
-        vendedor_id: vendedorId,
-        ...restricoes,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'vendedor_id',
-      });
+      .from('restricoes_vendedor')
+      .update(restricoes)
+      .eq('vendedor_id', vendedorId);
 
     if (error) {
       console.error('Erro ao salvar restrições:', error);
@@ -216,13 +174,13 @@ export const vendedoresService = {
   },
 
   // ============================================
-  // RECIBOS DO VENDEDOR
-  // TODO: Ajustar nome da tabela conforme estrutura do banco
+  // CONFIGURAÇÕES DE RECIBOS
+  // Tabela: configuracoes_recibos
   // ============================================
 
-  async buscarRecibos(vendedorId: string): Promise<VendedorRecibo | null> {
+  async buscarRecibos(vendedorId: string): Promise<ConfiguracaoRecibo | null> {
     const { data, error } = await supabase
-      .from('vendedor_recibos') // TODO: ajustar nome da tabela
+      .from('configuracoes_recibos')
       .select('*')
       .eq('vendedor_id', vendedorId)
       .maybeSingle();
@@ -235,20 +193,40 @@ export const vendedoresService = {
     return data;
   },
 
-  async salvarRecibos(vendedorId: string, recibos: VendedorRecibo): Promise<void> {
-    const { error } = await supabase
-      .from('vendedor_recibos') // TODO: ajustar nome da tabela
-      .upsert({
-        vendedor_id: vendedorId,
-        ...recibos,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'vendedor_id',
-      });
+  async salvarRecibos(vendedorId: string, recibos: Partial<ConfiguracaoRecibo>): Promise<void> {
+    // Verificar se já existe registro para este vendedor
+    const existente = await this.buscarRecibos(vendedorId);
+    
+    if (existente) {
+      // Atualizar
+      const { error } = await supabase
+        .from('configuracoes_recibos')
+        .update({
+          ...recibos,
+          vendedor_id: vendedorId,
+          empresa_id: null, // Garantir que é por vendedor
+        })
+        .eq('vendedor_id', vendedorId);
 
-    if (error) {
-      console.error('Erro ao salvar recibos:', error);
-      throw error;
+      if (error) {
+        console.error('Erro ao atualizar recibos:', error);
+        throw error;
+      }
+    } else {
+      // Criar novo
+      const { error } = await supabase
+        .from('configuracoes_recibos')
+        .insert({
+          ...recibos,
+          vendedor_id: vendedorId,
+          empresa_id: null,
+          ativo: true,
+        });
+
+      if (error) {
+        console.error('Erro ao criar recibos:', error);
+        throw error;
+      }
     }
   },
 };
