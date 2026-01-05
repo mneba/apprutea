@@ -1,0 +1,1 @@
+export { ModalVendedor } from './ModalVendedor';
