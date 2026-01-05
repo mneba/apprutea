@@ -23,7 +23,7 @@ import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio 
 type ViewMode = 'empresas' | 'rotas';
 
 export default function OrganizacaoPage() {
-  const { profile, localizacao, loading: loadingUser } = useUser();
+  const { profile, localizacao, setLocalizacao, loading: loadingUser } = useUser();
   
   // Estados
   const [loading, setLoading] = useState(true);
@@ -294,6 +294,16 @@ export default function OrganizacaoPage() {
             empresa_id: novaEmpresa.id,
           });
         }
+
+        // Atualizar seletor para a nova empresa
+        if (setLocalizacao) {
+          setLocalizacao({
+            empresa_id: novaEmpresa.id,
+            empresa: { id: novaEmpresa.id, nome: novaEmpresa.nome } as any,
+            rota_id: null,
+            rota: null,
+          });
+        }
       }
 
       setModalEmpresa(false);
@@ -356,13 +366,22 @@ export default function OrganizacaoPage() {
         {isSuperAdmin && (
           <div className="flex items-center gap-2">
             {viewMode === 'rotas' && empresaSelecionada && (
-              <button
-                onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
-              >
-                <Plus className="w-5 h-5" />
-                Nova Rota
-              </button>
+              <>
+                <button
+                  onClick={() => handleAbrirModalEditarEmpresa(empresaSelecionada)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                >
+                  <Edit className="w-5 h-5" />
+                  Gerenciar Empresa
+                </button>
+                <button
+                  onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                >
+                  <Plus className="w-5 h-5" />
+                  Nova Rota
+                </button>
+              </>
             )}
             <button
               onClick={handleAbrirModalNovaEmpresa}
