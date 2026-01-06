@@ -21,7 +21,8 @@
     "class-variance-authority": "^0.7.0",
     "react-hook-form": "^7.54.2",
     "@hookform/resolvers": "^3.9.0",
-    "zod": "^3.23.8"
+    "zod": "^3.23.8",
+    "recharts": "^2.15.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
