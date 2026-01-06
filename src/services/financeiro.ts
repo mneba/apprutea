@@ -279,11 +279,14 @@ export const financeiroService = {
       return { success: false, error: error.message };
     }
     
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Erro desconhecido' };
+    // A function retorna um array com um único registro
+    const resultado = Array.isArray(data) ? data[0] : data;
+    
+    if (!resultado?.success) {
+      return { success: false, error: resultado?.error || 'Erro ao processar movimentação' };
     }
     
-    return { success: true, id: data.id };
+    return { success: true, id: resultado.id };
   },
 
   // ==================================================
