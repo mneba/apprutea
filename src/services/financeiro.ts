@@ -286,7 +286,7 @@ export const financeiroService = {
       return { success: false, error: resultado?.error || 'Erro ao processar movimentação' };
     }
     
-    return { success: true, id: resultado.id };
+    return { success: true, id: resultado.mov_id };
   },
 
   // ==================================================
