@@ -1,7 +1,6 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
 import { 
   Wallet, 
   Building2, 
@@ -16,9 +15,7 @@ import {
   X,
   Loader2,
   Calendar,
-  Filter,
   ChevronDown,
-  DollarSign,
   FileText,
   AlertCircle
 } from 'lucide-react';
@@ -34,7 +31,6 @@ import {
 import { useUser } from '@/contexts/UserContext';
 import { financeiroService } from '@/services/financeiro';
 import type {
-  PeriodoFiltro,
   SaldosContas,
   ResumoMovimentacoes,
   DadosGrafico,
@@ -47,6 +43,13 @@ import type {
 // TIPOS LOCAIS
 // =====================================================
 type AbaAtiva = 'resumo' | 'extrato';
+type TipoFiltro = 'hoje' | 'ontem' | 'periodo';
+
+interface FiltroData {
+  tipo: TipoFiltro;
+  dataInicio: string;
+  dataFim: string;
+}
 
 // =====================================================
 // COMPONENTES AUXILIARES
@@ -149,43 +152,129 @@ function BotaoAcaoRapida({
   );
 }
 
-// Breadcrumb de Período
-function BreadcrumbPeriodo({ 
-  periodoAtivo, 
+// NOVO: Filtro de Período Simplificado (Hoje, Ontem, Calendário)
+function FiltroPeriodo({ 
+  filtro, 
   onChange 
 }: { 
-  periodoAtivo: PeriodoFiltro; 
-  onChange: (periodo: PeriodoFiltro) => void;
+  filtro: FiltroData; 
+  onChange: (filtro: FiltroData) => void;
 }) {
-  const periodos: { valor: PeriodoFiltro; label: string }[] = [
-    { valor: 'hoje', label: 'Hoje' },
-    { valor: 'ontem', label: 'Ontem' },
-    { valor: '7dias', label: '7 dias' },
-    { valor: '15dias', label: '15 dias' },
-    { valor: '30dias', label: '30 dias' },
-    { valor: 'mes_fechado', label: 'Mês Fechado' },
-  ];
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [tempDataInicio, setTempDataInicio] = useState(filtro.dataInicio);
+  const [tempDataFim, setTempDataFim] = useState(filtro.dataFim);
+
+  const handleAplicarPeriodo = () => {
+    onChange({
+      tipo: 'periodo',
+      dataInicio: tempDataInicio,
+      dataFim: tempDataFim,
+    });
+    setShowCalendar(false);
+  };
+
+  const formatarPeriodo = () => {
+    if (filtro.tipo === 'hoje') return 'Hoje';
+    if (filtro.tipo === 'ontem') return 'Ontem';
+    if (filtro.dataInicio === filtro.dataFim) {
+      return new Date(filtro.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR');
+    }
+    return `${new Date(filtro.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} - ${new Date(filtro.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`;
+  };
   
   return (
-    <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 flex-wrap">
-      {periodos.map((p) => (
+    <div className="flex items-center gap-2 flex-wrap">
+      {/* Botões Hoje/Ontem */}
+      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
         <button
-          key={p.valor}
-          onClick={() => onChange(p.valor)}
-          className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all ${
-            periodoAtivo === p.valor
+          onClick={() => onChange({ tipo: 'hoje', dataInicio: new Date().toISOString().split('T')[0], dataFim: new Date().toISOString().split('T')[0] })}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            filtro.tipo === 'hoje'
               ? 'bg-white text-blue-600 shadow-sm'
               : 'text-gray-600 hover:text-gray-900'
           }`}
         >
-          {p.label}
+          Hoje
         </button>
-      ))}
+        <button
+          onClick={() => {
+            const ontem = new Date();
+            ontem.setDate(ontem.getDate() - 1);
+            const ontemStr = ontem.toISOString().split('T')[0];
+            onChange({ tipo: 'ontem', dataInicio: ontemStr, dataFim: ontemStr });
+          }}
+          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+            filtro.tipo === 'ontem'
+              ? 'bg-white text-blue-600 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Ontem
+        </button>
+      </div>
+
+      {/* Botão de Calendário */}
+      <div className="relative">
+        <button
+          onClick={() => setShowCalendar(!showCalendar)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
+            filtro.tipo === 'periodo'
+              ? 'bg-blue-50 border-blue-300 text-blue-700'
+              : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+          }`}
+        >
+          <Calendar className="w-4 h-4" />
+          <span className="text-sm font-medium">
+            {filtro.tipo === 'periodo' ? formatarPeriodo() : 'Período'}
+          </span>
+          <ChevronDown className="w-4 h-4" />
+        </button>
+
+        {/* Dropdown do Calendário */}
+        {showCalendar && (
+          <div className="absolute top-full mt-2 right-0 bg-white rounded-xl shadow-lg border border-gray-200 p-4 z-50 min-w-[300px]">
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
+                <input
+                  type="date"
+                  value={tempDataInicio}
+                  onChange={(e) => setTempDataInicio(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Data Fim</label>
+                <input
+                  type="date"
+                  value={tempDataFim}
+                  onChange={(e) => setTempDataFim(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowCalendar(false)}
+                  className="flex-1 px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleAplicarPeriodo}
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Aplicar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-// Linha do Extrato
+// ATUALIZADO: Linha do Extrato com conta origem/destino
 function LinhaExtrato({ 
   movimento, 
   categorias 
@@ -196,6 +285,27 @@ function LinhaExtrato({
   const categoria = categorias.find(c => c.codigo === movimento.categoria);
   const isEntrada = movimento.tipo === 'RECEBER';
   const isTransferencia = movimento.tipo === 'TRANSFERENCIA';
+  const isSaida = movimento.tipo === 'PAGAR';
+  
+  // Determinar nome da conta para exibição
+  const getContaDisplay = () => {
+    if (isTransferencia) {
+      const origem = movimento.conta_origem_nome || '-';
+      const destino = movimento.conta_destino_nome || '-';
+      return (
+        <span className="text-xs text-gray-500">
+          {origem} → {destino}
+        </span>
+      );
+    }
+    if (isEntrada && movimento.conta_destino_nome) {
+      return <span className="text-xs text-gray-500">→ {movimento.conta_destino_nome}</span>;
+    }
+    if (isSaida && movimento.conta_origem_nome) {
+      return <span className="text-xs text-gray-500">← {movimento.conta_origem_nome}</span>;
+    }
+    return null;
+  };
   
   return (
     <tr className="hover:bg-gray-50 transition-colors">
@@ -207,8 +317,9 @@ function LinhaExtrato({
       <td className="px-4 py-3">
         <div>
           <p className="text-sm font-medium text-gray-900">{movimento.descricao}</p>
+          {getContaDisplay()}
           {movimento.observacoes && (
-            <p className="text-xs text-gray-500 mt-0.5">{movimento.observacoes}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{movimento.observacoes}</p>
           )}
         </div>
       </td>
@@ -299,7 +410,6 @@ function ModalNovaMovimentacao({
     return true;
   });
 
-  // Limpar form ao abrir/fechar
   useEffect(() => {
     if (isOpen) {
       setTipo('RECEBER');
@@ -358,7 +468,6 @@ function ModalNovaMovimentacao({
             </div>
           )}
 
-          {/* Tipo */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Movimento</label>
             <div className="flex gap-2">
@@ -387,7 +496,6 @@ function ModalNovaMovimentacao({
             </div>
           </div>
 
-          {/* Conta */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Conta *</label>
             <select
@@ -420,7 +528,6 @@ function ModalNovaMovimentacao({
             </select>
           </div>
 
-          {/* Categoria */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Categoria *</label>
             <select
@@ -436,7 +543,6 @@ function ModalNovaMovimentacao({
             </select>
           </div>
 
-          {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Descrição *</label>
             <input
@@ -448,7 +554,6 @@ function ModalNovaMovimentacao({
             />
           </div>
 
-          {/* Valor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Valor *</label>
             <div className="relative">
@@ -465,7 +570,6 @@ function ModalNovaMovimentacao({
             </div>
           </div>
 
-          {/* Forma de Pagamento */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Forma de Pagamento</label>
             <select
@@ -480,7 +584,6 @@ function ModalNovaMovimentacao({
             </select>
           </div>
 
-          {/* Observações */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
             <textarea
@@ -537,7 +640,6 @@ function ModalTransferencia({
   const contaOrigemObj = contas.find(c => c.id === contaOrigem);
   const contasDestinoFiltradas = contas.filter(c => c.id !== contaOrigem);
 
-  // Limpar form ao abrir
   useEffect(() => {
     if (isOpen) {
       setContaOrigem('');
@@ -598,7 +700,6 @@ function ModalTransferencia({
             </div>
           )}
 
-          {/* Conta Origem */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Conta de Origem *</label>
             <select
@@ -615,14 +716,12 @@ function ModalTransferencia({
             </select>
           </div>
 
-          {/* Ícone de Transferência */}
           <div className="flex justify-center">
             <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
               <ArrowRight className="w-5 h-5 text-blue-600" />
             </div>
           </div>
 
-          {/* Conta Destino */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Conta de Destino *</label>
             <select
@@ -640,7 +739,6 @@ function ModalTransferencia({
             </select>
           </div>
 
-          {/* Valor */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Valor *</label>
             <div className="relative">
@@ -663,7 +761,6 @@ function ModalTransferencia({
             )}
           </div>
 
-          {/* Descrição */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
             <input
@@ -675,7 +772,6 @@ function ModalTransferencia({
             />
           </div>
 
-          {/* Observações */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
             <textarea
@@ -709,7 +805,7 @@ function ModalTransferencia({
   );
 }
 
-// Modal Ajuste de Saldo
+// ATUALIZADO: Modal Ajuste de Saldo - Agora com SALDO FINAL
 function ModalAjusteSaldo({ 
   isOpen, 
   onClose, 
@@ -722,33 +818,42 @@ function ModalAjusteSaldo({
   onSalvar: (dados: any) => Promise<void>;
 }) {
   const [contaId, setContaId] = useState('');
-  const [tipoAjuste, setTipoAjuste] = useState<'positivo' | 'negativo'>('positivo');
-  const [valor, setValor] = useState('');
+  const [saldoFinal, setSaldoFinal] = useState('');
   const [motivo, setMotivo] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
 
   const contaSelecionada = contas.find(c => c.id === contaId);
-  const valorNum = parseFloat(valor) || 0;
-  const valorAjuste = tipoAjuste === 'positivo' ? valorNum : -valorNum;
-  const valorFinal = (contaSelecionada?.saldo_atual || 0) + valorAjuste;
+  const saldoAtual = contaSelecionada?.saldo_atual || 0;
+  const saldoFinalNum = parseFloat(saldoFinal) || 0;
+  const diferenca = saldoFinalNum - saldoAtual;
 
-  // Limpar form ao abrir
   useEffect(() => {
     if (isOpen) {
       setContaId('');
-      setTipoAjuste('positivo');
-      setValor('');
+      setSaldoFinal('');
       setMotivo('');
       setObservacoes('');
       setErro('');
     }
   }, [isOpen]);
 
+  // Quando seleciona conta, preenche saldo atual como sugestão
+  useEffect(() => {
+    if (contaSelecionada) {
+      setSaldoFinal(contaSelecionada.saldo_atual.toFixed(2));
+    }
+  }, [contaSelecionada]);
+
   const handleSalvar = async () => {
-    if (!contaId || !valor || !motivo) {
+    if (!contaId || saldoFinal === '' || !motivo) {
       setErro('Preencha todos os campos obrigatórios');
+      return;
+    }
+
+    if (diferenca === 0) {
+      setErro('O saldo final é igual ao saldo atual. Nenhum ajuste necessário.');
       return;
     }
     
@@ -757,7 +862,7 @@ function ModalAjusteSaldo({
     try {
       await onSalvar({
         conta_id: contaId,
-        valor: valorAjuste,
+        saldo_final: saldoFinalNum,
         motivo,
         observacoes,
       });
@@ -788,7 +893,6 @@ function ModalAjusteSaldo({
             </div>
           )}
 
-          {/* Conta */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Conta *</label>
             <select
@@ -805,67 +909,48 @@ function ModalAjusteSaldo({
             </select>
           </div>
 
-          {/* Tipo de Ajuste */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Ajuste</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setTipoAjuste('positivo')}
-                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium transition-all ${
-                  tipoAjuste === 'positivo' 
-                    ? 'border-green-500 bg-green-50 text-green-700' 
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                + Aumentar
-              </button>
-              <button
-                onClick={() => setTipoAjuste('negativo')}
-                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium transition-all ${
-                  tipoAjuste === 'negativo' 
-                    ? 'border-red-500 bg-red-50 text-red-700' 
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                - Diminuir
-              </button>
+          {/* Saldo Atual (apenas leitura) */}
+          {contaSelecionada && (
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-sm text-gray-500 mb-1">Saldo Atual</p>
+              <p className="text-xl font-bold text-gray-900">
+                {saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
             </div>
-          </div>
+          )}
 
-          {/* Valor */}
+          {/* Saldo Final */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Valor do Ajuste *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Saldo Final Desejado *</label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
               <input
                 type="number"
                 step="0.01"
-                min="0.01"
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
+                value={saldoFinal}
+                onChange={(e) => setSaldoFinal(e.target.value)}
                 placeholder="0,00"
                 className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                disabled={!contaId}
               />
             </div>
           </div>
 
-          {/* Preview */}
-          {contaSelecionada && valor && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-2">Preview do ajuste:</p>
-              <div className="flex items-center justify-between">
-                <span className="text-gray-700">
-                  {contaSelecionada.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          {/* Preview da diferença */}
+          {contaSelecionada && saldoFinal !== '' && diferenca !== 0 && (
+            <div className={`rounded-lg p-4 ${diferenca > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
+              <p className="text-sm text-gray-600 mb-1">Ajuste necessário</p>
+              <div className="flex items-center gap-2">
+                <span className={`text-lg font-bold ${diferenca > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                  {diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </span>
-                <ArrowRight className="w-4 h-4 text-gray-400" />
-                <span className={`font-semibold ${valorFinal >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {valorFinal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                <span className={`text-xs px-2 py-0.5 rounded ${diferenca > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
+                  {diferenca > 0 ? 'Entrada' : 'Saída'}
                 </span>
               </div>
             </div>
           )}
 
-          {/* Motivo */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Motivo *</label>
             <select
@@ -882,7 +967,6 @@ function ModalAjusteSaldo({
             </select>
           </div>
 
-          {/* Observações */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
             <textarea
@@ -904,7 +988,7 @@ function ModalAjusteSaldo({
           </button>
           <button
             onClick={handleSalvar}
-            disabled={salvando || !contaId || !valor || !motivo}
+            disabled={salvando || !contaId || saldoFinal === '' || !motivo || diferenca === 0}
             className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
           >
             {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -926,8 +1010,16 @@ export default function FinanceiroPage() {
 
   // Estado
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('resumo');
-  const [periodoResumo, setPeriodoResumo] = useState<PeriodoFiltro>('7dias');
-  const [periodoExtrato, setPeriodoExtrato] = useState<PeriodoFiltro>('30dias');
+  const [filtroResumo, setFiltroResumo] = useState<FiltroData>({
+    tipo: 'hoje',
+    dataInicio: new Date().toISOString().split('T')[0],
+    dataFim: new Date().toISOString().split('T')[0],
+  });
+  const [filtroExtrato, setFiltroExtrato] = useState<FiltroData>({
+    tipo: 'hoje',
+    dataInicio: new Date().toISOString().split('T')[0],
+    dataFim: new Date().toISOString().split('T')[0],
+  });
   const [contaFiltro, setContaFiltro] = useState<string>('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   
@@ -983,28 +1075,38 @@ export default function FinanceiroPage() {
     if (!empresaId) return;
     setLoadingResumo(true);
     try {
-      const data = await financeiroService.buscarResumoMovimentacoes(empresaId, periodoResumo);
+      const data = await financeiroService.buscarResumoMovimentacoes(
+        empresaId, 
+        filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined
+      );
       setResumo(data);
     } catch (error) {
       console.error('Erro ao carregar resumo:', error);
     } finally {
       setLoadingResumo(false);
     }
-  }, [empresaId, periodoResumo]);
+  }, [empresaId, filtroResumo]);
 
   // Carregar dados do gráfico
   const carregarGrafico = useCallback(async () => {
     if (!empresaId) return;
     setLoadingGrafico(true);
     try {
-      const data = await financeiroService.buscarDadosGrafico(empresaId, periodoResumo);
+      const data = await financeiroService.buscarDadosGrafico(
+        empresaId, 
+        filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined
+      );
       setDadosGrafico(data);
     } catch (error) {
       console.error('Erro ao carregar gráfico:', error);
     } finally {
       setLoadingGrafico(false);
     }
-  }, [empresaId, periodoResumo]);
+  }, [empresaId, filtroResumo]);
 
   // Carregar contas
   const carregarContas = useCallback(async () => {
@@ -1036,9 +1138,11 @@ export default function FinanceiroPage() {
     setLoadingExtrato(true);
     try {
       const data = await financeiroService.buscarExtrato(empresaId, {
-        periodo: periodoExtrato,
+        periodo: filtroExtrato.tipo === 'periodo' ? undefined : filtroExtrato.tipo,
         conta_id: contaFiltro || undefined,
         categoria: categoriaFiltro || undefined,
+        data_inicio: filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataInicio : undefined,
+        data_fim: filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataFim : undefined,
       });
       setMovimentos(data);
     } catch (error) {
@@ -1046,7 +1150,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingExtrato(false);
     }
-  }, [empresaId, periodoExtrato, contaFiltro, categoriaFiltro]);
+  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro]);
 
   // Effects
   useEffect(() => {
@@ -1062,13 +1166,13 @@ export default function FinanceiroPage() {
       carregarResumo();
       carregarGrafico();
     }
-  }, [empresaId, abaAtiva, periodoResumo, carregarResumo, carregarGrafico]);
+  }, [empresaId, abaAtiva, filtroResumo, carregarResumo, carregarGrafico]);
 
   useEffect(() => {
     if (empresaId && abaAtiva === 'extrato') {
       carregarExtrato();
     }
-  }, [empresaId, abaAtiva, periodoExtrato, contaFiltro, categoriaFiltro, carregarExtrato]);
+  }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, carregarExtrato]);
 
   // Handlers
   const handleSalvarMovimentacao = async (dados: any) => {
@@ -1080,7 +1184,6 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    // Recarregar dados
     await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
   };
 
@@ -1093,7 +1196,6 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    // Recarregar dados
     await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
   };
 
@@ -1106,7 +1208,6 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    // Recarregar dados
     await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
   };
 
@@ -1206,7 +1307,7 @@ export default function FinanceiroPage() {
             <div>
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
                 <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Movimentações</h2>
-                <BreadcrumbPeriodo periodoAtivo={periodoResumo} onChange={setPeriodoResumo} />
+                <FiltroPeriodo filtro={filtroResumo} onChange={setFiltroResumo} />
               </div>
               
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -1314,12 +1415,10 @@ export default function FinanceiroPage() {
           <div className="space-y-4">
             {/* Filtros */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              {/* Breadcrumb de Período */}
-              <BreadcrumbPeriodo periodoAtivo={periodoExtrato} onChange={setPeriodoExtrato} />
+              <FiltroPeriodo filtro={filtroExtrato} onChange={setFiltroExtrato} />
               
               {/* Filtros Dropdown */}
               <div className="flex flex-wrap items-center gap-3">
-                {/* Filtro de Conta */}
                 <div className="relative">
                   <select
                     value={contaFiltro}
@@ -1346,7 +1445,6 @@ export default function FinanceiroPage() {
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                 </div>
 
-                {/* Filtro de Categoria */}
                 <div className="relative">
                   <select
                     value={categoriaFiltro}
@@ -1402,7 +1500,6 @@ export default function FinanceiroPage() {
                 </table>
               </div>
               
-              {/* Footer da tabela com totais */}
               {movimentos.length > 0 && (
                 <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-4 text-sm">

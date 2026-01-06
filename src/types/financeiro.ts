@@ -88,7 +88,11 @@ export interface MovimentoFinanceiro {
   updated_at: string;
   created_by?: string;
   conta_origem_id?: string;
+  conta_origem_nome?: string;
+  conta_origem_tipo?: string;
   conta_destino_id?: string;
+  conta_destino_nome?: string;
+  conta_destino_tipo?: string;
   usuario_id?: string;
   liquidacao_id?: string;
   vendedor_id?: string;
@@ -126,6 +130,7 @@ export interface ResumoMovimentacoes {
 
 export interface DadosGrafico {
   data: string;
+  data_formatada?: string;
   entradas: number;
   saidas: number;
 }
@@ -167,10 +172,12 @@ export interface AjusteSaldoInput {
 
 export interface FiltrosExtrato {
   conta_id?: string;
-  periodo: PeriodoFiltro;
+  periodo?: PeriodoFiltro | string;
   categoria?: string;
   tipo?: TipoMovimento;
   status?: StatusMovimento;
+  data_inicio?: string;
+  data_fim?: string;
 }
 
 // =====================================================

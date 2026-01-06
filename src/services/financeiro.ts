@@ -58,13 +58,17 @@ export const financeiroService = {
   // ==================================================
   async buscarResumoMovimentacoes(
     empresaId: string,
-    periodo: PeriodoFiltro
+    periodo?: string,
+    dataInicio?: string,
+    dataFim?: string
   ): Promise<ResumoMovimentacoes> {
     const supabase = createClient();
     
     const { data, error } = await supabase.rpc('fn_buscar_resumo_movimentacoes', {
       p_empresa_id: empresaId,
-      p_periodo: periodo,
+      p_periodo: periodo || 'hoje',
+      p_data_inicio: dataInicio || null,
+      p_data_fim: dataFim || null,
     });
     
     if (error) {
@@ -79,13 +83,16 @@ export const financeiroService = {
       };
     }
     
+    // A function retorna um array com um único registro
+    const resultado = Array.isArray(data) ? data[0] : data;
+    
     return {
-      total_entradas: data?.total_entradas || 0,
-      total_saidas: data?.total_saidas || 0,
-      saldo_periodo: data?.saldo_periodo || 0,
-      qtd_entradas: data?.qtd_entradas || 0,
-      qtd_saidas: data?.qtd_saidas || 0,
-      qtd_total: data?.qtd_total || 0,
+      total_entradas: resultado?.total_entradas || 0,
+      total_saidas: resultado?.total_saidas || 0,
+      saldo_periodo: resultado?.saldo_periodo || 0,
+      qtd_entradas: resultado?.qtd_entradas || 0,
+      qtd_saidas: resultado?.qtd_saidas || 0,
+      qtd_total: resultado?.qtd_total || 0,
     };
   },
 
@@ -94,13 +101,17 @@ export const financeiroService = {
   // ==================================================
   async buscarDadosGrafico(
     empresaId: string,
-    periodo: PeriodoFiltro
+    periodo?: string,
+    dataInicio?: string,
+    dataFim?: string
   ): Promise<DadosGrafico[]> {
     const supabase = createClient();
     
     const { data, error } = await supabase.rpc('fn_buscar_dados_grafico', {
       p_empresa_id: empresaId,
-      p_periodo: periodo,
+      p_periodo: periodo || '7dias',
+      p_data_inicio: dataInicio || null,
+      p_data_fim: dataFim || null,
     });
     
     if (error) {
@@ -116,17 +127,19 @@ export const financeiroService = {
   // ==================================================
   async buscarExtrato(
     empresaId: string,
-    filtros: FiltrosExtrato
+    filtros: FiltrosExtrato & { data_inicio?: string; data_fim?: string }
   ): Promise<MovimentoFinanceiro[]> {
     const supabase = createClient();
     
     const { data, error } = await supabase.rpc('fn_buscar_extrato_financeiro', {
       p_empresa_id: empresaId,
-      p_periodo: filtros.periodo,
+      p_periodo: filtros.periodo || 'hoje',
       p_conta_id: filtros.conta_id || null,
       p_categoria: filtros.categoria || null,
       p_tipo: filtros.tipo || null,
       p_limite: 100,
+      p_data_inicio: filtros.data_inicio || null,
+      p_data_fim: filtros.data_fim || null,
     });
     
     if (error) {
@@ -244,7 +257,7 @@ export const financeiroService = {
   // CRIAR AJUSTE DE SALDO
   // ==================================================
   async criarAjusteSaldo(
-    input: AjusteSaldoInput,
+    input: { conta_id: string; saldo_final: number; motivo: string; observacoes?: string },
     usuarioId?: string,
     createdBy?: string
   ): Promise<{ success: boolean; error?: string; id?: string; saldo_novo?: number }> {
@@ -252,7 +265,7 @@ export const financeiroService = {
     
     const { data, error } = await supabase.rpc('fn_criar_ajuste_saldo', {
       p_conta_id: input.conta_id,
-      p_valor: input.valor, // Positivo = aumentar, Negativo = diminuir
+      p_saldo_final: input.saldo_final,
       p_motivo: input.motivo,
       p_observacoes: input.observacoes || null,
       p_usuario_id: usuarioId || null,
@@ -264,14 +277,17 @@ export const financeiroService = {
       return { success: false, error: error.message };
     }
     
-    if (!data?.success) {
-      return { success: false, error: data?.error || 'Erro desconhecido' };
+    // A function retorna um array com um único registro
+    const resultado = Array.isArray(data) ? data[0] : data;
+    
+    if (!resultado?.success) {
+      return { success: false, error: resultado?.error || 'Erro desconhecido' };
     }
     
     return { 
       success: true, 
-      id: data.id,
-      saldo_novo: data.saldo_novo,
+      id: resultado.id,
+      saldo_novo: resultado.saldo_novo,
     };
   },
 };
