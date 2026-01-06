@@ -344,13 +344,14 @@ export const financeiroService = {
       return { success: false, error: 'O saldo final é igual ao saldo atual. Nenhum ajuste necessário.' };
     }
     
-    // Chamar a function existente (ajustar_saldo_conta ou fn_criar_ajuste_saldo)
-    // Tentar primeiro com a function que já existia
+    const observacoesCompletas = `Saldo anterior: R$ ${saldoAtual.toFixed(2)} → Saldo final: R$ ${input.saldo_final.toFixed(2)}. ${input.observacoes || ''}`.trim();
+    
+    // Tentar com ajustar_saldo_conta
     const { data, error } = await supabase.rpc('ajustar_saldo_conta', {
       p_conta_id: input.conta_id,
-      p_valor: valorAjuste,
-      p_motivo: input.motivo + ' | Saldo anterior: ' + saldoAtual.toFixed(2) + ' → Saldo final: ' + input.saldo_final.toFixed(2),
-      p_observacoes: input.observacoes || null,
+      p_valor_ajuste: valorAjuste,
+      p_motivo: input.motivo,
+      p_observacoes: observacoesCompletas,
       p_usuario_id: usuarioId || null,
       p_created_by: createdBy || null,
     });
