@@ -921,8 +921,8 @@ function ModalAjusteSaldo({
 // =====================================================
 
 export default function FinanceiroPage() {
-  const { localizacao, profile } = useUser();
-  const empresaId = localizacao?.empresa_id;
+  const { localizacaoAtual, profile } = useUser();
+  const empresaId = localizacaoAtual?.empresa?.id;
 
   // Estado
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('resumo');
