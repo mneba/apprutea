@@ -64,11 +64,33 @@ export const financeiroService = {
   ): Promise<ResumoMovimentacoes> {
     const supabase = createClient();
     
+    // Converter para periodo se for datas customizadas
+    let periodoParam = periodo || 'hoje';
+    
+    // Se tiver datas customizadas, calcular qual período usar
+    // (temporário até atualizar as functions no Supabase)
+    if (dataInicio && dataFim && !periodo) {
+      const inicio = new Date(dataInicio);
+      const fim = new Date(dataFim);
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      
+      const diffDias = Math.ceil((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDias <= 1) {
+        periodoParam = inicio.toDateString() === hoje.toDateString() ? 'hoje' : 'ontem';
+      } else if (diffDias <= 7) {
+        periodoParam = '7dias';
+      } else if (diffDias <= 15) {
+        periodoParam = '15dias';
+      } else {
+        periodoParam = '30dias';
+      }
+    }
+    
     const { data, error } = await supabase.rpc('fn_buscar_resumo_movimentacoes', {
       p_empresa_id: empresaId,
-      p_periodo: periodo || 'hoje',
-      p_data_inicio: dataInicio || null,
-      p_data_fim: dataFim || null,
+      p_periodo: periodoParam,
     });
     
     if (error) {
@@ -107,11 +129,31 @@ export const financeiroService = {
   ): Promise<DadosGrafico[]> {
     const supabase = createClient();
     
+    // Converter para periodo se for datas customizadas
+    let periodoParam = periodo || '7dias';
+    
+    if (dataInicio && dataFim && !periodo) {
+      const inicio = new Date(dataInicio);
+      const fim = new Date(dataFim);
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      
+      const diffDias = Math.ceil((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDias <= 1) {
+        periodoParam = inicio.toDateString() === hoje.toDateString() ? 'hoje' : 'ontem';
+      } else if (diffDias <= 7) {
+        periodoParam = '7dias';
+      } else if (diffDias <= 15) {
+        periodoParam = '15dias';
+      } else {
+        periodoParam = '30dias';
+      }
+    }
+    
     const { data, error } = await supabase.rpc('fn_buscar_dados_grafico', {
       p_empresa_id: empresaId,
-      p_periodo: periodo || '7dias',
-      p_data_inicio: dataInicio || null,
-      p_data_fim: dataFim || null,
+      p_periodo: periodoParam,
     });
     
     if (error) {
@@ -131,15 +173,35 @@ export const financeiroService = {
   ): Promise<MovimentoFinanceiro[]> {
     const supabase = createClient();
     
+    // Converter para periodo se for datas customizadas
+    let periodoParam = filtros.periodo || 'hoje';
+    
+    if (filtros.data_inicio && filtros.data_fim && !filtros.periodo) {
+      const inicio = new Date(filtros.data_inicio);
+      const fim = new Date(filtros.data_fim);
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      
+      const diffDias = Math.ceil((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
+      
+      if (diffDias <= 1) {
+        periodoParam = inicio.toDateString() === hoje.toDateString() ? 'hoje' : 'ontem';
+      } else if (diffDias <= 7) {
+        periodoParam = '7dias';
+      } else if (diffDias <= 15) {
+        periodoParam = '15dias';
+      } else {
+        periodoParam = '30dias';
+      }
+    }
+    
     const { data, error } = await supabase.rpc('fn_buscar_extrato_financeiro', {
       p_empresa_id: empresaId,
-      p_periodo: filtros.periodo || 'hoje',
+      p_periodo: periodoParam,
       p_conta_id: filtros.conta_id || null,
       p_categoria: filtros.categoria || null,
       p_tipo: filtros.tipo || null,
       p_limite: 100,
-      p_data_inicio: filtros.data_inicio || null,
-      p_data_fim: filtros.data_fim || null,
     });
     
     if (error) {
@@ -263,10 +325,31 @@ export const financeiroService = {
   ): Promise<{ success: boolean; error?: string; id?: string; saldo_novo?: number }> {
     const supabase = createClient();
     
-    const { data, error } = await supabase.rpc('fn_criar_ajuste_saldo', {
+    // Primeiro, buscar o saldo atual da conta
+    const { data: contaData, error: contaError } = await supabase
+      .from('contas')
+      .select('saldo_atual')
+      .eq('id', input.conta_id)
+      .single();
+    
+    if (contaError || !contaData) {
+      console.error('Erro ao buscar conta:', contaError);
+      return { success: false, error: 'Conta não encontrada' };
+    }
+    
+    const saldoAtual = contaData.saldo_atual || 0;
+    const valorAjuste = input.saldo_final - saldoAtual;
+    
+    if (valorAjuste === 0) {
+      return { success: false, error: 'O saldo final é igual ao saldo atual. Nenhum ajuste necessário.' };
+    }
+    
+    // Chamar a function existente (ajustar_saldo_conta ou fn_criar_ajuste_saldo)
+    // Tentar primeiro com a function que já existia
+    const { data, error } = await supabase.rpc('ajustar_saldo_conta', {
       p_conta_id: input.conta_id,
-      p_saldo_final: input.saldo_final,
-      p_motivo: input.motivo,
+      p_valor: valorAjuste,
+      p_motivo: input.motivo + ' | Saldo anterior: ' + saldoAtual.toFixed(2) + ' → Saldo final: ' + input.saldo_final.toFixed(2),
       p_observacoes: input.observacoes || null,
       p_usuario_id: usuarioId || null,
       p_created_by: createdBy || null,
@@ -277,17 +360,10 @@ export const financeiroService = {
       return { success: false, error: error.message };
     }
     
-    // A function retorna um array com um único registro
-    const resultado = Array.isArray(data) ? data[0] : data;
-    
-    if (!resultado?.success) {
-      return { success: false, error: resultado?.error || 'Erro desconhecido' };
-    }
-    
     return { 
       success: true, 
-      id: resultado.id,
-      saldo_novo: resultado.saldo_novo,
+      id: data,
+      saldo_novo: input.saldo_final,
     };
   },
 };
