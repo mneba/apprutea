@@ -47,9 +47,8 @@ const menuGroups: MenuGroup[] = [
   {
     title: 'Estrutura',
     items: [
-      // ✅ CORREÇÃO: Vendedores ANTES de Organização
-      { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores' },
       { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao' },
+      { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores' },
     ],
   },
   {
