@@ -307,7 +307,7 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
       
       setCarregandoParcelas(emprestimoExpandido);
       try {
-        const parcelasData = await clientesService.buscarParcelasEmprestimo(emprestimoExpandido);
+        const parcelasData = await clientesService.buscarParcelasViaView(emprestimoExpandido);
         setParcelas(prev => ({ ...prev, [emprestimoExpandido]: parcelasData }));
       } catch (error) {
         console.error('Erro ao carregar parcelas:', error);

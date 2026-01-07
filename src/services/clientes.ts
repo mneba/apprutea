@@ -568,7 +568,7 @@ export const clientesService = {
   // ==================================================
   // BUSCAR PARCELAS DE UM EMPRÉSTIMO (via view)
   // ==================================================
-  async buscarParcelasEmprestimo(emprestimoId: string): Promise<ParcelaView[]> {
+  async buscarParcelasViaView(emprestimoId: string): Promise<ParcelaView[]> {
     const supabase = createClient();
     
     const { data, error } = await supabase
