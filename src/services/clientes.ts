@@ -257,7 +257,7 @@ export const clientesService = {
         )
       `)
       .eq('empresa_id', empresaId)
-      .eq('status', 'ATIVO')
+      .eq('status', 'ATIVA')
       .order('nome');
     
     if (error) {
