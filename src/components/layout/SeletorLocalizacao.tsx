@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MapPin, ChevronRight, X, Building2, Navigation } from 'lucide-react';
+import { MapPin, ChevronRight, X, Building2, Navigation, Check, Loader2 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { usuariosService } from '@/services/usuarios';
 import type { Hierarquia, Empresa, Rota } from '@/types/database';
@@ -13,6 +13,7 @@ export function SeletorLocalizacao() {
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loadingRotas, setLoadingRotas] = useState(false);
   
   // Seleções temporárias
   const [paisSelecionado, setPaisSelecionado] = useState<string | null>(null);
@@ -66,6 +67,8 @@ export function SeletorLocalizacao() {
       }
       if (localizacao.empresa_id) {
         setEmpresaIdSelecionada(localizacao.empresa_id);
+        // Se já tem empresa selecionada, carregar suas rotas
+        carregarRotas(localizacao.empresa_id);
       }
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
@@ -74,16 +77,8 @@ export function SeletorLocalizacao() {
     }
   };
 
-  // Carregar rotas quando empresa mudar
-  useEffect(() => {
-    if (empresaIdSelecionada) {
-      carregarRotas(empresaIdSelecionada);
-    } else {
-      setRotas([]);
-    }
-  }, [empresaIdSelecionada]);
-
   const carregarRotas = async (empresaId: string) => {
+    setLoadingRotas(true);
     try {
       const rotasData = await usuariosService.listarRotasPorEmpresa(empresaId);
       
@@ -94,8 +89,13 @@ export function SeletorLocalizacao() {
       } else {
         setRotas(rotasData);
       }
+      
+      return rotasData;
     } catch (err) {
       console.error('Erro ao carregar rotas:', err);
+      return [];
+    } finally {
+      setLoadingRotas(false);
     }
   };
 
@@ -110,10 +110,11 @@ export function SeletorLocalizacao() {
     (e) => e.hierarquia_id === hierarquiaIdSelecionada
   );
 
-  // Selecionar empresa e salvar no contexto
-  const handleSelecionarEmpresa = (empresa: Empresa) => {
+  // Selecionar empresa - SÓ FECHA SE NÃO TIVER ROTAS
+  const handleSelecionarEmpresa = async (empresa: Empresa) => {
     const hierarquia = hierarquias.find(h => h.id === empresa.hierarquia_id);
     
+    // Atualizar localização com a empresa (sem rota por enquanto)
     setLocalizacao({
       hierarquia_id: empresa.hierarquia_id,
       hierarquia: hierarquia || null,
@@ -123,15 +124,55 @@ export function SeletorLocalizacao() {
       rota: null,
     });
     
-    setIsOpen(false);
+    // Atualizar empresa selecionada para mostrar rotas
+    setEmpresaIdSelecionada(empresa.id);
+    
+    // Carregar rotas para verificar se tem
+    setLoadingRotas(true);
+    try {
+      const rotasData = await usuariosService.listarRotasPorEmpresa(empresa.id);
+      
+      let rotasFiltradas = rotasData;
+      if (!isSuperAdmin && profile) {
+        const rotasPermitidas = profile.rotas_ids || [];
+        rotasFiltradas = rotasData.filter(r => rotasPermitidas.includes(r.id));
+      }
+      
+      setRotas(rotasFiltradas);
+      
+      // ============================================
+      // REGRA: SÓ FECHA SE NÃO TIVER ROTAS
+      // Se tiver rotas, mantém aberto para o usuário selecionar
+      // ============================================
+      if (rotasFiltradas.length === 0) {
+        setIsOpen(false);
+      }
+      
+    } catch (err) {
+      console.error('Erro ao carregar rotas:', err);
+      setIsOpen(false);
+    } finally {
+      setLoadingRotas(false);
+    }
   };
 
-  // Selecionar rota
+  // Selecionar rota - sempre fecha
   const handleSelecionarRota = (rota: Rota) => {
     setLocalizacao({
       ...localizacao,
       rota_id: rota.id,
       rota: rota,
+    });
+    
+    setIsOpen(false);
+  };
+
+  // Limpar rota (selecionar "Todas as rotas")
+  const handleLimparRota = () => {
+    setLocalizacao({
+      ...localizacao,
+      rota_id: null,
+      rota: null,
     });
     
     setIsOpen(false);
@@ -280,6 +321,9 @@ export function SeletorLocalizacao() {
                                     >
                                       <Building2 className="w-3 h-3" />
                                       {empresa.nome}
+                                      {localizacao.empresa_id === empresa.id && (
+                                        <Check className="w-3 h-3 ml-auto" />
+                                      )}
                                     </button>
                                   ))}
                                 </div>
@@ -303,27 +347,52 @@ export function SeletorLocalizacao() {
             )}
           </div>
 
-          {/* Footer com Rota Selecionada */}
-          {localizacao.empresa && rotas.length > 0 && (
+          {/* Footer com Rotas da Empresa Selecionada */}
+          {localizacao.empresa && (
             <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 rounded-b-xl">
-              <div className="text-xs text-gray-500 mb-2">Selecione a rota:</div>
-              <div className="flex flex-wrap gap-2">
-                {rotas.map((rota) => (
-                  <button
-                    key={rota.id}
-                    onClick={() => handleSelecionarRota(rota)}
-                    className={`
-                      px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                      ${localizacao.rota_id === rota.id
-                        ? 'bg-blue-600 text-white'
-                        : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'}
-                    `}
-                  >
-                    <Navigation className="w-3 h-3 inline mr-1" />
-                    {rota.nome}
-                  </button>
-                ))}
-              </div>
+              {loadingRotas ? (
+                <div className="flex items-center justify-center py-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                  <span className="ml-2 text-sm text-gray-500">Carregando rotas...</span>
+                </div>
+              ) : rotas.length > 0 ? (
+                <>
+                  <div className="text-xs text-gray-500 mb-2">Selecione a rota (opcional):</div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Opção "Todas as rotas" */}
+                    <button
+                      onClick={handleLimparRota}
+                      className={`
+                        px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                        ${!localizacao.rota_id
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'}
+                      `}
+                    >
+                      Todas
+                    </button>
+                    {rotas.map((rota) => (
+                      <button
+                        key={rota.id}
+                        onClick={() => handleSelecionarRota(rota)}
+                        className={`
+                          px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                          ${localizacao.rota_id === rota.id
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'}
+                        `}
+                      >
+                        <Navigation className="w-3 h-3 inline mr-1" />
+                        {rota.nome}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-gray-500 text-center py-1">
+                  Nenhuma rota cadastrada para esta empresa
+                </div>
+              )}
             </div>
           )}
         </div>

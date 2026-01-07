@@ -10,9 +10,7 @@ import {
   TrendingDown,
   ArrowRightLeft,
   Plus,
-  ArrowRight,
   CheckSquare,
-  X,
   Loader2,
   Calendar,
   ChevronDown,
@@ -30,6 +28,11 @@ import {
 } from 'recharts';
 import { useUser } from '@/contexts/UserContext';
 import { financeiroService } from '@/services/financeiro';
+import { 
+  ModalNovaMovimentacao, 
+  ModalTransferencia, 
+  ModalAjusteSaldo 
+} from '@/components/financeiro';
 import type {
   SaldosContas,
   ResumoMovimentacoes,
@@ -55,7 +58,6 @@ interface FiltroData {
 // COMPONENTES AUXILIARES
 // =====================================================
 
-// Card de Indicador (Saldos)
 function CardIndicador({ 
   titulo, 
   valor, 
@@ -90,7 +92,6 @@ function CardIndicador({
   );
 }
 
-// Card de Movimentação
 function CardMovimentacao({ 
   tipo, 
   titulo, 
@@ -129,7 +130,6 @@ function CardMovimentacao({
   );
 }
 
-// Botão de Ação Rápida
 function BotaoAcaoRapida({ 
   icone: Icone, 
   titulo, 
@@ -152,7 +152,6 @@ function BotaoAcaoRapida({
   );
 }
 
-// NOVO: Filtro de Período Simplificado (Hoje, Ontem, Calendário)
 function FiltroPeriodo({ 
   filtro, 
   onChange 
@@ -184,7 +183,6 @@ function FiltroPeriodo({
   
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      {/* Botões Hoje/Ontem */}
       <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => onChange({ tipo: 'hoje', dataInicio: new Date().toISOString().split('T')[0], dataFim: new Date().toISOString().split('T')[0] })}
@@ -213,7 +211,6 @@ function FiltroPeriodo({
         </button>
       </div>
 
-      {/* Botão de Calendário */}
       <div className="relative">
         <button
           onClick={() => setShowCalendar(!showCalendar)}
@@ -224,15 +221,12 @@ function FiltroPeriodo({
           }`}
         >
           <Calendar className="w-4 h-4" />
-          <span className="text-sm font-medium">
-            {filtro.tipo === 'periodo' ? formatarPeriodo() : 'Período'}
-          </span>
+          <span className="text-sm font-medium">{formatarPeriodo()}</span>
           <ChevronDown className="w-4 h-4" />
         </button>
 
-        {/* Dropdown do Calendário */}
         {showCalendar && (
-          <div className="absolute top-full mt-2 right-0 bg-white rounded-xl shadow-lg border border-gray-200 p-4 z-50 min-w-[300px]">
+          <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 min-w-[280px]">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
@@ -240,7 +234,7 @@ function FiltroPeriodo({
                   type="date"
                   value={tempDataInicio}
                   onChange={(e) => setTempDataInicio(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
@@ -249,19 +243,19 @@ function FiltroPeriodo({
                   type="date"
                   value={tempDataFim}
                   onChange={(e) => setTempDataFim(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="flex gap-2">
                 <button
                   onClick={() => setShowCalendar(false)}
-                  className="flex-1 px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
+                  className="flex-1 px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={handleAplicarPeriodo}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
                 >
                   Aplicar
                 </button>
@@ -274,7 +268,6 @@ function FiltroPeriodo({
   );
 }
 
-// ATUALIZADO: Linha do Extrato com conta origem/destino
 function LinhaExtrato({ 
   movimento, 
   categorias 
@@ -287,14 +280,11 @@ function LinhaExtrato({
   const isTransferencia = movimento.tipo === 'TRANSFERENCIA';
   const isSaida = movimento.tipo === 'PAGAR';
   
-  // Determinar nome da conta para exibição
   const getContaDisplay = () => {
     if (isTransferencia) {
-      const origem = movimento.conta_origem_nome || '-';
-      const destino = movimento.conta_destino_nome || '-';
       return (
         <span className="text-xs text-gray-500">
-          {origem} → {destino}
+          {movimento.conta_origem_nome || '-'} → {movimento.conta_destino_nome || '-'}
         </span>
       );
     }
@@ -358,7 +348,6 @@ function LinhaExtrato({
   );
 }
 
-// Aviso de seleção de empresa
 function AvisoSelecioneEmpresa() {
   return (
     <div className="flex flex-col items-center justify-center py-20">
@@ -374,633 +363,6 @@ function AvisoSelecioneEmpresa() {
 }
 
 // =====================================================
-// MODAIS
-// =====================================================
-
-// Modal Nova Movimentação
-function ModalNovaMovimentacao({ 
-  isOpen, 
-  onClose, 
-  contas,
-  categorias,
-  onSalvar 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void;
-  contas: ContaComDetalhes[];
-  categorias: CategoriaFinanceira[];
-  onSalvar: (dados: any) => Promise<void>;
-}) {
-  const [tipo, setTipo] = useState<'RECEBER' | 'PAGAR'>('RECEBER');
-  const [contaId, setContaId] = useState('');
-  const [categoria, setCategoria] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [valor, setValor] = useState('');
-  const [formaPagamento, setFormaPagamento] = useState('DINHEIRO');
-  const [observacoes, setObservacoes] = useState('');
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState('');
-
-  const contaSelecionada = contas.find(c => c.id === contaId);
-  const categoriasFiltradas = categorias.filter(c => {
-    if (c.tipo_movimento !== 'AMBOS' && c.tipo_movimento !== tipo) return false;
-    if (contaSelecionada?.tipo_conta === 'EMPRESA' && !c.aplicavel_empresa) return false;
-    if (contaSelecionada?.tipo_conta === 'ROTA' && !c.aplicavel_rota) return false;
-    if (contaSelecionada?.tipo_conta === 'MICROSEGURO' && !c.aplicavel_microseguro) return false;
-    return true;
-  });
-
-  useEffect(() => {
-    if (isOpen) {
-      setTipo('RECEBER');
-      setContaId('');
-      setCategoria('');
-      setDescricao('');
-      setValor('');
-      setFormaPagamento('DINHEIRO');
-      setObservacoes('');
-      setErro('');
-    }
-  }, [isOpen]);
-
-  const handleSalvar = async () => {
-    if (!contaId || !categoria || !descricao || !valor) {
-      setErro('Preencha todos os campos obrigatórios');
-      return;
-    }
-    
-    setSalvando(true);
-    setErro('');
-    try {
-      await onSalvar({
-        tipo,
-        conta_destino_id: contaId,
-        categoria,
-        descricao,
-        valor: parseFloat(valor),
-        forma_pagamento: formaPagamento,
-        observacoes,
-      });
-      onClose();
-    } catch (e: any) {
-      setErro(e.message || 'Erro ao salvar movimentação');
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">Nova Movimentação</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        
-        <div className="p-5 space-y-4">
-          {erro && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {erro}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Movimento</label>
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setTipo('RECEBER'); setCategoria(''); }}
-                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium transition-all ${
-                  tipo === 'RECEBER' 
-                    ? 'border-green-500 bg-green-50 text-green-700' 
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <TrendingUp className="w-4 h-4 inline mr-2" />
-                Entrada
-              </button>
-              <button
-                onClick={() => { setTipo('PAGAR'); setCategoria(''); }}
-                className={`flex-1 py-2.5 px-4 rounded-lg border-2 font-medium transition-all ${
-                  tipo === 'PAGAR' 
-                    ? 'border-red-500 bg-red-50 text-red-700' 
-                    : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                }`}
-              >
-                <TrendingDown className="w-4 h-4 inline mr-2" />
-                Saída
-              </button>
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Conta *</label>
-            <select
-              value={contaId}
-              onChange={(e) => { setContaId(e.target.value); setCategoria(''); }}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione uma conta</option>
-              <optgroup label="🏢 Empresa">
-                {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="🛣️ Rotas">
-                {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="🛡️ Microseguros">
-                {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Categoria *</label>
-            <select
-              value={categoria}
-              onChange={(e) => setCategoria(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={!contaId}
-            >
-              <option value="">Selecione uma categoria</option>
-              {categoriasFiltradas.map(c => (
-                <option key={c.id} value={c.codigo}>{c.nome_pt}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição *</label>
-            <input
-              type="text"
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Ex: Pagamento parcela 5/24 - João Silva"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Valor *</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
-                placeholder="0,00"
-                className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Forma de Pagamento</label>
-            <select
-              value={formaPagamento}
-              onChange={(e) => setFormaPagamento(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="DINHEIRO">Dinheiro</option>
-              <option value="PIX">PIX</option>
-              <option value="TRANSFERENCIA">Transferência</option>
-              <option value="CARTAO">Cartão</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-            <textarea
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-              rows={2}
-              placeholder="Observações adicionais..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 p-5 border-t bg-gray-50 rounded-b-2xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSalvar}
-            disabled={salvando || !contaId || !categoria || !descricao || !valor}
-            className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-          >
-            {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
-            {tipo === 'RECEBER' ? 'Registrar Entrada' : 'Registrar Saída'}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Modal Transferência
-function ModalTransferencia({ 
-  isOpen, 
-  onClose, 
-  contas,
-  onSalvar 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void;
-  contas: ContaComDetalhes[];
-  onSalvar: (dados: any) => Promise<void>;
-}) {
-  const [contaOrigem, setContaOrigem] = useState('');
-  const [contaDestino, setContaDestino] = useState('');
-  const [valor, setValor] = useState('');
-  const [descricao, setDescricao] = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState('');
-
-  const contaOrigemObj = contas.find(c => c.id === contaOrigem);
-  const contasDestinoFiltradas = contas.filter(c => c.id !== contaOrigem);
-
-  useEffect(() => {
-    if (isOpen) {
-      setContaOrigem('');
-      setContaDestino('');
-      setValor('');
-      setDescricao('');
-      setObservacoes('');
-      setErro('');
-    }
-  }, [isOpen]);
-
-  const handleSalvar = async () => {
-    if (!contaOrigem || !contaDestino || !valor) {
-      setErro('Preencha todos os campos obrigatórios');
-      return;
-    }
-    
-    const valorNum = parseFloat(valor);
-    if (contaOrigemObj && valorNum > contaOrigemObj.saldo_atual) {
-      setErro('Saldo insuficiente na conta de origem');
-      return;
-    }
-    
-    setSalvando(true);
-    setErro('');
-    try {
-      await onSalvar({
-        conta_origem_id: contaOrigem,
-        conta_destino_id: contaDestino,
-        valor: valorNum,
-        descricao: descricao || 'Transferência entre contas',
-        observacoes,
-      });
-      onClose();
-    } catch (e: any) {
-      setErro(e.message || 'Erro ao realizar transferência');
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">Transferência entre Contas</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        
-        <div className="p-5 space-y-4">
-          {erro && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {erro}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Conta de Origem *</label>
-            <select
-              value={contaOrigem}
-              onChange={(e) => { setContaOrigem(e.target.value); setContaDestino(''); }}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione a conta de origem</option>
-              {contas.map(c => (
-                <option key={c.id} value={c.id}>
-                  [{c.tipo_conta}] {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex justify-center">
-            <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-              <ArrowRight className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Conta de Destino *</label>
-            <select
-              value={contaDestino}
-              onChange={(e) => setContaDestino(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              disabled={!contaOrigem}
-            >
-              <option value="">Selecione a conta de destino</option>
-              {contasDestinoFiltradas.map(c => (
-                <option key={c.id} value={c.id}>
-                  [{c.tipo_conta}] {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Valor *</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
-              <input
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={contaOrigemObj?.saldo_atual || undefined}
-                value={valor}
-                onChange={(e) => setValor(e.target.value)}
-                placeholder="0,00"
-                className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              />
-            </div>
-            {contaOrigemObj && (
-              <p className="text-xs text-gray-500 mt-1">
-                Saldo disponível: {contaOrigemObj.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição</label>
-            <input
-              type="text"
-              value={descricao}
-              onChange={(e) => setDescricao(e.target.value)}
-              placeholder="Ex: Capital para rota / Devolução de lucros"
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-            <textarea
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-              rows={2}
-              placeholder="Observações adicionais..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 p-5 border-t bg-gray-50 rounded-b-2xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSalvar}
-            disabled={salvando || !contaOrigem || !contaDestino || !valor}
-            className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-          >
-            {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
-            Confirmar Transferência
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ATUALIZADO: Modal Ajuste de Saldo - Agora com SALDO FINAL
-function ModalAjusteSaldo({ 
-  isOpen, 
-  onClose, 
-  contas,
-  onSalvar 
-}: { 
-  isOpen: boolean; 
-  onClose: () => void;
-  contas: ContaComDetalhes[];
-  onSalvar: (dados: any) => Promise<void>;
-}) {
-  const [contaId, setContaId] = useState('');
-  const [saldoFinal, setSaldoFinal] = useState('');
-  const [motivo, setMotivo] = useState('');
-  const [observacoes, setObservacoes] = useState('');
-  const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState('');
-
-  const contaSelecionada = contas.find(c => c.id === contaId);
-  const saldoAtual = contaSelecionada?.saldo_atual || 0;
-  const saldoFinalNum = parseFloat(saldoFinal) || 0;
-  const diferenca = saldoFinalNum - saldoAtual;
-
-  useEffect(() => {
-    if (isOpen) {
-      setContaId('');
-      setSaldoFinal('');
-      setMotivo('');
-      setObservacoes('');
-      setErro('');
-    }
-  }, [isOpen]);
-
-  // Quando seleciona conta, preenche saldo atual como sugestão
-  useEffect(() => {
-    if (contaSelecionada) {
-      setSaldoFinal(contaSelecionada.saldo_atual.toFixed(2));
-    }
-  }, [contaSelecionada]);
-
-  const handleSalvar = async () => {
-    if (!contaId || saldoFinal === '' || !motivo) {
-      setErro('Preencha todos os campos obrigatórios');
-      return;
-    }
-
-    if (diferenca === 0) {
-      setErro('O saldo final é igual ao saldo atual. Nenhum ajuste necessário.');
-      return;
-    }
-    
-    setSalvando(true);
-    setErro('');
-    try {
-      await onSalvar({
-        conta_id: contaId,
-        saldo_final: saldoFinalNum,
-        motivo,
-        observacoes,
-      });
-      onClose();
-    } catch (e: any) {
-      setErro(e.message || 'Erro ao registrar ajuste');
-    } finally {
-      setSalvando(false);
-    }
-  };
-
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b">
-          <h2 className="text-lg font-semibold text-gray-900">Ajuste de Saldo</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
-            <X className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-        
-        <div className="p-5 space-y-4">
-          {erro && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {erro}
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Conta *</label>
-            <select
-              value={contaId}
-              onChange={(e) => setContaId(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione a conta</option>
-              {contas.map(c => (
-                <option key={c.id} value={c.id}>
-                  [{c.tipo_conta}] {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Saldo Atual (apenas leitura) */}
-          {contaSelecionada && (
-            <div className="bg-gray-50 rounded-lg p-4">
-              <p className="text-sm text-gray-500 mb-1">Saldo Atual</p>
-              <p className="text-xl font-bold text-gray-900">
-                {saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-              </p>
-            </div>
-          )}
-
-          {/* Saldo Final */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Saldo Final Desejado *</label>
-            <div className="relative">
-              <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
-              <input
-                type="number"
-                step="0.01"
-                value={saldoFinal}
-                onChange={(e) => setSaldoFinal(e.target.value)}
-                placeholder="0,00"
-                className="w-full pl-12 pr-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                disabled={!contaId}
-              />
-            </div>
-          </div>
-
-          {/* Preview da diferença */}
-          {contaSelecionada && saldoFinal !== '' && diferenca !== 0 && (
-            <div className={`rounded-lg p-4 ${diferenca > 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-              <p className="text-sm text-gray-600 mb-1">Ajuste necessário</p>
-              <div className="flex items-center gap-2">
-                <span className={`text-lg font-bold ${diferenca > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                  {diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-                <span className={`text-xs px-2 py-0.5 rounded ${diferenca > 0 ? 'bg-green-200 text-green-800' : 'bg-red-200 text-red-800'}`}>
-                  {diferenca > 0 ? 'Entrada' : 'Saída'}
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Motivo *</label>
-            <select
-              value={motivo}
-              onChange={(e) => setMotivo(e.target.value)}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione o motivo</option>
-              <option value="Diferença no fechamento">Diferença no fechamento</option>
-              <option value="Correção de erro">Correção de erro</option>
-              <option value="Ajuste de auditoria">Ajuste de auditoria</option>
-              <option value="Saldo inicial">Saldo inicial</option>
-              <option value="Outro">Outro</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
-            <textarea
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-              rows={2}
-              placeholder="Justificativa detalhada do ajuste..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none"
-            />
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-3 p-5 border-t bg-gray-50 rounded-b-2xl">
-          <button
-            onClick={onClose}
-            className="px-4 py-2.5 text-gray-700 font-medium hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSalvar}
-            disabled={salvando || !contaId || saldoFinal === '' || !motivo || diferenca === 0}
-            className="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
-          >
-            {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
-            Confirmar Ajuste
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// =====================================================
 // PÁGINA PRINCIPAL
 // =====================================================
 
@@ -1008,7 +370,6 @@ export default function FinanceiroPage() {
   const { localizacao, profile } = useUser();
   const empresaId = localizacao?.empresa_id;
 
-  // Estado
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('resumo');
   const [filtroResumo, setFiltroResumo] = useState<FiltroData>({
     tipo: 'hoje',
@@ -1023,19 +384,16 @@ export default function FinanceiroPage() {
   const [contaFiltro, setContaFiltro] = useState<string>('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   
-  // Loading states
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingResumo, setLoadingResumo] = useState(false);
   const [loadingGrafico, setLoadingGrafico] = useState(false);
   const [loadingExtrato, setLoadingExtrato] = useState(false);
   const [loadingContas, setLoadingContas] = useState(false);
   
-  // Modais
   const [modalMovimentacao, setModalMovimentacao] = useState(false);
   const [modalTransferencia, setModalTransferencia] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
 
-  // Dados
   const [saldos, setSaldos] = useState<SaldosContas>({
     total_consolidado: 0,
     saldo_empresa: 0,
@@ -1056,7 +414,6 @@ export default function FinanceiroPage() {
   const [contas, setContas] = useState<ContaComDetalhes[]>([]);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
 
-  // Carregar saldos
   const carregarSaldos = useCallback(async () => {
     if (!empresaId) return;
     setLoadingSaldos(true);
@@ -1070,7 +427,6 @@ export default function FinanceiroPage() {
     }
   }, [empresaId]);
 
-  // Carregar resumo por período
   const carregarResumo = useCallback(async () => {
     if (!empresaId) return;
     setLoadingResumo(true);
@@ -1089,7 +445,6 @@ export default function FinanceiroPage() {
     }
   }, [empresaId, filtroResumo]);
 
-  // Carregar dados do gráfico
   const carregarGrafico = useCallback(async () => {
     if (!empresaId) return;
     setLoadingGrafico(true);
@@ -1108,7 +463,6 @@ export default function FinanceiroPage() {
     }
   }, [empresaId, filtroResumo]);
 
-  // Carregar contas
   const carregarContas = useCallback(async () => {
     if (!empresaId) return;
     setLoadingContas(true);
@@ -1122,7 +476,6 @@ export default function FinanceiroPage() {
     }
   }, [empresaId]);
 
-  // Carregar categorias
   const carregarCategorias = useCallback(async () => {
     try {
       const data = await financeiroService.buscarCategorias();
@@ -1132,7 +485,6 @@ export default function FinanceiroPage() {
     }
   }, []);
 
-  // Carregar extrato
   const carregarExtrato = useCallback(async () => {
     if (!empresaId) return;
     setLoadingExtrato(true);
@@ -1152,7 +504,6 @@ export default function FinanceiroPage() {
     }
   }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro]);
 
-  // Effects
   useEffect(() => {
     if (empresaId) {
       carregarSaldos();
@@ -1174,7 +525,6 @@ export default function FinanceiroPage() {
     }
   }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, carregarExtrato]);
 
-  // Handlers
   const handleSalvarMovimentacao = async (dados: any) => {
     const result = await financeiroService.criarMovimentacao(
       dados,
@@ -1211,7 +561,6 @@ export default function FinanceiroPage() {
     await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
   };
 
-  // Se não tem empresa selecionada
   if (!empresaId) {
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1225,19 +574,16 @@ export default function FinanceiroPage() {
     );
   }
 
-  // Calcular totais do extrato
   const totalEntradas = movimentos.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header */}
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
         </div>
 
-        {/* Abas */}
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
           <button
             onClick={() => setAbaAtiva('resumo')}
@@ -1261,87 +607,34 @@ export default function FinanceiroPage() {
           </button>
         </div>
 
-        {/* ==================== ABA RESUMO ==================== */}
         {abaAtiva === 'resumo' && (
           <div className="space-y-6">
-            {/* Cards de Saldo */}
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Saldos das Contas</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <CardIndicador
-                  titulo="Total Consolidado"
-                  valor={saldos.total_consolidado}
-                  icone={Wallet}
-                  corIcone="text-indigo-600"
-                  corFundo="bg-indigo-100"
-                  loading={loadingSaldos}
-                />
-                <CardIndicador
-                  titulo="Empresa"
-                  valor={saldos.saldo_empresa}
-                  icone={Building2}
-                  corIcone="text-blue-600"
-                  corFundo="bg-blue-100"
-                  loading={loadingSaldos}
-                />
-                <CardIndicador
-                  titulo="Rotas"
-                  valor={saldos.saldo_rotas}
-                  icone={MapPin}
-                  corIcone="text-emerald-600"
-                  corFundo="bg-emerald-100"
-                  loading={loadingSaldos}
-                />
-                <CardIndicador
-                  titulo="Microseguros"
-                  valor={saldos.saldo_microseguros}
-                  icone={Shield}
-                  corIcone="text-amber-600"
-                  corFundo="bg-amber-100"
-                  loading={loadingSaldos}
-                />
+                <CardIndicador titulo="Total Consolidado" valor={saldos.total_consolidado} icone={Wallet} corIcone="text-indigo-600" corFundo="bg-indigo-100" loading={loadingSaldos} />
+                <CardIndicador titulo="Empresa" valor={saldos.saldo_empresa} icone={Building2} corIcone="text-blue-600" corFundo="bg-blue-100" loading={loadingSaldos} />
+                <CardIndicador titulo="Rotas" valor={saldos.saldo_rotas} icone={MapPin} corIcone="text-emerald-600" corFundo="bg-emerald-100" loading={loadingSaldos} />
+                <CardIndicador titulo="Microseguros" valor={saldos.saldo_microseguros} icone={Shield} corIcone="text-amber-600" corFundo="bg-amber-100" loading={loadingSaldos} />
               </div>
             </div>
 
-            {/* Movimentações + Gráfico */}
             <div>
-              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-4">
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Movimentações</h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Movimentações do Período</h2>
                 <FiltroPeriodo filtro={filtroResumo} onChange={setFiltroResumo} />
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Cards de Movimentação */}
-                <div className="grid grid-cols-3 gap-4">
-                  <CardMovimentacao
-                    tipo="entrada"
-                    titulo="Entradas"
-                    valor={resumo.total_entradas}
-                    quantidade={resumo.qtd_entradas}
-                    corValor="text-green-600"
-                    loading={loadingResumo}
-                  />
-                  <CardMovimentacao
-                    tipo="saida"
-                    titulo="Saídas"
-                    valor={resumo.total_saidas}
-                    quantidade={resumo.qtd_saidas}
-                    corValor="text-red-600"
-                    loading={loadingResumo}
-                  />
-                  <CardMovimentacao
-                    tipo="resultado"
-                    titulo="Resultado"
-                    valor={resumo.saldo_periodo}
-                    quantidade={resumo.qtd_total}
-                    corValor={resumo.saldo_periodo >= 0 ? 'text-green-600' : 'text-red-600'}
-                    loading={loadingResumo}
-                  />
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                <div className="lg:col-span-1 grid grid-cols-1 gap-4">
+                  <CardMovimentacao tipo="entrada" titulo="Entradas" valor={resumo.total_entradas} quantidade={resumo.qtd_entradas} corValor="text-green-600" loading={loadingResumo} />
+                  <CardMovimentacao tipo="saida" titulo="Saídas" valor={resumo.total_saidas} quantidade={resumo.qtd_saidas} corValor="text-red-600" loading={loadingResumo} />
+                  <CardMovimentacao tipo="resultado" titulo="Resultado" valor={resumo.saldo_periodo} quantidade={resumo.qtd_total} corValor={resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-red-600'} loading={loadingResumo} />
                 </div>
 
-                {/* Gráfico */}
-                <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="h-48">
+                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-sm font-medium text-gray-700 mb-4">Entradas vs Saídas</h3>
+                  <div className="h-64">
                     {loadingGrafico ? (
                       <div className="h-full flex items-center justify-center">
                         <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
@@ -1354,28 +647,9 @@ export default function FinanceiroPage() {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={dadosGrafico} barGap={4}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                          <XAxis 
-                            dataKey="data_formatada" 
-                            tick={{ fontSize: 11 }} 
-                            tickLine={false}
-                            axisLine={{ stroke: '#e5e7eb' }}
-                          />
-                          <YAxis 
-                            tick={{ fontSize: 11 }} 
-                            tickLine={false}
-                            axisLine={{ stroke: '#e5e7eb' }}
-                            tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                          />
-                          <Tooltip 
-                            formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                            labelStyle={{ color: '#374151' }}
-                            contentStyle={{ 
-                              backgroundColor: 'white', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                            }}
-                          />
+                          <XAxis dataKey="data_formatada" tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                          <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                          <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }} />
                           <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
                           <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} />
                         </BarChart>
@@ -1386,82 +660,49 @@ export default function FinanceiroPage() {
               </div>
             </div>
 
-            {/* Ações Rápidas */}
             <div>
               <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Ações Rápidas</h2>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <BotaoAcaoRapida
-                  icone={Plus}
-                  titulo="Nova movimentação"
-                  onClick={() => setModalMovimentacao(true)}
-                />
-                <BotaoAcaoRapida
-                  icone={ArrowRightLeft}
-                  titulo="Transferências"
-                  onClick={() => setModalTransferencia(true)}
-                />
-                <BotaoAcaoRapida
-                  icone={CheckSquare}
-                  titulo="Ajuste Saldo"
-                  onClick={() => setModalAjuste(true)}
-                />
+                <BotaoAcaoRapida icone={Plus} titulo="Nova movimentação" onClick={() => setModalMovimentacao(true)} />
+                <BotaoAcaoRapida icone={ArrowRightLeft} titulo="Transferências" onClick={() => setModalTransferencia(true)} />
+                <BotaoAcaoRapida icone={CheckSquare} titulo="Ajuste Saldo" onClick={() => setModalAjuste(true)} />
               </div>
             </div>
           </div>
         )}
 
-        {/* ==================== ABA EXTRATO DETALHADO ==================== */}
         {abaAtiva === 'extrato' && (
           <div className="space-y-4">
-            {/* Filtros */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
               <FiltroPeriodo filtro={filtroExtrato} onChange={setFiltroExtrato} />
               
-              {/* Filtros Dropdown */}
               <div className="flex flex-wrap items-center gap-3">
                 <div className="relative">
-                  <select
-                    value={contaFiltro}
-                    onChange={(e) => setContaFiltro(e.target.value)}
-                    className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
-                  >
+                  <select value={contaFiltro} onChange={(e) => setContaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
                     <option value="">Todas as Contas</option>
                     <optgroup label="🏢 Empresa">
-                      {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
+                      {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
                     </optgroup>
                     <optgroup label="🛣️ Rotas">
-                      {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
+                      {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
                     </optgroup>
                     <optgroup label="🛡️ Microseguros">
-                      {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (
-                        <option key={c.id} value={c.id}>{c.nome}</option>
-                      ))}
+                      {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
                     </optgroup>
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                 </div>
 
                 <div className="relative">
-                  <select
-                    value={categoriaFiltro}
-                    onChange={(e) => setCategoriaFiltro(e.target.value)}
-                    className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 cursor-pointer"
-                  >
+                  <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
                     <option value="">Todas as Categorias</option>
-                    {categorias.map(c => (
-                      <option key={c.id} value={c.codigo}>{c.nome_pt}</option>
-                    ))}
+                    {categorias.map(c => (<option key={c.id} value={c.codigo}>{c.nome_pt}</option>))}
                   </select>
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
                 </div>
               </div>
             </div>
 
-            {/* Tabela de Extrato */}
             <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
@@ -1476,25 +717,16 @@ export default function FinanceiroPage() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {loadingExtrato ? (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center">
-                          <Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" />
-                        </td>
-                      </tr>
+                      <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
                     ) : movimentos.length > 0 ? (
-                      movimentos.map(m => (
-                        <LinhaExtrato key={m.id} movimento={m} categorias={categorias} />
-                      ))
+                      movimentos.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
                     ) : (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-12 text-center">
-                          <div className="flex flex-col items-center">
-                            <FileText className="w-12 h-12 text-gray-300 mb-3" />
-                            <p className="text-gray-500">Nenhuma movimentação encontrada</p>
-                            <p className="text-sm text-gray-400 mt-1">Ajuste os filtros ou período para ver mais resultados</p>
-                          </div>
-                        </td>
-                      </tr>
+                      <tr><td colSpan={5} className="px-4 py-12 text-center">
+                        <div className="flex flex-col items-center">
+                          <FileText className="w-12 h-12 text-gray-300 mb-3" />
+                          <p className="text-gray-500">Nenhuma movimentação encontrada</p>
+                        </div>
+                      </td></tr>
                     )}
                   </tbody>
                 </table>
@@ -1503,16 +735,10 @@ export default function FinanceiroPage() {
               {movimentos.length > 0 && (
                 <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
                   <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-                    <span className="text-gray-600">
-                      {movimentos.length} {movimentos.length === 1 ? 'registro' : 'registros'}
-                    </span>
+                    <span className="text-gray-600">{movimentos.length} registros</span>
                     <div className="flex items-center gap-6">
-                      <span className="text-green-600 font-medium">
-                        Entradas: {totalEntradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
-                      <span className="text-red-600 font-medium">
-                        Saídas: {totalSaidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                      </span>
+                      <span className="text-green-600 font-medium">Entradas: {totalEntradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                      <span className="text-red-600 font-medium">Saídas: {totalSaidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                     </div>
                   </div>
                 </div>
@@ -1522,7 +748,7 @@ export default function FinanceiroPage() {
         )}
       </div>
 
-      {/* Modais */}
+      {/* Modais - Componentes externos padronizados */}
       <ModalNovaMovimentacao
         isOpen={modalMovimentacao}
         onClose={() => setModalMovimentacao(false)}
