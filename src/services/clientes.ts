@@ -527,9 +527,9 @@ export const clientesService = {
   },
 
   // ==================================================
-  // BUSCAR EMPRÉSTIMOS DO CLIENTE (via view)
+  // BUSCAR HISTÓRICO DE EMPRÉSTIMOS DO CLIENTE (via view)
   // ==================================================
-  async buscarEmprestimosCliente(clienteId: string): Promise<{
+  async buscarHistoricoEmprestimosCliente(clienteId: string): Promise<{
     ativos: EmprestimoHistorico[];
     finalizados: EmprestimoHistorico[];
   }> {
@@ -607,7 +607,7 @@ export const clientesService = {
     }
     
     // Buscar empréstimos
-    const emprestimos = await this.buscarEmprestimosCliente(clienteId);
+    const emprestimos = await this.buscarHistoricoEmprestimosCliente(clienteId);
     
     return { cliente, emprestimos };
   },
