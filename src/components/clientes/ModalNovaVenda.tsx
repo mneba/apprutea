@@ -709,17 +709,44 @@ export function ModalNovaVenda({
                   >
                     <option value="">Selecione uma rota</option>
                     {rotas.map(r => (
-                      <option key={r.id} value={r.id}>{r.nome}</option>
+                      <option key={r.id} value={r.id}>
+                        {r.nome} {r.vendedor_nome ? `(${r.vendedor_nome})` : '⚠️ Sem vendedor'}
+                      </option>
                     ))}
                   </select>
+                  {/* Feedback sobre vendedor */}
+                  {rotaId && rotaSelecionada && (
+                    <div className={`mt-2 text-sm flex items-center gap-2 ${vendedorId ? 'text-green-600' : 'text-red-600'}`}>
+                      {vendedorId ? (
+                        <>
+                          <Check className="w-4 h-4" />
+                          Vendedor: {rotaSelecionada.vendedor_nome}
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle className="w-4 h-4" />
+                          Esta rota não possui vendedor vinculado
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
               {rotas.length === 1 && (
-                <div className="p-4 rounded-xl border-2 border-blue-100 bg-blue-50">
-                  <div className="flex items-center gap-2 text-blue-700">
+                <div className={`p-4 rounded-xl border-2 ${rotas[0].vendedor_id ? 'border-blue-100 bg-blue-50' : 'border-red-100 bg-red-50'}`}>
+                  <div className={`flex items-center gap-2 ${rotas[0].vendedor_id ? 'text-blue-700' : 'text-red-700'}`}>
                     <MapPin className="w-4 h-4" />
                     <span className="font-medium">Rota: {rotas[0].nome}</span>
+                    {rotas[0].vendedor_nome && (
+                      <span className="text-sm">• Vendedor: {rotas[0].vendedor_nome}</span>
+                    )}
                   </div>
+                  {!rotas[0].vendedor_id && (
+                    <p className="text-sm text-red-600 mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-4 h-4" />
+                      Esta rota não possui vendedor vinculado. Vincule um vendedor antes de continuar.
+                    </p>
+                  )}
                 </div>
               )}
 

@@ -241,37 +241,65 @@ export const clientesService = {
   async buscarRotasEmpresa(empresaId: string): Promise<RotaSimples[]> {
     const supabase = createClient();
     
-    // Query direta para garantir que vendedor_id seja retornado
-    const { data, error } = await supabase
+    // Buscar rotas da empresa
+    const { data: rotasData, error: rotasError } = await supabase
       .from('rotas')
       .select(`
         id,
         nome,
         codigo,
         status,
-        vendedor_id,
-        vendedores:vendedor_id (nome),
+        quantidade_clientes,
         cidades:cidade_id (nome)
       `)
       .eq('empresa_id', empresaId)
       .eq('status', 'ATIVO')
       .order('nome');
     
-    if (error) {
-      console.error('Erro ao buscar rotas:', error);
+    if (rotasError) {
+      console.error('Erro ao buscar rotas:', rotasError);
       return [];
     }
+
+    if (!rotasData || rotasData.length === 0) {
+      return [];
+    }
+
+    // Buscar vendedores ativos que atendem essas rotas
+    // O vendedor tem rotas_ids como array JSONB
+    const { data: vendedoresData, error: vendedoresError } = await supabase
+      .from('vendedores')
+      .select('id, nome, rotas_ids')
+      .eq('status', 'ATIVO');
+
+    // Criar mapa de rota -> vendedor
+    const rotaVendedorMap = new Map<string, { id: string; nome: string }>();
     
-    return (data || []).map((r: any) => ({
-      id: r.id,
-      nome: r.nome,
-      codigo: r.codigo || '',
-      cidade_nome: r.cidades?.nome,
-      qtd_clientes: 0,
-      status: r.status,
-      vendedor_id: r.vendedor_id,
-      vendedor_nome: r.vendedores?.nome,
-    }));
+    if (vendedoresData) {
+      for (const vendedor of vendedoresData) {
+        const rotasIds = vendedor.rotas_ids || [];
+        for (const rotaId of rotasIds) {
+          // Só mapeia se ainda não tem vendedor (pega o primeiro)
+          if (!rotaVendedorMap.has(rotaId)) {
+            rotaVendedorMap.set(rotaId, { id: vendedor.id, nome: vendedor.nome });
+          }
+        }
+      }
+    }
+    
+    return (rotasData || []).map((r: any) => {
+      const vendedor = rotaVendedorMap.get(r.id);
+      return {
+        id: r.id,
+        nome: r.nome,
+        codigo: r.codigo || '',
+        cidade_nome: r.cidades?.nome,
+        qtd_clientes: r.quantidade_clientes || 0,
+        status: r.status,
+        vendedor_id: vendedor?.id,
+        vendedor_nome: vendedor?.nome,
+      };
+    });
   },
 
   // ==================================================
