@@ -200,7 +200,8 @@ export default function ClientesPage() {
     return { total, ativos, inativos, suspensos };
   }, [clientes]);
 
-  const temRotas = rotas.length > 0;
+  // Se tem rota no contexto OU rotas carregadas, então tem rotas
+  const temRotas = rotas.length > 0 || !!rotaIdContexto;
 
   const carregarClientes = useCallback(async () => {
     if (!empresaId) return;
