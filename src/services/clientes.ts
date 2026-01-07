@@ -241,16 +241,37 @@ export const clientesService = {
   async buscarRotasEmpresa(empresaId: string): Promise<RotaSimples[]> {
     const supabase = createClient();
     
-    const { data, error } = await supabase.rpc('fn_buscar_rotas_empresa', {
-      p_empresa_id: empresaId,
-    });
+    // Query direta para garantir que vendedor_id seja retornado
+    const { data, error } = await supabase
+      .from('rotas')
+      .select(`
+        id,
+        nome,
+        codigo,
+        status,
+        vendedor_id,
+        vendedores:vendedor_id (nome),
+        cidades:cidade_id (nome)
+      `)
+      .eq('empresa_id', empresaId)
+      .eq('status', 'ATIVO')
+      .order('nome');
     
     if (error) {
       console.error('Erro ao buscar rotas:', error);
       return [];
     }
     
-    return data || [];
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      nome: r.nome,
+      codigo: r.codigo || '',
+      cidade_nome: r.cidades?.nome,
+      qtd_clientes: 0,
+      status: r.status,
+      vendedor_id: r.vendedor_id,
+      vendedor_nome: r.vendedores?.nome,
+    }));
   },
 
   // ==================================================

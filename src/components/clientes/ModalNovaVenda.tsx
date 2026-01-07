@@ -110,6 +110,7 @@ export function ModalNovaVenda({
   const [erro, setErro] = useState('');
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const valorPrincipalRef = useRef<HTMLInputElement>(null);
 
   // === Dados do Cliente ===
   const [nome, setNome] = useState('');
@@ -241,8 +242,13 @@ export function ModalNovaVenda({
     return null;
   };
 
+  // Rota selecionada e vendedor
+  const rotaSelecionada = rotas.find(r => r.id === rotaId);
+  const vendedorId = rotaSelecionada?.vendedor_id;
+
   const validarEmprestimo = () => {
     if (!rotaId) return 'Selecione uma rota';
+    if (!vendedorId) return 'A rota selecionada não possui vendedor vinculado. Vincule um vendedor à rota antes de criar empréstimos.';
     if (!valorPrincipal || valorPrincipalNum <= 0) return 'Valor principal é obrigatório';
     if (!numeroParcelas || numParcelasNum <= 0) return 'Número de parcelas é obrigatório';
     if (!taxaJuros) return 'Taxa de juros é obrigatória';
@@ -264,6 +270,10 @@ export function ModalNovaVenda({
     }
     setErro('');
     setActiveTab('emprestimo');
+    // Focar no campo de valor principal após renderizar
+    setTimeout(() => {
+      valorPrincipalRef.current?.focus();
+    }, 100);
   };
 
   const irParaResumo = () => {
@@ -312,7 +322,7 @@ export function ModalNovaVenda({
           observacoes: observacoesEmprestimo || undefined,
           empresa_id: empresaId,
           rota_id: rotaId,
-          vendedor_id: undefined,
+          vendedor_id: vendedorId,
           user_id: userId,
           latitude: undefined,
           longitude: undefined,
@@ -338,7 +348,7 @@ export function ModalNovaVenda({
           observacoes: observacoesEmprestimo || undefined,
           empresa_id: empresaId,
           rota_id: rotaId,
-          vendedor_id: undefined,
+          vendedor_id: vendedorId,
           user_id: userId,
           latitude: undefined,
           longitude: undefined,
@@ -364,7 +374,7 @@ export function ModalNovaVenda({
           observacoes: observacoesEmprestimo || undefined,
           empresa_id: empresaId,
           rota_id: rotaId,
-          vendedor_id: undefined,
+          vendedor_id: vendedorId,
           user_id: userId,
           latitude: undefined,
           longitude: undefined,
@@ -395,8 +405,6 @@ export function ModalNovaVenda({
   };
 
   if (!isOpen) return null;
-
-  const rotaSelecionada = rotas.find(r => r.id === rotaId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -556,7 +564,7 @@ export function ModalNovaVenda({
 
               {/* Telefones */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white overflow-hidden">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                     <Phone className="w-4 h-4 text-gray-500" />
                     Celular *
@@ -565,7 +573,7 @@ export function ModalNovaVenda({
                     <select
                       value={ddiCelular}
                       onChange={(e) => setDdiCelular(e.target.value)}
-                      className="w-28 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                      className="w-24 flex-shrink-0 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                       {DDIS.map(d => (
                         <option key={d.codigo} value={d.codigo}>{d.bandeira} {d.codigo}</option>
@@ -576,12 +584,12 @@ export function ModalNovaVenda({
                       value={telefoneCelular}
                       onChange={(e) => setTelefoneCelular(e.target.value)}
                       placeholder="99999-9999"
-                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="flex-1 min-w-0 px-3 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
 
-                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white overflow-hidden">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                     <Phone className="w-4 h-4 text-gray-500" />
                     Telefone Fixo
@@ -590,7 +598,7 @@ export function ModalNovaVenda({
                     <select
                       value={ddiFixo}
                       onChange={(e) => setDdiFixo(e.target.value)}
-                      className="w-28 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                      className="w-24 flex-shrink-0 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm"
                     >
                       {DDIS.map(d => (
                         <option key={d.codigo} value={d.codigo}>{d.bandeira} {d.codigo}</option>
@@ -601,7 +609,7 @@ export function ModalNovaVenda({
                       value={telefoneFixo}
                       onChange={(e) => setTelefoneFixo(e.target.value)}
                       placeholder="3333-4444"
-                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="flex-1 min-w-0 px-3 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -725,6 +733,7 @@ export function ModalNovaVenda({
                   <div className="relative">
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
                     <input
+                      ref={valorPrincipalRef}
                       type="number"
                       step="0.01"
                       min="0"

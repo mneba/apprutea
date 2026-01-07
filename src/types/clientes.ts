@@ -117,6 +117,8 @@ export interface RotaSimples {
   cidade_nome?: string;
   qtd_clientes: number;
   status: string;
+  vendedor_id?: string;
+  vendedor_nome?: string;
 }
 
 // =====================================================
