@@ -20,6 +20,8 @@ import type {
   RespostaNovaVenda,
   RespostaPagamento,
   ProximaParcela,
+  EmprestimoHistorico,
+  ParcelaView,
 } from '@/types/clientes';
 
 // =====================================================
@@ -522,6 +524,92 @@ export const clientesService = {
       success: resultado?.success !== false,
       error: resultado?.error,
     };
+  },
+
+  // ==================================================
+  // BUSCAR EMPRÉSTIMOS DO CLIENTE (via view)
+  // ==================================================
+  async buscarEmprestimosCliente(clienteId: string): Promise<{
+    ativos: EmprestimoHistorico[];
+    finalizados: EmprestimoHistorico[];
+  }> {
+    const supabase = createClient();
+    
+    // Buscar empréstimos ativos
+    const { data: ativos, error: errorAtivos } = await supabase
+      .from('vw_historico_emprestimos_cliente')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .eq('emprestimo_status', 'ATIVO')
+      .order('data_emprestimo', { ascending: false });
+    
+    if (errorAtivos) {
+      console.error('Erro ao buscar empréstimos ativos:', errorAtivos);
+    }
+    
+    // Buscar empréstimos finalizados
+    const { data: finalizados, error: errorFinalizados } = await supabase
+      .from('vw_historico_emprestimos_cliente')
+      .select('*')
+      .eq('cliente_id', clienteId)
+      .neq('emprestimo_status', 'ATIVO')
+      .order('data_emprestimo', { ascending: false });
+    
+    if (errorFinalizados) {
+      console.error('Erro ao buscar empréstimos finalizados:', errorFinalizados);
+    }
+    
+    return {
+      ativos: ativos || [],
+      finalizados: finalizados || [],
+    };
+  },
+
+  // ==================================================
+  // BUSCAR PARCELAS DE UM EMPRÉSTIMO (via view)
+  // ==================================================
+  async buscarParcelasEmprestimo(emprestimoId: string): Promise<ParcelaView[]> {
+    const supabase = createClient();
+    
+    const { data, error } = await supabase
+      .from('vw_parcelas_emprestimo')
+      .select('*')
+      .eq('emprestimo_id', emprestimoId)
+      .order('numero_parcela', { ascending: true });
+    
+    if (error) {
+      console.error('Erro ao buscar parcelas:', error);
+      return [];
+    }
+    
+    return data || [];
+  },
+
+  // ==================================================
+  // BUSCAR CLIENTE COMPLETO (dados + empréstimos)
+  // ==================================================
+  async buscarClienteCompleto(clienteId: string): Promise<{
+    cliente: Cliente | null;
+    emprestimos: { ativos: EmprestimoHistorico[]; finalizados: EmprestimoHistorico[] };
+  }> {
+    const supabase = createClient();
+    
+    // Buscar dados do cliente
+    const { data: cliente, error } = await supabase
+      .from('clientes')
+      .select('*')
+      .eq('id', clienteId)
+      .single();
+    
+    if (error) {
+      console.error('Erro ao buscar cliente:', error);
+      return { cliente: null, emprestimos: { ativos: [], finalizados: [] } };
+    }
+    
+    // Buscar empréstimos
+    const emprestimos = await this.buscarEmprestimosCliente(clienteId);
+    
+    return { cliente, emprestimos };
   },
 
   // ==================================================

@@ -19,6 +19,7 @@ import {
 import { useUser } from '@/contexts/UserContext';
 import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
+import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
 
 // =====================================================
@@ -195,6 +196,10 @@ export default function ClientesPage() {
   
   const [modalNovaVenda, setModalNovaVenda] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
+  
+  // Modal de detalhes
+  const [modalDetalhes, setModalDetalhes] = useState(false);
+  const [clienteDetalhes, setClienteDetalhes] = useState<ClienteComTotais | null>(null);
 
   const estatisticas = useMemo(() => {
     const total = clientes.length;
@@ -410,7 +415,10 @@ export default function ClientesPage() {
               <CardCliente
                 key={cliente.id}
                 cliente={cliente}
-                onDetalhes={() => console.log('Detalhes:', cliente.id)}
+                onDetalhes={() => {
+                  setClienteDetalhes(cliente);
+                  setModalDetalhes(true);
+                }}
                 onNovaVenda={() => handleNovaVenda(cliente)}
               />
             ))}
@@ -450,6 +458,16 @@ export default function ClientesPage() {
             onSucesso={handleSucessoVenda}
           />
         )}
+
+        {/* Modal de Detalhes do Cliente */}
+        <ModalDetalhesCliente
+          isOpen={modalDetalhes}
+          onClose={() => {
+            setModalDetalhes(false);
+            setClienteDetalhes(null);
+          }}
+          cliente={clienteDetalhes}
+        />
       </div>
     </div>
   );
