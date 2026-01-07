@@ -282,41 +282,41 @@ export function ModalNovaVenda({
     setErro('');
     
     try {
-      const telefoneCompleto = telefoneCelular ? `${ddiCelular}${telefoneCelular}` : null;
-      const telefoneFixoCompleto = telefoneFixo ? `${ddiFixo}${telefoneFixo}` : null;
+      const telefoneCompleto = telefoneCelular ? `${ddiCelular}${telefoneCelular}` : undefined;
+      const telefoneFixoCompleto = telefoneFixo ? `${ddiFixo}${telefoneFixo}` : undefined;
 
       // Determinar qual função usar
       if (isNovoCliente) {
         // Nova venda completa (novo cliente + empréstimo)
         const result = await clientesService.novaVendaCompleta({
-          cliente_id: null,
+          cliente_id: undefined,
           cliente_nome: nome,
-          cliente_documento: documento || null,
+          cliente_documento: documento || undefined,
           cliente_telefone: telefoneCompleto,
           cliente_telefone_fixo: telefoneFixoCompleto,
-          cliente_email: email || null,
-          cliente_endereco: endereco || null,
-          cliente_endereco_comercial: enderecoComercial || null,
-          cliente_segmento_id: segmentoId || null,
-          cliente_foto_url: fotoUrl || null,
-          cliente_observacoes: observacoesCliente || null,
+          cliente_email: email || undefined,
+          cliente_endereco: endereco || undefined,
+          cliente_endereco_comercial: enderecoComercial || undefined,
+          cliente_segmento_id: segmentoId || undefined,
+          cliente_foto_url: fotoUrl || undefined,
+          cliente_observacoes: observacoesCliente || undefined,
           valor_principal: valorPrincipalNum,
           numero_parcelas: numParcelasNum,
           taxa_juros: taxaJurosNum,
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
-          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : null,
-          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : null,
-          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : null,
+          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : undefined,
+          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : undefined,
+          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : undefined,
           iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
-          observacoes: observacoesEmprestimo || null,
+          observacoes: observacoesEmprestimo || undefined,
           empresa_id: empresaId,
           rota_id: rotaId,
-          vendedor_id: null,
+          vendedor_id: undefined,
           user_id: userId,
-          latitude: null,
-          longitude: null,
-          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : null,
+          latitude: undefined,
+          longitude: undefined,
+          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : undefined,
         });
         
         if (!result.success) {
@@ -331,18 +331,18 @@ export function ModalNovaVenda({
           taxa_juros: taxaJurosNum,
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
-          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : null,
-          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : null,
-          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : null,
+          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : undefined,
+          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : undefined,
+          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : undefined,
           iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
-          observacoes: observacoesEmprestimo || null,
+          observacoes: observacoesEmprestimo || undefined,
           empresa_id: empresaId,
           rota_id: rotaId,
-          vendedor_id: null,
+          vendedor_id: undefined,
           user_id: userId,
-          latitude: null,
-          longitude: null,
-          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : null,
+          latitude: undefined,
+          longitude: undefined,
+          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : undefined,
         });
         
         if (!result.success) {
@@ -357,18 +357,18 @@ export function ModalNovaVenda({
           taxa_juros: taxaJurosNum,
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
-          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : null,
-          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : null,
-          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : null,
+          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : undefined,
+          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : undefined,
+          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : undefined,
           iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
-          observacoes: observacoesEmprestimo || null,
+          observacoes: observacoesEmprestimo || undefined,
           empresa_id: empresaId,
           rota_id: rotaId,
-          vendedor_id: null,
+          vendedor_id: undefined,
           user_id: userId,
-          latitude: null,
-          longitude: null,
-          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : null,
+          latitude: undefined,
+          longitude: undefined,
+          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : undefined,
         });
         
         if (!result.success) {
