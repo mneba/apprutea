@@ -1,662 +1,355 @@
 // =====================================================
-// SERVICE DO MÓDULO DE CLIENTES - SISTEMA APPRUTEA
-// Integrado com Functions do Supabase
+// TYPES DO MÓDULO DE CLIENTES - SISTEMA APPRUTEA
 // =====================================================
 
-import { createClient } from '@/lib/supabase/client';
-import type {
-  ClienteComTotais,
-  Cliente,
-  Emprestimo,
-  Parcela,
-  Segmento,
-  RotaSimples,
-  ContagemClientes,
-  FiltrosClientes,
-  NovaVendaInput,
-  RenovacaoInput,
-  PagamentoInput,
-  AtualizarClienteInput,
-  RespostaNovaVenda,
-  RespostaPagamento,
-  ProximaParcela,
-  EmprestimoHistorico,
-  ParcelaView,
-} from '@/types/clientes';
-
 // =====================================================
-// SERVICE PRINCIPAL
+// ENUMS E TIPOS BASE
 // =====================================================
 
-export const clientesService = {
-  // ==================================================
-  // BUSCAR CLIENTES (LISTAGEM)
-  // ==================================================
-  async buscarClientes(filtros: FiltrosClientes): Promise<ClienteComTotais[]> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_buscar_clientes', {
-      p_empresa_id: filtros.empresa_id,
-      p_rota_id: filtros.rota_id || null,
-      p_status: filtros.status || null,
-      p_busca: filtros.busca || null,
-      p_limite: filtros.limite || 50,
-      p_offset: filtros.offset || 0,
-    });
-    
-    if (error) {
-      console.error('Erro ao buscar clientes:', error);
-      return [];
-    }
-    
-    return (data || []).map((c: any) => ({
-      ...c,
-      rotas_ids: c.rotas_ids || [],
-    }));
-  },
-
-  // ==================================================
-  // BUSCAR DETALHES DO CLIENTE
-  // ==================================================
-  async buscarClienteDetalhes(clienteId: string): Promise<Cliente | null> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_buscar_cliente_detalhes', {
-      p_cliente_id: clienteId,
-    });
-    
-    if (error) {
-      console.error('Erro ao buscar detalhes do cliente:', error);
-      return null;
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    if (!resultado) return null;
-    
-    return {
-      ...resultado,
-      rotas_ids: resultado.rotas_ids || [],
-    };
-  },
-
-  // ==================================================
-  // BUSCAR EMPRÉSTIMOS DO CLIENTE (Query Direta)
-  // ==================================================
-  async buscarEmprestimosCliente(
-    clienteId: string, 
-    apenasAtivos: boolean = false
-  ): Promise<Emprestimo[]> {
-    const supabase = createClient();
-    
-    let query = supabase
-      .from('emprestimos')
-      .select(`
-        *,
-        rotas:rota_id (nome),
-        vendedores:vendedor_id (nome)
-      `)
-      .eq('cliente_id', clienteId)
-      .order('created_at', { ascending: false });
-    
-    if (apenasAtivos) {
-      query = query.eq('status', 'ATIVO');
-    }
-    
-    const { data, error } = await query;
-    
-    if (error) {
-      console.error('Erro ao buscar empréstimos:', error);
-      return [];
-    }
-    
-    return (data || []).map((e: any) => ({
-      ...e,
-      rota_nome: e.rotas?.nome,
-      vendedor_nome: e.vendedores?.nome,
-      percentual_pago: e.valor_total > 0 ? Math.round((e.valor_pago / e.valor_total) * 100) : 0,
-    }));
-  },
-
-  // ==================================================
-  // BUSCAR ÚLTIMO EMPRÉSTIMO DO CLIENTE
-  // ==================================================
-  async buscarUltimoEmprestimo(clienteId: string): Promise<Emprestimo | null> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase
-      .from('emprestimos')
-      .select('*')
-      .eq('cliente_id', clienteId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
-    
-    if (error) {
-      console.error('Erro ao buscar último empréstimo:', error);
-      return null;
-    }
-    
-    return data;
-  },
-
-  // ==================================================
-  // BUSCAR PARCELAS DO EMPRÉSTIMO (Query Direta)
-  // ==================================================
-  async buscarParcelasEmprestimo(emprestimoId: string): Promise<Parcela[]> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase
-      .from('emprestimo_parcelas')
-      .select('*')
-      .eq('emprestimo_id', emprestimoId)
-      .order('numero_parcela', { ascending: true });
-    
-    if (error) {
-      console.error('Erro ao buscar parcelas:', error);
-      return [];
-    }
-    
-    return (data || []).map((p: any) => ({
-      ...p,
-      valor_total_parcela: p.valor_parcela + (p.valor_multa || 0),
-      esta_atrasada: new Date(p.data_vencimento) < new Date() && ['PENDENTE', 'PARCIAL'].includes(p.status),
-    }));
-  },
-
-  // ==================================================
-  // CONTAR PARCELAS PAGAS
-  // ==================================================
-  async contarParcelasPagas(emprestimoId: string): Promise<number> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase
-      .from('emprestimo_parcelas')
-      .select('status')
-      .eq('emprestimo_id', emprestimoId);
-    
-    if (error) {
-      console.error('Erro ao contar parcelas:', error);
-      return 0;
-    }
-    
-    return (data || []).filter((p: any) => p.status?.toUpperCase() === 'PAGO').length;
-  },
-
-  // ==================================================
-  // BUSCAR PRÓXIMA PARCELA A PAGAR (RPC Existente)
-  // ==================================================
-  async buscarProximaParcela(emprestimoId: string): Promise<ProximaParcela | null> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_buscar_proxima_parcela_a_pagar', {
-      p_emprestimo_id: emprestimoId,
-    });
-    
-    if (error) {
-      console.error('Erro ao buscar próxima parcela:', error);
-      return null;
-    }
-    
-    // Retorna o primeiro resultado se for array
-    const resultado = Array.isArray(data) ? data[0] : data;
-    return resultado || null;
-  },
-
-  // ==================================================
-  // CONSULTAR PARCELA PARA PAGAMENTO (RPC Existente)
-  // ==================================================
-  async consultarParcelaPagamento(parcelaId: string): Promise<any> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_consultar_parcela_para_pagamento', {
-      p_parcela_id: parcelaId,
-    });
-    
-    if (error) {
-      console.error('Erro ao consultar parcela:', error);
-      return null;
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    return resultado || null;
-  },
-
-  // ==================================================
-  // BUSCAR SEGMENTOS
-  // ==================================================
-  async buscarSegmentos(): Promise<Segmento[]> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_buscar_segmentos');
-    
-    if (error) {
-      console.error('Erro ao buscar segmentos:', error);
-      return [];
-    }
-    
-    return data || [];
-  },
-
-  // ==================================================
-  // BUSCAR ROTAS DA EMPRESA
-  // ==================================================
-  async buscarRotasEmpresa(empresaId: string): Promise<RotaSimples[]> {
-    const supabase = createClient();
-    
-    // Rotas tem vendedor_id diretamente
-    const { data, error } = await supabase
-      .from('rotas')
-      .select(`
-        id,
-        nome,
-        descricao,
-        status,
-        quantidade_clientes,
-        vendedor_id,
-        vendedores (
-          id,
-          nome
-        )
-      `)
-      .eq('empresa_id', empresaId)
-      .eq('status', 'ATIVA')
-      .order('nome');
-    
-    if (error) {
-      console.error('Erro ao buscar rotas:', error);
-      return [];
-    }
-    
-    return (data || []).map((r: any) => ({
-      id: r.id,
-      nome: r.nome,
-      codigo: '',
-      cidade_nome: undefined,
-      qtd_clientes: r.quantidade_clientes || 0,
-      status: r.status,
-      vendedor_id: r.vendedor_id,
-      vendedor_nome: r.vendedores?.nome,
-    }));
-  },
-
-  // ==================================================
-  // CONTAR CLIENTES
-  // ==================================================
-  async contarClientes(
-    empresaId: string, 
-    rotaId?: string
-  ): Promise<ContagemClientes> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_contar_clientes', {
-      p_empresa_id: empresaId,
-      p_rota_id: rotaId || null,
-    });
-    
-    if (error) {
-      console.error('Erro ao contar clientes:', error);
-      return {
-        total: 0,
-        ativos: 0,
-        inativos: 0,
-        suspensos: 0,
-        com_emprestimo_ativo: 0,
-        com_parcelas_atrasadas: 0,
-      };
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    return resultado || {
-      total: 0,
-      ativos: 0,
-      inativos: 0,
-      suspensos: 0,
-      com_emprestimo_ativo: 0,
-      com_parcelas_atrasadas: 0,
-    };
-  },
-
-  // ==================================================
-  // NOVA VENDA COMPLETA (CLIENTE + EMPRÉSTIMO)
-  // ==================================================
-  async novaVendaCompleta(input: NovaVendaInput): Promise<RespostaNovaVenda> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_nova_venda_completa', {
-      p_cliente_id: input.cliente_id || null,
-      p_cliente_nome: input.cliente_nome || null,
-      p_cliente_documento: input.cliente_documento || null,
-      p_cliente_telefone: input.cliente_telefone || null,
-      p_cliente_telefone_fixo: input.cliente_telefone_fixo || null,
-      p_cliente_email: input.cliente_email || null,
-      p_cliente_endereco: input.cliente_endereco || null,
-      p_cliente_endereco_comercial: input.cliente_endereco_comercial || null,
-      p_cliente_segmento_id: input.cliente_segmento_id || null,
-      p_cliente_foto_url: input.cliente_foto_url || null,
-      p_cliente_observacoes: input.cliente_observacoes || null,
-      p_valor_principal: input.valor_principal,
-      p_numero_parcelas: input.numero_parcelas,
-      p_taxa_juros: input.taxa_juros,
-      p_frequencia: input.frequencia,
-      p_data_primeiro_vencimento: input.data_primeiro_vencimento,
-      p_dia_semana_cobranca: input.dia_semana_cobranca || null,
-      p_dia_mes_cobranca: input.dia_mes_cobranca || null,
-      p_dias_mes_cobranca: input.dias_mes_cobranca || null,
-      p_iniciar_proximo_mes: input.iniciar_proximo_mes || false,
-      p_observacoes: input.observacoes || null,
-      p_empresa_id: input.empresa_id,
-      p_rota_id: input.rota_id,
-      p_vendedor_id: input.vendedor_id || null,
-      p_user_id: input.user_id,
-      p_latitude: input.latitude || null,
-      p_longitude: input.longitude || null,
-      p_microseguro_valor: input.microseguro_valor || null,
-    });
-    
-    if (error) {
-      console.error('Erro na nova venda:', error);
-      return { success: false, error: error.message };
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    
-    if (!resultado) {
-      return { success: false, error: 'Resposta vazia do servidor' };
-    }
-    
-    // A função retorna 'sucesso' (português)
-    return {
-      success: resultado.sucesso === true,
-      cliente_id: resultado.cliente_id,
-      emprestimo_id: resultado.emprestimo_id,
-      error: resultado.mensagem || resultado.error,
-    };
-  },
-
-  // ==================================================
-  // RENOVAR EMPRÉSTIMO
-  // ==================================================
-  async renovarEmprestimo(input: RenovacaoInput): Promise<RespostaNovaVenda> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_renovar_emprestimo', {
-      p_cliente_id: input.cliente_id,
-      p_valor_principal: input.valor_principal,
-      p_numero_parcelas: input.numero_parcelas,
-      p_taxa_juros: input.taxa_juros,
-      p_frequencia: input.frequencia,
-      p_data_primeiro_vencimento: input.data_primeiro_vencimento,
-      p_empresa_id: input.empresa_id,
-      p_rota_id: input.rota_id,
-      p_vendedor_id: input.vendedor_id || null,
-      p_user_id: input.user_id,
-      p_dia_semana_cobranca: input.dia_semana_cobranca || null,
-      p_dia_mes_cobranca: input.dia_mes_cobranca || null,
-      p_dias_mes_cobranca: input.dias_mes_cobranca || null,
-      p_iniciar_proximo_mes: input.iniciar_proximo_mes || false,
-      p_observacoes: input.observacoes || null,
-      p_latitude: input.latitude || null,
-      p_longitude: input.longitude || null,
-      p_microseguro_valor: input.microseguro_valor || null,
-    });
-    
-    if (error) {
-      console.error('Erro na renovação:', error);
-      return { success: false, error: error.message };
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    
-    // A função retorna 'sucesso' (português)
-    return {
-      success: resultado?.sucesso === true,
-      cliente_id: resultado?.cliente_id,
-      emprestimo_id: resultado?.emprestimo_id,
-      error: resultado?.mensagem || resultado?.error,
-    };
-  },
-
-  // ==================================================
-  // VENDA ADICIONAL (SEGUNDO EMPRÉSTIMO)
-  // ==================================================
-  async vendaAdicional(input: RenovacaoInput): Promise<RespostaNovaVenda> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_nova_venda_adicional', {
-      p_cliente_id: input.cliente_id,
-      p_valor_principal: input.valor_principal,
-      p_numero_parcelas: input.numero_parcelas,
-      p_taxa_juros: input.taxa_juros,
-      p_frequencia: input.frequencia,
-      p_data_primeiro_vencimento: input.data_primeiro_vencimento,
-      p_empresa_id: input.empresa_id,
-      p_rota_id: input.rota_id,
-      p_vendedor_id: input.vendedor_id || null,
-      p_user_id: input.user_id,
-      p_dia_semana_cobranca: input.dia_semana_cobranca || null,
-      p_dia_mes_cobranca: input.dia_mes_cobranca || null,
-      p_dias_mes_cobranca: input.dias_mes_cobranca || null,
-      p_iniciar_proximo_mes: input.iniciar_proximo_mes || false,
-      p_observacoes: input.observacoes || null,
-      p_latitude: input.latitude || null,
-      p_longitude: input.longitude || null,
-      p_microseguro_valor: input.microseguro_valor || null,
-    });
-    
-    if (error) {
-      console.error('Erro na venda adicional:', error);
-      return { success: false, error: error.message };
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    
-    // A função retorna 'sucesso' (português)
-    return {
-      success: resultado?.sucesso === true,
-      cliente_id: resultado?.cliente_id,
-      emprestimo_id: resultado?.emprestimo_id,
-      error: resultado?.mensagem || resultado?.error,
-    };
-  },
-
-  // ==================================================
-  // REGISTRAR PAGAMENTO
-  // ==================================================
-  async registrarPagamento(input: PagamentoInput): Promise<RespostaPagamento> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_registrar_pagamento', {
-      p_parcela_id: input.parcela_id,
-      p_valor_pagamento: input.valor_pagamento,
-      p_valor_credito: input.valor_credito || 0,
-      p_forma_pagamento: input.forma_pagamento,
-      p_observacoes: input.observacoes || null,
-      p_latitude: input.latitude || null,
-      p_longitude: input.longitude || null,
-      p_precisao_gps: input.precisao_gps || null,
-      p_liquidacao_id: input.liquidacao_id || null,
-    });
-    
-    if (error) {
-      console.error('Erro no pagamento:', error);
-      return { success: false, error: error.message };
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    
-    return {
-      success: resultado?.success !== false,
-      parcela_id: resultado?.parcela_id,
-      emprestimo_quitado: resultado?.emprestimo_quitado,
-      error: resultado?.error,
-    };
-  },
-
-  // ==================================================
-  // ATUALIZAR CLIENTE
-  // ==================================================
-  async atualizarCliente(input: AtualizarClienteInput): Promise<{ success: boolean; error?: string }> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_atualizar_cliente', {
-      p_cliente_id: input.cliente_id,
-      p_nome: input.nome || null,
-      p_documento: input.documento || null,
-      p_telefone_celular: input.telefone_celular || null,
-      p_telefone_fixo: input.telefone_fixo || null,
-      p_email: input.email || null,
-      p_endereco: input.endereco || null,
-      p_endereco_comercial: input.endereco_comercial || null,
-      p_segmento_id: input.segmento_id || null,
-      p_foto_url: input.foto_url || null,
-      p_observacoes: input.observacoes || null,
-      p_status: input.status || null,
-    });
-    
-    if (error) {
-      console.error('Erro ao atualizar cliente:', error);
-      return { success: false, error: error.message };
-    }
-    
-    const resultado = Array.isArray(data) ? data[0] : data;
-    
-    return {
-      success: resultado?.success !== false,
-      error: resultado?.error,
-    };
-  },
-
-  // ==================================================
-  // BUSCAR EMPRÉSTIMOS DO CLIENTE (via view)
-  // ==================================================
-  async buscarEmprestimosCliente(clienteId: string): Promise<{
-    ativos: EmprestimoHistorico[];
-    finalizados: EmprestimoHistorico[];
-  }> {
-    const supabase = createClient();
-    
-    // Buscar empréstimos ativos
-    const { data: ativos, error: errorAtivos } = await supabase
-      .from('vw_historico_emprestimos_cliente')
-      .select('*')
-      .eq('cliente_id', clienteId)
-      .eq('emprestimo_status', 'ATIVO')
-      .order('data_emprestimo', { ascending: false });
-    
-    if (errorAtivos) {
-      console.error('Erro ao buscar empréstimos ativos:', errorAtivos);
-    }
-    
-    // Buscar empréstimos finalizados
-    const { data: finalizados, error: errorFinalizados } = await supabase
-      .from('vw_historico_emprestimos_cliente')
-      .select('*')
-      .eq('cliente_id', clienteId)
-      .neq('emprestimo_status', 'ATIVO')
-      .order('data_emprestimo', { ascending: false });
-    
-    if (errorFinalizados) {
-      console.error('Erro ao buscar empréstimos finalizados:', errorFinalizados);
-    }
-    
-    return {
-      ativos: ativos || [],
-      finalizados: finalizados || [],
-    };
-  },
-
-  // ==================================================
-  // BUSCAR PARCELAS DE UM EMPRÉSTIMO (via view)
-  // ==================================================
-  async buscarParcelasEmprestimo(emprestimoId: string): Promise<ParcelaView[]> {
-    const supabase = createClient();
-    
-    const { data, error } = await supabase
-      .from('vw_parcelas_emprestimo')
-      .select('*')
-      .eq('emprestimo_id', emprestimoId)
-      .order('numero_parcela', { ascending: true });
-    
-    if (error) {
-      console.error('Erro ao buscar parcelas:', error);
-      return [];
-    }
-    
-    return data || [];
-  },
-
-  // ==================================================
-  // BUSCAR CLIENTE COMPLETO (dados + empréstimos)
-  // ==================================================
-  async buscarClienteCompleto(clienteId: string): Promise<{
-    cliente: Cliente | null;
-    emprestimos: { ativos: EmprestimoHistorico[]; finalizados: EmprestimoHistorico[] };
-  }> {
-    const supabase = createClient();
-    
-    // Buscar dados do cliente
-    const { data: cliente, error } = await supabase
-      .from('clientes')
-      .select('*')
-      .eq('id', clienteId)
-      .single();
-    
-    if (error) {
-      console.error('Erro ao buscar cliente:', error);
-      return { cliente: null, emprestimos: { ativos: [], finalizados: [] } };
-    }
-    
-    // Buscar empréstimos
-    const emprestimos = await this.buscarEmprestimosCliente(clienteId);
-    
-    return { cliente, emprestimos };
-  },
-
-  // ==================================================
-  // HELPERS - CÁLCULOS DE EMPRÉSTIMO
-  // ==================================================
-  calcularEmprestimo(valorPrincipal: number, taxaJuros: number, numeroParcelas: number) {
-    const valorJuros = valorPrincipal * (taxaJuros / 100);
-    const valorTotal = valorPrincipal + valorJuros;
-    const valorParcela = valorTotal / numeroParcelas;
-    
-    return {
-      valor_principal: valorPrincipal,
-      valor_juros: Math.round(valorJuros * 100) / 100,
-      valor_total: Math.round(valorTotal * 100) / 100,
-      valor_parcela: Math.round(valorParcela * 100) / 100,
-      taxa_juros: taxaJuros,
-      numero_parcelas: numeroParcelas,
-    };
-  },
-
-  // Calcular data do primeiro vencimento baseado na frequência
-  calcularPrimeiroVencimento(
-    frequencia: string, 
-    diasAPartirDeHoje: number = 1
-  ): string {
-    const data = new Date();
-    data.setDate(data.getDate() + diasAPartirDeHoje);
-    return data.toISOString().split('T')[0];
-  },
-};
+export type StatusCliente = 'ATIVO' | 'INATIVO' | 'SUSPENSO';
+export type StatusEmprestimo = 'ATIVO' | 'QUITADO' | 'CANCELADO' | 'VENCIDO' | 'RENEGOCIADO' | 'ADIANTADO' | 'INCOMPLETO';
+export type StatusParcela = 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'VENCIDO' | 'CANCELADO';
+export type TipoEmprestimo = 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO';
+export type FrequenciaPagamento = 'DIARIO' | 'SEMANAL' | 'QUINZENAL' | 'MENSAL' | 'FLEXIVEL';
+export type FormaPagamento = 'DINHEIRO' | 'PIX' | 'TRANSFERENCIA' | 'CARTAO';
 
 // =====================================================
-// HOOKS AUXILIARES
+// INTERFACES PRINCIPAIS
 // =====================================================
 
-export const clientesKeys = {
-  all: ['clientes'] as const,
-  lista: (empresaId: string, filtros?: Partial<FiltrosClientes>) => 
-    [...clientesKeys.all, 'lista', empresaId, filtros] as const,
-  detalhes: (clienteId: string) => 
-    [...clientesKeys.all, 'detalhes', clienteId] as const,
-  emprestimos: (clienteId: string) => 
-    [...clientesKeys.all, 'emprestimos', clienteId] as const,
-  parcelas: (emprestimoId: string) => 
-    [...clientesKeys.all, 'parcelas', emprestimoId] as const,
-  contagem: (empresaId: string, rotaId?: string) => 
-    [...clientesKeys.all, 'contagem', empresaId, rotaId] as const,
-  segmentos: () => [...clientesKeys.all, 'segmentos'] as const,
-  rotas: (empresaId: string) => [...clientesKeys.all, 'rotas', empresaId] as const,
-};
+export interface Cliente {
+  id: string;
+  codigo_cliente: number;
+  nome: string;
+  documento?: string;
+  telefone_celular?: string;
+  telefone_fixo?: string;
+  email?: string;
+  endereco?: string;
+  endereco_comercial?: string;
+  status: StatusCliente;
+  data_cadastro: string;
+  observacoes?: string;
+  foto_url?: string;
+  latitude?: number;
+  longitude?: number;
+  segmento_id?: string;
+  segmento_nome?: string;
+  empresa_id: string;
+  rotas_ids: string[];
+  rotas_nomes?: string;
+  permite_emprestimo_adicional: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ClienteComTotais extends Cliente {
+  qtd_emprestimos_ativos: number;
+  qtd_emprestimos_total: number;
+  valor_total_emprestimos: number;
+  valor_total_pago: number;
+  valor_saldo_devedor: number;
+  parcelas_pendentes: number;
+  parcelas_atrasadas: number;
+}
+
+export interface Emprestimo {
+  id: string;
+  cliente_id: string;
+  rota_id: string;
+  empresa_id: string;
+  tipo_emprestimo: TipoEmprestimo;
+  valor_principal: number;
+  valor_total: number;
+  valor_pago: number;
+  valor_saldo: number;
+  numero_parcelas: number;
+  numero_parcelas_pagas: number;
+  numero_parcelas_restantes: number;
+  valor_parcela: number;
+  taxa_juros: number;
+  frequencia_pagamento: FrequenciaPagamento;
+  data_emprestimo: string;
+  data_primeiro_vencimento: string;
+  status: StatusEmprestimo;
+  observacoes?: string;
+  rota_nome?: string;
+  vendedor_nome?: string;
+  created_at: string;
+  // Calculados
+  percentual_pago: number;
+  proxima_parcela_vencimento?: string;
+  dias_atraso: number;
+}
+
+export interface Parcela {
+  id: string;
+  emprestimo_id: string;
+  numero_parcela: number;
+  valor_parcela: number;
+  valor_pago: number;
+  valor_saldo: number;
+  valor_multa: number;
+  data_vencimento: string;
+  data_pagamento?: string;
+  dias_atraso: number;
+  status: StatusParcela;
+  observacoes?: string;
+  // Calculados
+  valor_total_parcela: number;
+  esta_atrasada: boolean;
+}
+
+export interface Segmento {
+  id: string;
+  grupo_pt: string;
+  grupo_es: string;
+  nome_pt: string;
+  nome_es: string;
+  ordem_grupo: number;
+  ordem: number;
+}
+
+export interface RotaSimples {
+  id: string;
+  nome: string;
+  codigo: string;
+  cidade_nome?: string;
+  qtd_clientes: number;
+  status: string;
+  vendedor_id?: string;
+  vendedor_nome?: string;
+}
+
+// =====================================================
+// INTERFACES DE CONTAGEM/RESUMO
+// =====================================================
+
+export interface ContagemClientes {
+  total: number;
+  ativos: number;
+  inativos: number;
+  suspensos: number;
+  com_emprestimo_ativo: number;
+  com_parcelas_atrasadas: number;
+}
+
+// =====================================================
+// INTERFACES DE INPUT (FORMULÁRIOS)
+// =====================================================
+
+export interface FiltrosClientes {
+  empresa_id: string;
+  rota_id?: string;
+  status?: StatusCliente;
+  busca?: string;
+  limite?: number;
+  offset?: number;
+}
+
+export interface NovaVendaInput {
+  // Dados do cliente (obrigatório se cliente novo)
+  cliente_id?: string;
+  cliente_nome?: string;
+  cliente_documento?: string;
+  cliente_telefone?: string;
+  cliente_telefone_fixo?: string;
+  cliente_email?: string;
+  cliente_endereco?: string;
+  cliente_endereco_comercial?: string;
+  cliente_segmento_id?: string;
+  cliente_foto_url?: string;
+  cliente_observacoes?: string;
+  // Dados do empréstimo
+  valor_principal: number;
+  numero_parcelas: number;
+  taxa_juros: number;
+  frequencia: FrequenciaPagamento;
+  data_primeiro_vencimento: string;
+  dia_semana_cobranca?: number;
+  dia_mes_cobranca?: number;
+  dias_mes_cobranca?: number[];
+  iniciar_proximo_mes?: boolean;
+  observacoes?: string;
+  // Contexto
+  empresa_id: string;
+  rota_id: string;
+  vendedor_id?: string;
+  user_id: string;
+  // GPS
+  latitude?: number;
+  longitude?: number;
+  // Microseguro
+  microseguro_valor?: number;
+}
+
+export interface RenovacaoInput {
+  cliente_id: string;
+  valor_principal: number;
+  numero_parcelas: number;
+  taxa_juros: number;
+  frequencia: FrequenciaPagamento;
+  data_primeiro_vencimento: string;
+  dia_semana_cobranca?: number;
+  dia_mes_cobranca?: number;
+  dias_mes_cobranca?: number[];
+  iniciar_proximo_mes?: boolean;
+  observacoes?: string;
+  empresa_id: string;
+  rota_id: string;
+  vendedor_id?: string;
+  user_id: string;
+  latitude?: number;
+  longitude?: number;
+  microseguro_valor?: number;
+}
+
+export interface PagamentoInput {
+  parcela_id: string;
+  valor_pagamento: number;
+  valor_credito?: number;
+  forma_pagamento: FormaPagamento;
+  observacoes?: string;
+  latitude?: number;
+  longitude?: number;
+  precisao_gps?: number;
+  liquidacao_id?: string;
+}
+
+export interface AtualizarClienteInput {
+  cliente_id: string;
+  nome?: string;
+  documento?: string;
+  telefone_celular?: string;
+  telefone_fixo?: string;
+  email?: string;
+  endereco?: string;
+  endereco_comercial?: string;
+  segmento_id?: string;
+  foto_url?: string;
+  observacoes?: string;
+  status?: StatusCliente;
+}
+
+// =====================================================
+// INTERFACES DE RESPOSTA
+// =====================================================
+
+export interface RespostaNovaVenda {
+  success: boolean;
+  cliente_id?: string;
+  emprestimo_id?: string;
+  error?: string;
+}
+
+export interface RespostaPagamento {
+  success: boolean;
+  parcela_id?: string;
+  emprestimo_quitado?: boolean;
+  error?: string;
+}
+
+// =====================================================
+// INTERFACES AUXILIARES
+// =====================================================
+
+export interface ProximaParcela {
+  parcela_id: string;
+  emprestimo_id: string;
+  numero_parcela: number;
+  valor_parcela: number;
+  valor_saldo: number;
+  valor_multa: number;
+  data_vencimento: string;
+  dias_atraso: number;
+  cliente_nome: string;
+  valor_total_devido: number;
+}
+
+// Configuração de frequência para cálculos
+export const FREQUENCIA_CONFIG = {
+  DIARIO: { label: 'Diário', dias: 1 },
+  SEMANAL: { label: 'Semanal', dias: 7 },
+  QUINZENAL: { label: 'Quinzenal', dias: 15 },
+  MENSAL: { label: 'Mensal', dias: 30 },
+  FLEXIVEL: { label: 'Flexível', dias: 0 },
+} as const;
+
+// Cores de status
+export const STATUS_CLIENTE_COLORS = {
+  ATIVO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Ativo' },
+  INATIVO: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Inativo' },
+  SUSPENSO: { bg: 'bg-red-100', text: 'text-red-700', label: 'Suspenso' },
+} as const;
+
+export const STATUS_EMPRESTIMO_COLORS = {
+  ATIVO: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Ativo' },
+  QUITADO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Quitado' },
+  CANCELADO: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Cancelado' },
+  VENCIDO: { bg: 'bg-red-100', text: 'text-red-700', label: 'Vencido' },
+  RENEGOCIADO: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Renegociado' },
+  ADIANTADO: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Adiantado' },
+  INCOMPLETO: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Incompleto' },
+} as const;
+
+export const STATUS_PARCELA_COLORS = {
+  PENDENTE: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pendente' },
+  PAGO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Pago' },
+  PARCIAL: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Parcial' },
+  VENCIDO: { bg: 'bg-red-100', text: 'text-red-700', label: 'Vencido' },
+  CANCELADO: { bg: 'bg-gray-100', text: 'text-gray-700', label: 'Cancelado' },
+} as const;
+
+// =====================================================
+// INTERFACE PARA VIEW vw_historico_emprestimos_cliente
+// =====================================================
+
+export interface EmprestimoHistorico {
+  cliente_id: string;
+  cliente_nome: string;
+  cliente_documento?: string;
+  cliente_telefone?: string;
+  emprestimo_id: string;
+  tipo_emprestimo?: string;
+  emprestimo_status: string;
+  data_emprestimo: string;
+  valor_principal: number;
+  taxa_juros: number;
+  valor_total: number;
+  valor_parcela: number;
+  emprestimo_valor_pago: number;
+  emprestimo_saldo: number;
+  numero_parcelas: number;
+  numero_parcelas_pagas: number;
+  numero_parcelas_restantes: number;
+  parcelas_pagas: number;
+  parcelas_pendentes: number;
+  parcelas_parciais: number;
+  parcelas_vencidas: number;
+  total_pago_parcelas: number;
+  total_saldo_parcelas: number;
+  total_multas: number;
+  proximo_vencimento?: string;
+  valor_proximo_vencimento?: number;
+  data_ultimo_pagamento?: string;
+  percentual_quitado: number;
+  percentual_valor_pago: number;
+  status_computado: string;
+}
+
+// =====================================================
+// INTERFACE PARA VIEW vw_parcelas_emprestimo
+// =====================================================
+
+export interface ParcelaView {
+  id: string;
+  emprestimo_id: string;
+  numero_parcela: number;
+  valor_parcela: number;
+  valor_pago: number;
+  valor_saldo: number;
+  valor_multa: number;
+  data_vencimento: string;
+  data_pagamento?: string;
+  status: string;
+}
