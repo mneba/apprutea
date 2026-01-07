@@ -19,7 +19,7 @@ import {
 import { useUser } from '@/contexts/UserContext';
 import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
-import type { ClienteListagem, Segmento, RotaSimples } from '@/types/clientes';
+import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
 
 // =====================================================
 // COMPONENTES AUXILIARES
@@ -81,7 +81,7 @@ function CardCliente({
   onDetalhes, 
   onNovaVenda 
 }: { 
-  cliente: ClienteListagem; 
+  cliente: ClienteComTotais; 
   onDetalhes: () => void;
   onNovaVenda: () => void;
 }) {
@@ -103,10 +103,10 @@ function CardCliente({
           )}
 
           <div className="flex flex-wrap gap-3 text-sm text-gray-500">
-            {cliente.celular && (
+            {cliente.telefone_celular && (
               <span className="flex items-center gap-1">
                 <Phone className="w-3.5 h-3.5" />
-                {cliente.celular}
+                {cliente.telefone_celular}
               </span>
             )}
             {cliente.email && (
@@ -115,10 +115,10 @@ function CardCliente({
                 {cliente.email}
               </span>
             )}
-            {cliente.rota_nome && (
+            {cliente.rotas_nomes && (
               <span className="flex items-center gap-1">
                 <MapPin className="w-3.5 h-3.5" />
-                {cliente.rota_nome}
+                {cliente.rotas_nomes}
               </span>
             )}
           </div>
@@ -181,7 +181,7 @@ export default function ClientesPage() {
   const rotaIdContexto = localizacao?.rota_id;
   const userId = profile?.user_id;
 
-  const [clientes, setClientes] = useState<ClienteListagem[]>([]);
+  const [clientes, setClientes] = useState<ClienteComTotais[]>([]);
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [rotas, setRotas] = useState<RotaSimples[]>([]);
   const [loading, setLoading] = useState(false);
@@ -190,7 +190,7 @@ export default function ClientesPage() {
   const [rotaFiltro, setRotaFiltro] = useState<string>('');
   
   const [modalNovaVenda, setModalNovaVenda] = useState(false);
-  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteListagem | null>(null);
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
 
   const estatisticas = useMemo(() => {
     const total = clientes.length;
@@ -206,9 +206,10 @@ export default function ClientesPage() {
     if (!empresaId) return;
     setLoading(true);
     try {
-      const data = await clientesService.buscarClientes(empresaId, {
+      const data = await clientesService.buscarClientes({
+        empresa_id: empresaId,
         busca: busca || undefined,
-        status: statusFiltro || undefined,
+        status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
         rota_id: rotaFiltro || rotaIdContexto || undefined,
       });
       setClientes(data);
@@ -222,7 +223,7 @@ export default function ClientesPage() {
   const carregarSegmentos = useCallback(async () => {
     if (!empresaId) return;
     try {
-      const data = await clientesService.buscarSegmentos(empresaId);
+      const data = await clientesService.buscarSegmentos();
       setSegmentos(data);
     } catch (error) {
       console.error('Erro ao carregar segmentos:', error);
@@ -254,7 +255,7 @@ export default function ClientesPage() {
     return () => clearTimeout(timer);
   }, [busca, empresaId, carregarClientes]);
 
-  const handleNovaVenda = (cliente?: ClienteListagem) => {
+  const handleNovaVenda = (cliente?: ClienteComTotais) => {
     setClienteSelecionado(cliente || null);
     setModalNovaVenda(true);
   };
