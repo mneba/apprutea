@@ -19,9 +19,12 @@ import {
   Percent,
   Check,
   AlertCircle,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import type { 
+  Cliente,
   ClienteComTotais, 
   Segmento, 
   RotaSimples, 
@@ -32,7 +35,6 @@ import type {
 // CONSTANTES
 // =====================================================
 
-// DDIs da América Latina
 const DDIS = [
   { codigo: '+55', pais: 'Brasil', bandeira: '🇧🇷' },
   { codigo: '+54', pais: 'Argentina', bandeira: '🇦🇷' },
@@ -49,11 +51,22 @@ const DDIS = [
   { codigo: '+506', pais: 'Costa Rica', bandeira: '🇨🇷' },
 ];
 
-const FREQUENCIAS: { value: FrequenciaPagamento; label: string }[] = [
-  { value: 'DIARIO', label: 'Diário' },
-  { value: 'SEMANAL', label: 'Semanal' },
-  { value: 'QUINZENAL', label: 'Quinzenal' },
-  { value: 'MENSAL', label: 'Mensal' },
+const FREQUENCIAS: { value: FrequenciaPagamento; label: string; descricao: string }[] = [
+  { value: 'DIARIO', label: 'Diário', descricao: 'Parcelas todos os dias úteis' },
+  { value: 'SEMANAL', label: 'Semanal', descricao: 'Uma parcela por semana' },
+  { value: 'QUINZENAL', label: 'Quinzenal', descricao: 'Parcelas a cada 15 dias' },
+  { value: 'MENSAL', label: 'Mensal', descricao: 'Uma parcela por mês' },
+  { value: 'FLEXIVEL', label: 'Flexível', descricao: 'Datas personalizadas' },
+];
+
+const DIAS_SEMANA = [
+  { value: 0, label: 'Domingo', abrev: 'Dom' },
+  { value: 1, label: 'Segunda', abrev: 'Seg' },
+  { value: 2, label: 'Terça', abrev: 'Ter' },
+  { value: 3, label: 'Quarta', abrev: 'Qua' },
+  { value: 4, label: 'Quinta', abrev: 'Qui' },
+  { value: 5, label: 'Sexta', abrev: 'Sex' },
+  { value: 6, label: 'Sábado', abrev: 'Sáb' },
 ];
 
 // =====================================================
@@ -65,12 +78,12 @@ type TabType = 'cliente' | 'emprestimo' | 'resumo';
 interface Props {
   isOpen: boolean;
   onClose: () => void;
-  cliente?: ClienteComTotais | null;
+  cliente?: Cliente | ClienteComTotais | null;
   segmentos: Segmento[];
   rotas: RotaSimples[];
   empresaId: string;
   userId: string;
-  rotaIdContexto?: string | null; // Rota do seletor de localização
+  rotaIdContexto?: string | null;
   onSucesso: () => void;
 }
 
@@ -90,7 +103,7 @@ export function ModalNovaVenda({
   onSucesso 
 }: Props) {
   const isNovoCliente = !cliente;
-  const temEmprestimoAtivo = cliente && cliente.qtd_emprestimos_ativos > 0;
+  const temEmprestimoAtivo = cliente && 'qtd_emprestimos_ativos' in cliente && cliente.qtd_emprestimos_ativos > 0;
   
   const [activeTab, setActiveTab] = useState<TabType>('cliente');
   const [saving, setSaving] = useState(false);
@@ -98,7 +111,7 @@ export function ModalNovaVenda({
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // === ABA DADOS DO CLIENTE ===
+  // === Dados do Cliente ===
   const [nome, setNome] = useState('');
   const [documento, setDocumento] = useState('');
   const [ddiCelular, setDdiCelular] = useState('+55');
@@ -112,29 +125,48 @@ export function ModalNovaVenda({
   const [observacoesCliente, setObservacoesCliente] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
 
-  // === ABA EMPRÉSTIMO ===
+  // === Dados do Empréstimo ===
   const [rotaId, setRotaId] = useState('');
   const [valorPrincipal, setValorPrincipal] = useState('');
-  const [numeroParcelas, setNumeroParcelas] = useState('12');
+  const [numeroParcelas, setNumeroParcelas] = useState('30');
   const [taxaJuros, setTaxaJuros] = useState('20');
   const [frequencia, setFrequencia] = useState<FrequenciaPagamento>('DIARIO');
   const [dataPrimeiroVencimento, setDataPrimeiroVencimento] = useState('');
   const [observacoesEmprestimo, setObservacoesEmprestimo] = useState('');
-  const [microseguroValor, setMicroseguroValor] = useState('');
+  
+  // === Campos específicos por frequência ===
+  const [diaSemanaCobranca, setDiaSemanaCobranca] = useState<number>(1); // Segunda
+  const [diaMesCobranca, setDiaMesCobranca] = useState<number>(10);
+  const [diasMesCobranca, setDiasMesCobranca] = useState<number[]>([]);
+  const [iniciarProximoMes, setIniciarProximoMes] = useState(false);
+  
+  // === Microseguro ===
+  const [temMicroseguro, setTemMicroseguro] = useState(false);
+  const [valorMicroseguro, setValorMicroseguro] = useState('');
 
-  // Reset ao abrir
+  // === Cálculos ===
+  const valorPrincipalNum = parseFloat(valorPrincipal) || 0;
+  const taxaJurosNum = parseFloat(taxaJuros) || 0;
+  const numParcelasNum = parseInt(numeroParcelas) || 0;
+  const valorJuros = valorPrincipalNum * (taxaJurosNum / 100);
+  const valorTotal = valorPrincipalNum + valorJuros;
+  const valorParcela = numParcelasNum > 0 ? valorTotal / numParcelasNum : 0;
+  const valorMicroseguroNum = temMicroseguro ? (parseFloat(valorMicroseguro) || 0) : 0;
+
+  // Reset ao abrir/fechar
   useEffect(() => {
     if (isOpen) {
-      // Se é cliente existente, pula para aba de empréstimo
       setActiveTab(isNovoCliente ? 'cliente' : 'emprestimo');
       setErro('');
       
+      // Data padrão: amanhã
+      const amanha = new Date();
+      amanha.setDate(amanha.getDate() + 1);
+      setDataPrimeiroVencimento(amanha.toISOString().split('T')[0]);
+      
       if (cliente) {
-        // Preencher dados do cliente existente
         setNome(cliente.nome);
         setDocumento(cliente.documento || '');
-        
-        // Extrair DDI do celular
         if (cliente.telefone_celular) {
           const ddiEncontrado = DDIS.find(d => cliente.telefone_celular?.startsWith(d.codigo));
           if (ddiEncontrado) {
@@ -144,11 +176,9 @@ export function ModalNovaVenda({
             setTelefoneCelular(cliente.telefone_celular);
           }
         }
-        
         setEmail(cliente.email || '');
         setFotoUrl(cliente.foto_url || '');
       } else {
-        // Limpar campos para novo cliente
         setNome('');
         setDocumento('');
         setDdiCelular('+55');
@@ -163,8 +193,7 @@ export function ModalNovaVenda({
         setFotoUrl('');
       }
       
-      // Campos do empréstimo
-      // Se só tem 1 rota, seleciona automaticamente. Se tem rota no contexto, usa ela.
+      // Rota
       if (rotaIdContexto) {
         setRotaId(rotaIdContexto);
       } else if (rotas.length === 1) {
@@ -173,168 +202,228 @@ export function ModalNovaVenda({
         setRotaId('');
       }
       
+      // Empréstimo
       setValorPrincipal('');
-      setNumeroParcelas('12');
+      setNumeroParcelas('30');
       setTaxaJuros('20');
       setFrequencia('DIARIO');
-      setMicroseguroValor('');
       setObservacoesEmprestimo('');
-      
-      // Data padrão: amanhã
-      const amanha = new Date();
-      amanha.setDate(amanha.getDate() + 1);
-      setDataPrimeiroVencimento(amanha.toISOString().split('T')[0]);
+      setDiaSemanaCobranca(1);
+      setDiaMesCobranca(10);
+      setDiasMesCobranca([]);
+      setIniciarProximoMes(false);
+      setTemMicroseguro(false);
+      setValorMicroseguro('');
     }
   }, [isOpen, cliente, isNovoCliente, rotas, rotaIdContexto]);
 
-  // Cálculos do empréstimo
-  const calculo = clientesService.calcularEmprestimo(
-    parseFloat(valorPrincipal) || 0,
-    parseFloat(taxaJuros) || 0,
-    parseInt(numeroParcelas) || 1
-  );
-
-  const totalComMicroseguro = calculo.valor_total + (parseFloat(microseguroValor) || 0);
-
-  // Validações
-  const podeAvancarCliente = nome.trim() && telefoneCelular.trim();
-  const podeAvancarEmprestimo = rotaId && valorPrincipal && numeroParcelas && taxaJuros && dataPrimeiroVencimento;
-
-  // Upload de foto
-  const handleUploadFoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handler para upload de foto
+  const handleFotoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     
-    // Validar tamanho (máx 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      alert('Imagem muito grande. Máximo 2MB.');
-      return;
-    }
-    
     setUploadingFoto(true);
     try {
-      // Converter para base64 ou fazer upload
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFotoUrl(reader.result as string);
-        setUploadingFoto(false);
-      };
-      reader.onerror = () => {
-        setUploadingFoto(false);
-        alert('Erro ao carregar imagem');
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
+      // TODO: Implementar upload real
+      const url = URL.createObjectURL(file);
+      setFotoUrl(url);
+    } catch (error) {
+      console.error('Erro ao fazer upload:', error);
+    } finally {
       setUploadingFoto(false);
     }
+  };
+
+  // Validações
+  const validarCliente = () => {
+    if (!nome.trim()) return 'Nome é obrigatório';
+    if (!telefoneCelular.trim()) return 'Celular é obrigatório';
+    return null;
+  };
+
+  const validarEmprestimo = () => {
+    if (!rotaId) return 'Selecione uma rota';
+    if (!valorPrincipal || valorPrincipalNum <= 0) return 'Valor principal é obrigatório';
+    if (!numeroParcelas || numParcelasNum <= 0) return 'Número de parcelas é obrigatório';
+    if (!taxaJuros) return 'Taxa de juros é obrigatória';
+    if (!dataPrimeiroVencimento) return 'Data do primeiro vencimento é obrigatória';
+    if (frequencia === 'FLEXIVEL' && diasMesCobranca.length === 0) {
+      return 'Selecione pelo menos um dia do mês para cobrança';
+    }
+    return null;
+  };
+
+  // Navegação entre abas
+  const irParaEmprestimo = () => {
+    if (isNovoCliente) {
+      const erro = validarCliente();
+      if (erro) {
+        setErro(erro);
+        return;
+      }
+    }
+    setErro('');
+    setActiveTab('emprestimo');
+  };
+
+  const irParaResumo = () => {
+    const erro = validarEmprestimo();
+    if (erro) {
+      setErro(erro);
+      return;
+    }
+    setErro('');
+    setActiveTab('resumo');
   };
 
   // Salvar
   const handleSalvar = async () => {
     setSaving(true);
     setErro('');
-
+    
     try {
-      const telefoneCompletoC = telefoneCelular ? `${ddiCelular}${telefoneCelular.replace(/\D/g, '')}` : '';
-      const telefoneCompletoF = telefoneFixo ? `${ddiFixo}${telefoneFixo.replace(/\D/g, '')}` : '';
-      
-      let resultado;
+      const telefoneCompleto = telefoneCelular ? `${ddiCelular}${telefoneCelular}` : null;
+      const telefoneFixoCompleto = telefoneFixo ? `${ddiFixo}${telefoneFixo}` : null;
 
+      // Determinar qual função usar
       if (isNovoCliente) {
-        // Nova venda completa (cliente + empréstimo)
-        resultado = await clientesService.novaVendaCompleta({
+        // Nova venda completa (novo cliente + empréstimo)
+        const result = await clientesService.novaVendaCompleta({
+          cliente_id: null,
           cliente_nome: nome,
-          cliente_documento: documento || undefined,
-          cliente_telefone: telefoneCompletoC,
-          cliente_telefone_fixo: telefoneCompletoF || undefined,
-          cliente_email: email || undefined,
-          cliente_endereco: endereco || undefined,
-          cliente_endereco_comercial: enderecoComercial || undefined,
-          cliente_segmento_id: segmentoId || undefined,
-          cliente_foto_url: fotoUrl || undefined,
-          cliente_observacoes: observacoesCliente || undefined,
-          valor_principal: parseFloat(valorPrincipal),
-          numero_parcelas: parseInt(numeroParcelas),
-          taxa_juros: parseFloat(taxaJuros),
+          cliente_documento: documento || null,
+          cliente_telefone: telefoneCompleto,
+          cliente_telefone_fixo: telefoneFixoCompleto,
+          cliente_email: email || null,
+          cliente_endereco: endereco || null,
+          cliente_endereco_comercial: enderecoComercial || null,
+          cliente_segmento_id: segmentoId || null,
+          cliente_foto_url: fotoUrl || null,
+          cliente_observacoes: observacoesCliente || null,
+          valor_principal: valorPrincipalNum,
+          numero_parcelas: numParcelasNum,
+          taxa_juros: taxaJurosNum,
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
-          observacoes: observacoesEmprestimo || undefined,
+          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : null,
+          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : null,
+          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : null,
+          iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
+          observacoes: observacoesEmprestimo || null,
           empresa_id: empresaId,
           rota_id: rotaId,
+          vendedor_id: null,
           user_id: userId,
-          microseguro_valor: microseguroValor ? parseFloat(microseguroValor) : undefined,
+          latitude: null,
+          longitude: null,
+          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : null,
         });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Erro ao criar venda');
+        }
       } else if (temEmprestimoAtivo) {
-        // Venda adicional
-        resultado = await clientesService.vendaAdicional({
+        // Empréstimo adicional
+        const result = await clientesService.vendaAdicional({
           cliente_id: cliente!.id,
-          valor_principal: parseFloat(valorPrincipal),
-          numero_parcelas: parseInt(numeroParcelas),
-          taxa_juros: parseFloat(taxaJuros),
+          valor_principal: valorPrincipalNum,
+          numero_parcelas: numParcelasNum,
+          taxa_juros: taxaJurosNum,
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
-          observacoes: observacoesEmprestimo || undefined,
+          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : null,
+          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : null,
+          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : null,
+          iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
+          observacoes: observacoesEmprestimo || null,
           empresa_id: empresaId,
           rota_id: rotaId,
+          vendedor_id: null,
           user_id: userId,
-          microseguro_valor: microseguroValor ? parseFloat(microseguroValor) : undefined,
+          latitude: null,
+          longitude: null,
+          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : null,
         });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Erro ao criar venda adicional');
+        }
       } else {
         // Renovação
-        resultado = await clientesService.renovarEmprestimo({
+        const result = await clientesService.renovarEmprestimo({
           cliente_id: cliente!.id,
-          valor_principal: parseFloat(valorPrincipal),
-          numero_parcelas: parseInt(numeroParcelas),
-          taxa_juros: parseFloat(taxaJuros),
+          valor_principal: valorPrincipalNum,
+          numero_parcelas: numParcelasNum,
+          taxa_juros: taxaJurosNum,
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
-          observacoes: observacoesEmprestimo || undefined,
+          dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : null,
+          dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : null,
+          dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : null,
+          iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
+          observacoes: observacoesEmprestimo || null,
           empresa_id: empresaId,
           rota_id: rotaId,
+          vendedor_id: null,
           user_id: userId,
-          microseguro_valor: microseguroValor ? parseFloat(microseguroValor) : undefined,
+          latitude: null,
+          longitude: null,
+          microseguro_valor: valorMicroseguroNum > 0 ? valorMicroseguroNum : null,
         });
+        
+        if (!result.success) {
+          throw new Error(result.error || 'Erro ao renovar empréstimo');
+        }
       }
-
-      if (!resultado.success) {
-        throw new Error(resultado.error || 'Erro ao processar venda');
-      }
-
+      
       onSucesso();
-      onClose();
-    } catch (e: any) {
-      setErro(e.message || 'Erro ao salvar');
+    } catch (error: any) {
+      console.error('Erro ao salvar:', error);
+      setErro(error.message || 'Erro ao salvar');
     } finally {
       setSaving(false);
     }
   };
 
-  // Tabs
-  const tabs = isNovoCliente 
-    ? [
-        { id: 'cliente' as TabType, label: 'Dados do Cliente', icon: User },
-        { id: 'emprestimo' as TabType, label: 'Empréstimo', icon: CreditCard },
-        { id: 'resumo' as TabType, label: 'Resumo', icon: FileText },
-      ]
-    : [
-        { id: 'emprestimo' as TabType, label: 'Empréstimo', icon: CreditCard },
-        { id: 'resumo' as TabType, label: 'Resumo', icon: FileText },
-      ];
+  // Toggle dia flexível
+  const toggleDiaFlexivel = (dia: number) => {
+    setDiasMesCobranca(prev => 
+      prev.includes(dia) 
+        ? prev.filter(d => d !== dia)
+        : [...prev, dia].sort((a, b) => a - b)
+    );
+  };
 
   if (!isOpen) return null;
+
+  const rotaSelecionada = rotas.find(r => r.id === rotaId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+      
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gradient-to-r from-blue-600 to-blue-700">
-          <div>
-            <h2 className="text-xl font-semibold text-white">
-              {isNovoCliente ? 'Nova Venda' : temEmprestimoAtivo ? 'Venda Adicional' : 'Renovação'}
-            </h2>
-            {cliente && <p className="text-blue-200 text-sm">{cliente.nome}</p>}
+        <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-600 to-blue-700">
+          <div className="flex items-center gap-3">
+            {fotoUrl ? (
+              <img src={fotoUrl} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-white/30" />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
+                <User className="w-6 h-6 text-white" />
+              </div>
+            )}
+            <div>
+              <h2 className="text-xl font-semibold text-white">
+                {isNovoCliente ? 'Novo Cliente' : temEmprestimoAtivo ? 'Venda Adicional' : 'Renovação'}
+              </h2>
+              {cliente && (
+                <div className="flex items-center gap-2 text-blue-100 text-sm">
+                  <span className="bg-white/20 px-2 py-0.5 rounded font-mono">#{cliente.codigo_cliente}</span>
+                  <span>{cliente.nome}</span>
+                </div>
+              )}
+            </div>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-white/10 rounded-lg transition-colors">
             <X className="w-5 h-5 text-white" />
@@ -342,151 +431,130 @@ export function ModalNovaVenda({
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 px-6 bg-gray-50">
-          {tabs.map((tab, index) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            const isDisabled = (
-              (tab.id === 'emprestimo' && isNovoCliente && !podeAvancarCliente) ||
-              (tab.id === 'resumo' && !podeAvancarEmprestimo)
-            );
-            
-            return (
-              <button
-                key={tab.id}
-                onClick={() => !isDisabled && setActiveTab(tab.id)}
-                disabled={isDisabled}
-                className={`
-                  flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors
-                  ${isActive
-                    ? 'border-blue-600 text-blue-600'
-                    : isDisabled 
-                      ? 'border-transparent text-gray-300 cursor-not-allowed'
-                      : 'border-transparent text-gray-500 hover:text-gray-700'}
-                `}
-              >
-                <span className={`
-                  w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                  ${isActive ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-600'}
-                `}>
-                  {index + 1}
-                </span>
-                <Icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            );
-          })}
+        <div className="flex border-b bg-gray-50">
+          <button
+            onClick={() => isNovoCliente && setActiveTab('cliente')}
+            disabled={!isNovoCliente}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'cliente'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                : isNovoCliente 
+                  ? 'text-gray-500 hover:text-gray-700' 
+                  : 'text-gray-400 cursor-not-allowed'
+            }`}
+          >
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+              activeTab === 'cliente' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-white'
+            }`}>1</span>
+            Cliente
+          </button>
+          <button
+            onClick={() => setActiveTab('emprestimo')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'emprestimo'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+              activeTab === 'emprestimo' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-white'
+            }`}>2</span>
+            Empréstimo
+          </button>
+          <button
+            onClick={() => setActiveTab('resumo')}
+            className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+              activeTab === 'resumo'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
+              activeTab === 'resumo' ? 'bg-blue-600 text-white' : 'bg-gray-300 text-white'
+            }`}>3</span>
+            Resumo
+          </button>
         </div>
 
-        {/* Body */}
+        {/* Erro */}
+        {erro && (
+          <div className="mx-6 mt-4 flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-sm text-red-700">{erro}</p>
+          </div>
+        )}
+
+        {/* Conteúdo */}
         <div className="flex-1 overflow-y-auto p-6">
-          {erro && (
-            <div className="flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200 mb-6">
-              <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-              <p className="text-sm text-red-700">{erro}</p>
-            </div>
-          )}
-
-          {/* ==================== ABA DADOS DO CLIENTE ==================== */}
+          {/* === TAB CLIENTE === */}
           {activeTab === 'cliente' && (
-            <div className="space-y-6">
-              {/* Header com foto */}
-              <div className="flex items-start gap-6 p-4 bg-gray-50 rounded-xl">
-                {/* Foto */}
-                <div className="flex flex-col items-center gap-2">
-                  <div className="relative">
-                    <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center overflow-hidden border-4 border-white shadow-lg">
-                      {fotoUrl ? (
-                        <img
-                          src={fotoUrl}
-                          alt="Foto"
-                          className="w-24 h-24 object-cover"
-                          onError={() => setFotoUrl('')}
-                        />
-                      ) : (
-                        <span className="text-white font-bold text-3xl">
-                          {nome?.charAt(0).toUpperCase() || 'C'}
-                        </span>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={uploadingFoto}
-                      className="absolute -bottom-1 -right-1 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-blue-700 disabled:opacity-50"
-                      title="Alterar foto"
-                    >
-                      {uploadingFoto ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Camera className="w-4 h-4" />
-                      )}
-                    </button>
-                    {fotoUrl && (
-                      <button
-                        onClick={() => setFotoUrl('')}
-                        className="absolute -bottom-1 -left-1 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg hover:bg-red-600"
-                        title="Remover foto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+            <div className="space-y-5">
+              {/* Foto */}
+              <div className="flex justify-center">
+                <div className="relative">
+                  <div className={`w-24 h-24 rounded-full border-4 border-dashed ${fotoUrl ? 'border-blue-300' : 'border-gray-300'} flex items-center justify-center overflow-hidden bg-gray-50`}>
+                    {fotoUrl ? (
+                      <img src={fotoUrl} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera className="w-8 h-8 text-gray-400" />
                     )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleUploadFoto}
-                      className="hidden"
-                    />
                   </div>
-                  <span className="text-xs text-gray-500">
-                    {fotoUrl ? 'Alterar ou remover' : 'Clique para adicionar'}
-                  </span>
-                </div>
-
-                {/* Campos principais */}
-                <div className="flex-1 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Nome Completo *
-                      </label>
-                      <input
-                        type="text"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="Nome do cliente"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Documento (CPF/RG)
-                      </label>
-                      <input
-                        type="text"
-                        value={documento}
-                        onChange={(e) => setDocumento(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="000.000.000-00"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Email
-                      </label>
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        placeholder="email@exemplo.com"
-                      />
-                    </div>
-                  </div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleFotoUpload}
+                    className="hidden"
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingFoto}
+                    className="absolute bottom-0 right-0 w-8 h-8 bg-blue-600 text-white rounded-full flex items-center justify-center hover:bg-blue-700 transition-colors"
+                  >
+                    {uploadingFoto ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}
+                  </button>
+                  {fotoUrl && (
+                    <button
+                      onClick={() => setFotoUrl('')}
+                      className="absolute top-0 right-0 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Telefones com DDI */}
+              {/* Nome */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <User className="w-4 h-4 text-gray-500" />
+                  Nome Completo *
+                </label>
+                <input
+                  type="text"
+                  value={nome}
+                  onChange={(e) => setNome(e.target.value)}
+                  placeholder="Nome do cliente"
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Documento */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <FileText className="w-4 h-4 text-gray-500" />
+                  Documento (CPF/RG)
+                </label>
+                <input
+                  type="text"
+                  value={documento}
+                  onChange={(e) => setDocumento(e.target.value)}
+                  placeholder="000.000.000-00"
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
+              {/* Telefones */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
@@ -497,20 +565,18 @@ export function ModalNovaVenda({
                     <select
                       value={ddiCelular}
                       onChange={(e) => setDdiCelular(e.target.value)}
-                      className="w-28 px-2 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 text-sm"
+                      className="w-28 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                     >
                       {DDIS.map(d => (
-                        <option key={d.codigo} value={d.codigo}>
-                          {d.bandeira} {d.codigo}
-                        </option>
+                        <option key={d.codigo} value={d.codigo}>{d.bandeira} {d.codigo}</option>
                       ))}
                     </select>
                     <input
                       type="tel"
                       value={telefoneCelular}
                       onChange={(e) => setTelefoneCelular(e.target.value)}
-                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                      placeholder="11 99999-9999"
+                      placeholder="99999-9999"
+                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -524,38 +590,51 @@ export function ModalNovaVenda({
                     <select
                       value={ddiFixo}
                       onChange={(e) => setDdiFixo(e.target.value)}
-                      className="w-28 px-2 py-2.5 rounded-lg border border-gray-200 bg-gray-50 focus:ring-2 focus:ring-blue-500 text-sm"
+                      className="w-28 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                     >
                       {DDIS.map(d => (
-                        <option key={d.codigo} value={d.codigo}>
-                          {d.bandeira} {d.codigo}
-                        </option>
+                        <option key={d.codigo} value={d.codigo}>{d.bandeira} {d.codigo}</option>
                       ))}
                     </select>
                     <input
                       type="tel"
                       value={telefoneFixo}
                       onChange={(e) => setTelefoneFixo(e.target.value)}
-                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                      placeholder="11 3333-3333"
+                      placeholder="3333-4444"
+                      className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Email */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <Mail className="w-4 h-4 text-gray-500" />
+                  E-mail
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="email@exemplo.com"
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </div>
 
               {/* Endereços */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <MapPin className="w-4 h-4 text-gray-500" />
+                    <Building2 className="w-4 h-4 text-gray-500" />
                     Endereço Residencial
                   </label>
                   <input
                     type="text"
                     value={endereco}
                     onChange={(e) => setEndereco(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                    placeholder="Rua, número, bairro"
+                    placeholder="Rua, número, bairro..."
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
 
@@ -568,61 +647,51 @@ export function ModalNovaVenda({
                     type="text"
                     value={enderecoComercial}
                     onChange={(e) => setEnderecoComercial(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                    placeholder="Local de trabalho"
+                    placeholder="Rua, número, bairro..."
+                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
               </div>
 
-              {/* Segmento e Observações */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Segmento */}
+              {segmentos.length > 0 && (
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Segmento / Atividade
-                  </label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Segmento</label>
                   <select
                     value={segmentoId}
                     onChange={(e) => setSegmentoId(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Selecione...</option>
+                    <option value="">Selecione um segmento</option>
                     {segmentos.map(s => (
                       <option key={s.id} value={s.id}>{s.nome_pt}</option>
                     ))}
                   </select>
                 </div>
+              )}
 
-                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Observações
-                  </label>
-                  <textarea
-                    value={observacoesCliente}
-                    onChange={(e) => setObservacoesCliente(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 resize-none"
-                    placeholder="Anotações sobre o cliente..."
-                    rows={2}
-                  />
-                </div>
+              {/* Observações */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Observações</label>
+                <textarea
+                  value={observacoesCliente}
+                  onChange={(e) => setObservacoesCliente(e.target.value)}
+                  rows={2}
+                  placeholder="Anotações sobre o cliente..."
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 resize-none"
+                />
               </div>
             </div>
           )}
 
-          {/* ==================== ABA EMPRÉSTIMO ==================== */}
+          {/* === TAB EMPRÉSTIMO === */}
           {activeTab === 'emprestimo' && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-2 mb-4">
-                <CreditCard className="w-5 h-5 text-gray-600" />
-                <h3 className="text-lg font-medium text-gray-900">
-                  Dados do Empréstimo
-                </h3>
-              </div>
-
-              {/* Rota - só mostra se tiver mais de 1 rota */}
+            <div className="space-y-5">
+              {/* Rota */}
               {rotas.length > 1 && (
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <MapPin className="w-4 h-4 text-blue-500" />
+                    <MapPin className="w-4 h-4 text-gray-500" />
                     Rota *
                   </label>
                   <select
@@ -630,26 +699,23 @@ export function ModalNovaVenda({
                     onChange={(e) => setRotaId(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="">Selecione a rota</option>
+                    <option value="">Selecione uma rota</option>
                     {rotas.map(r => (
-                      <option key={r.id} value={r.id}>{r.nome} ({r.cidade_nome})</option>
+                      <option key={r.id} value={r.id}>{r.nome}</option>
                     ))}
                   </select>
                 </div>
               )}
-
-              {/* Se só tem 1 rota, mostra info */}
               {rotas.length === 1 && (
-                <div className="flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                  <MapPin className="w-5 h-5 text-blue-500" />
-                  <div>
-                    <span className="text-sm font-medium text-blue-700">Rota: </span>
-                    <span className="text-sm text-blue-600">{rotas[0].nome}</span>
+                <div className="p-4 rounded-xl border-2 border-blue-100 bg-blue-50">
+                  <div className="flex items-center gap-2 text-blue-700">
+                    <MapPin className="w-4 h-4" />
+                    <span className="font-medium">Rota: {rotas[0].nome}</span>
                   </div>
                 </div>
               )}
 
-              {/* Valores */}
+              {/* Valor e Parcelas */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
@@ -657,42 +723,23 @@ export function ModalNovaVenda({
                     Valor Principal *
                   </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="1"
-                      value={valorPrincipal}
-                      onChange={(e) => setValorPrincipal(e.target.value)}
-                      className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                      placeholder="0,00"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Percent className="w-4 h-4 text-amber-500" />
-                    Taxa de Juros *
-                  </label>
-                  <div className="relative">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
                     <input
                       type="number"
                       step="0.01"
                       min="0"
-                      value={taxaJuros}
-                      onChange={(e) => setTaxaJuros(e.target.value)}
-                      className="w-full pl-4 pr-10 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                      placeholder="20"
+                      value={valorPrincipal}
+                      onChange={(e) => setValorPrincipal(e.target.value)}
+                      placeholder="0,00"
+                      className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                     />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500">%</span>
                   </div>
                 </div>
 
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Hash className="w-4 h-4 text-purple-500" />
-                    Nº de Parcelas *
+                    <Hash className="w-4 h-4 text-gray-500" />
+                    Nº Parcelas *
                   </label>
                   <input
                     type="number"
@@ -701,234 +748,338 @@ export function ModalNovaVenda({
                     value={numeroParcelas}
                     onChange={(e) => setNumeroParcelas(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                    placeholder="12"
                   />
                 </div>
-              </div>
-
-              {/* Frequência e Data */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Calendar className="w-4 h-4 text-blue-500" />
-                    Frequência *
-                  </label>
-                  <select
-                    value={frequencia}
-                    onChange={(e) => setFrequencia(e.target.value as FrequenciaPagamento)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500"
-                  >
-                    {FREQUENCIAS.map(f => (
-                      <option key={f.value} value={f.value}>{f.label}</option>
-                    ))}
-                  </select>
-                </div>
 
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Calendar className="w-4 h-4 text-orange-500" />
-                    1º Vencimento *
+                    <Percent className="w-4 h-4 text-gray-500" />
+                    Taxa Juros (%) *
                   </label>
                   <input
-                    type="date"
-                    value={dataPrimeiroVencimento}
-                    onChange={(e) => setDataPrimeiroVencimento(e.target.value)}
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="100"
+                    value={taxaJuros}
+                    onChange={(e) => setTaxaJuros(e.target.value)}
                     className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
+              </div>
 
-                <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                  <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
-                    <Building2 className="w-4 h-4 text-teal-500" />
-                    Microseguro
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">R$</span>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={microseguroValor}
-                      onChange={(e) => setMicroseguroValor(e.target.value)}
-                      className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                      placeholder="0,00"
-                    />
-                  </div>
+              {/* Frequência */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-3">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  Frequência de Pagamento *
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                  {FREQUENCIAS.map(f => (
+                    <button
+                      key={f.value}
+                      onClick={() => setFrequencia(f.value)}
+                      className={`p-3 rounded-xl border-2 text-center transition-all ${
+                        frequencia === f.value
+                          ? 'border-blue-500 bg-blue-50 text-blue-700'
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <p className="font-medium text-sm">{f.label}</p>
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {/* Preview do cálculo */}
-              {valorPrincipal && (
-                <div className="p-4 rounded-xl bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200">
-                  <h4 className="font-medium text-blue-900 mb-3 flex items-center gap-2">
-                    <DollarSign className="w-4 h-4" />
-                    Resumo do Cálculo
-                  </h4>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <span className="text-blue-600">Principal:</span>
-                      <p className="font-semibold text-blue-900">{calculo.valor_principal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                    </div>
-                    <div>
-                      <span className="text-blue-600">Juros ({taxaJuros}%):</span>
-                      <p className="font-semibold text-blue-900">{calculo.valor_juros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                    </div>
-                    <div>
-                      <span className="text-blue-600">Total:</span>
-                      <p className="font-semibold text-blue-900">{calculo.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                    </div>
-                    <div>
-                      <span className="text-blue-600">Parcela:</span>
-                      <p className="font-semibold text-blue-900">{calculo.valor_parcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</p>
-                    </div>
+              {/* Data Primeiro Vencimento */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  Data do 1º Vencimento *
+                </label>
+                <input
+                  type="date"
+                  value={dataPrimeiroVencimento}
+                  onChange={(e) => setDataPrimeiroVencimento(e.target.value)}
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Opções específicas por frequência */}
+              {frequencia === 'SEMANAL' && (
+                <div className="p-4 rounded-xl border-2 border-blue-100 bg-blue-50">
+                  <label className="block text-sm font-medium text-blue-700 mb-3">
+                    Dia da Semana para Cobrança
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {DIAS_SEMANA.map(dia => (
+                      <button
+                        key={dia.value}
+                        onClick={() => setDiaSemanaCobranca(dia.value)}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                          diaSemanaCobranca === dia.value
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-100'
+                        }`}
+                      >
+                        {dia.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
+              {frequencia === 'MENSAL' && (
+                <div className="p-4 rounded-xl border-2 border-blue-100 bg-blue-50">
+                  <label className="block text-sm font-medium text-blue-700 mb-3">
+                    Dia do Mês para Vencimento
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(dia => (
+                      <button
+                        key={dia}
+                        onClick={() => setDiaMesCobranca(dia)}
+                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${
+                          diaMesCobranca === dia
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-100'
+                        }`}
+                      >
+                        {dia}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {frequencia === 'FLEXIVEL' && (
+                <div className="p-4 rounded-xl border-2 border-purple-100 bg-purple-50">
+                  <label className="block text-sm font-medium text-purple-700 mb-3">
+                    Selecione os Dias do Mês para Cobrança
+                  </label>
+                  <div className="flex flex-wrap gap-2 mb-4">
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(dia => (
+                      <button
+                        key={dia}
+                        onClick={() => toggleDiaFlexivel(dia)}
+                        className={`w-10 h-10 rounded-lg text-sm font-medium transition-all ${
+                          diasMesCobranca.includes(dia)
+                            ? 'bg-purple-600 text-white'
+                            : 'bg-white border border-purple-200 text-purple-700 hover:bg-purple-100'
+                        }`}
+                      >
+                        {dia}
+                      </button>
+                    ))}
+                  </div>
+                  {diasMesCobranca.length > 0 && (
+                    <p className="text-sm text-purple-600 mb-3">
+                      Dias selecionados: <strong>{diasMesCobranca.join(', ')}</strong>
+                    </p>
+                  )}
+                  <label className="flex items-center gap-3 p-3 bg-white rounded-lg border border-purple-200">
+                    <input
+                      type="checkbox"
+                      checked={iniciarProximoMes}
+                      onChange={(e) => setIniciarProximoMes(e.target.checked)}
+                      className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                    />
+                    <span className="text-sm text-purple-700">
+                      Iniciar cobrança somente a partir do próximo mês
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              {/* Microseguro */}
+              <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                <label className="flex items-center gap-3 mb-3">
+                  <input
+                    type="checkbox"
+                    checked={temMicroseguro}
+                    onChange={(e) => setTemMicroseguro(e.target.checked)}
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  />
+                  <span className="text-sm font-medium text-gray-700">Incluir Microseguro</span>
+                </label>
+                {temMicroseguro && (
+                  <div className="relative mt-2">
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={valorMicroseguro}
+                      onChange={(e) => setValorMicroseguro(e.target.value)}
+                      placeholder="Valor do microseguro"
+                      className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                )}
+              </div>
+
               {/* Observações */}
               <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Observações do Empréstimo
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Observações do Empréstimo</label>
                 <textarea
                   value={observacoesEmprestimo}
                   onChange={(e) => setObservacoesEmprestimo(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 resize-none"
-                  placeholder="Anotações..."
                   rows={2}
+                  placeholder="Anotações sobre o empréstimo..."
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 resize-none"
                 />
               </div>
             </div>
           )}
 
-          {/* ==================== ABA RESUMO ==================== */}
+          {/* === TAB RESUMO === */}
           {activeTab === 'resumo' && (
-            <div className="space-y-6">
-              {/* Cliente */}
-              <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
-                <h4 className="font-medium text-gray-900 mb-3 flex items-center gap-2">
-                  <User className="w-4 h-4" />
-                  Cliente
-                </h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <span className="text-gray-500">Nome:</span>
-                    <p className="font-medium text-gray-900">{nome}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-500">Celular:</span>
-                    <p className="font-medium text-gray-900">{ddiCelular} {telefoneCelular}</p>
-                  </div>
-                  {documento && (
-                    <div>
-                      <span className="text-gray-500">Documento:</span>
-                      <p className="font-medium text-gray-900">{documento}</p>
-                    </div>
+            <div className="space-y-5">
+              {/* Info Cliente */}
+              <div className="p-5 rounded-xl bg-gray-50 border border-gray-200">
+                <h3 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+                  <User className="w-5 h-5 text-blue-600" />
+                  {isNovoCliente ? 'Novo Cliente' : 'Cliente'}
+                </h3>
+                <div className="space-y-1 text-sm">
+                  {cliente && (
+                    <p className="text-gray-600">Código: <span className="font-mono font-medium">#{cliente.codigo_cliente}</span></p>
                   )}
-                  {email && (
-                    <div>
-                      <span className="text-gray-500">Email:</span>
-                      <p className="font-medium text-gray-900">{email}</p>
-                    </div>
-                  )}
+                  <p className="text-gray-600">Nome: <span className="font-medium text-gray-900">{nome}</span></p>
+                  {documento && <p className="text-gray-600">Documento: <span className="font-medium text-gray-900">{documento}</span></p>}
+                  {telefoneCelular && <p className="text-gray-600">Celular: <span className="font-medium text-gray-900">{ddiCelular} {telefoneCelular}</span></p>}
                 </div>
               </div>
 
-              {/* Empréstimo */}
-              <div className="p-4 rounded-xl bg-green-50 border border-green-200">
-                <h4 className="font-medium text-green-900 mb-3 flex items-center gap-2">
-                  <CreditCard className="w-4 h-4" />
+              {/* Info Empréstimo */}
+              <div className="p-5 rounded-xl bg-blue-50 border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-3 flex items-center gap-2">
+                  <CreditCard className="w-5 h-5 text-blue-600" />
                   Empréstimo
-                </h4>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-green-700">Valor Principal:</span>
-                    <span className="font-medium">{calculo.valor_principal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                </h3>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="text-blue-600">Valor Principal</p>
+                    <p className="font-bold text-blue-900 text-lg">
+                      {valorPrincipalNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-green-700">Juros ({taxaJuros}%):</span>
-                    <span className="font-medium">+ {calculo.valor_juros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  <div>
+                    <p className="text-blue-600">Juros ({taxaJuros}%)</p>
+                    <p className="font-bold text-blue-900 text-lg">
+                      {valorJuros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
                   </div>
-                  <div className="flex justify-between border-t border-green-200 pt-2">
-                    <span className="text-green-700 font-medium">Total a Receber:</span>
-                    <span className="font-bold text-green-900">{calculo.valor_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  <div>
+                    <p className="text-blue-600">Total a Pagar</p>
+                    <p className="font-bold text-blue-900 text-lg">
+                      {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
                   </div>
-                  <div className="flex justify-between text-xs text-green-600">
-                    <span>{numeroParcelas}x {frequencia}</span>
-                    <span>{calculo.valor_parcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  <div>
+                    <p className="text-blue-600">Valor da Parcela</p>
+                    <p className="font-bold text-blue-900 text-lg">
+                      {valorParcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </p>
                   </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-blue-200 text-sm">
+                  <p className="text-blue-700">
+                    <strong>{numeroParcelas}x</strong> de <strong>{valorParcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong> • 
+                    Frequência: <strong>{FREQUENCIAS.find(f => f.value === frequencia)?.label}</strong>
+                  </p>
+                  <p className="text-blue-600 mt-1">
+                    1º Vencimento: <strong>{new Date(dataPrimeiroVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</strong>
+                  </p>
+                  {frequencia === 'SEMANAL' && (
+                    <p className="text-blue-600">Dia: <strong>{DIAS_SEMANA.find(d => d.value === diaSemanaCobranca)?.label}</strong></p>
+                  )}
+                  {frequencia === 'MENSAL' && (
+                    <p className="text-blue-600">Dia do mês: <strong>{diaMesCobranca}</strong></p>
+                  )}
+                  {frequencia === 'FLEXIVEL' && (
+                    <p className="text-blue-600">Dias: <strong>{diasMesCobranca.join(', ')}</strong></p>
+                  )}
+                  {rotaSelecionada && (
+                    <p className="text-blue-600">Rota: <strong>{rotaSelecionada.nome}</strong></p>
+                  )}
                 </div>
               </div>
 
               {/* Microseguro */}
-              {microseguroValor && parseFloat(microseguroValor) > 0 && (
-                <div className="p-4 rounded-xl bg-amber-50 border border-amber-200">
-                  <h4 className="font-medium text-amber-900 mb-2 flex items-center gap-2">
-                    <Building2 className="w-4 h-4" />
-                    Microseguro
-                  </h4>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-amber-700">Valor:</span>
-                    <span className="font-medium">{parseFloat(microseguroValor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                  </div>
+              {temMicroseguro && valorMicroseguroNum > 0 && (
+                <div className="p-5 rounded-xl bg-purple-50 border border-purple-200">
+                  <h3 className="font-semibold text-purple-900 mb-2">Microseguro</h3>
+                  <p className="text-2xl font-bold text-purple-700">
+                    {valorMicroseguroNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </p>
                 </div>
               )}
 
               {/* Total Geral */}
-              <div className="p-5 rounded-xl bg-gradient-to-r from-blue-600 to-blue-700 text-white">
-                <div className="flex justify-between items-center">
-                  <span className="font-medium text-lg">TOTAL A RECEBER:</span>
-                  <span className="text-3xl font-bold">{totalComMicroseguro.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                </div>
+              <div className="p-5 rounded-xl bg-green-50 border border-green-200">
+                <h3 className="font-semibold text-green-900 mb-2">Total Geral</h3>
+                <p className="text-3xl font-bold text-green-700">
+                  {(valorTotal + valorMicroseguroNum).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </p>
               </div>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between px-6 py-4 border-t border-gray-200 bg-gray-50">
           <button
-            onClick={onClose}
-            className="px-5 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors font-medium"
+            onClick={() => {
+              if (activeTab === 'emprestimo' && isNovoCliente) setActiveTab('cliente');
+              else if (activeTab === 'resumo') setActiveTab('emprestimo');
+              else onClose();
+            }}
+            className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
           >
-            Cancelar
+            <ChevronLeft className="w-4 h-4" />
+            {activeTab === 'cliente' ? 'Cancelar' : 'Voltar'}
           </button>
 
-          <div className="flex gap-3">
-            {/* Botão Voltar */}
-            {activeTab !== 'cliente' && (isNovoCliente || activeTab === 'resumo') && (
-              <button
-                onClick={() => setActiveTab(activeTab === 'resumo' ? 'emprestimo' : 'cliente')}
-                className="px-5 py-2.5 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 transition-colors font-medium"
-              >
-                Voltar
-              </button>
-            )}
+          {activeTab === 'cliente' && (
+            <button
+              onClick={irParaEmprestimo}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium"
+            >
+              Próximo
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
 
-            {/* Botão Avançar/Salvar */}
-            {activeTab !== 'resumo' ? (
-              <button
-                onClick={() => {
-                  if (activeTab === 'cliente') setActiveTab('emprestimo');
-                  else setActiveTab('resumo');
-                }}
-                disabled={activeTab === 'cliente' ? !podeAvancarCliente : !podeAvancarEmprestimo}
-                className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-              >
-                Avançar
-              </button>
-            ) : (
-              <button
-                onClick={handleSalvar}
-                disabled={saving}
-                className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors font-medium"
-              >
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                <Check className="w-4 h-4" />
-                Confirmar Venda
-              </button>
-            )}
-          </div>
+          {activeTab === 'emprestimo' && (
+            <button
+              onClick={irParaResumo}
+              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 font-medium"
+            >
+              Próximo
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+
+          {activeTab === 'resumo' && (
+            <button
+              onClick={handleSalvar}
+              disabled={saving}
+              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium disabled:opacity-50"
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  Confirmar Venda
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
     </div>

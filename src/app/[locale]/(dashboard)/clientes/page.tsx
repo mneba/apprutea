@@ -94,6 +94,10 @@ function CardCliente({
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1">
+            {/* Código do cliente (consecutivo) */}
+            <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-xs font-mono text-gray-600">
+              #{cliente.codigo_cliente}
+            </span>
             <h3 className="font-semibold text-gray-900 truncate">{cliente.nome}</h3>
             <BadgeStatus status={cliente.status} />
           </div>

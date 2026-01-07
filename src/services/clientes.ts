@@ -338,11 +338,12 @@ export const clientesService = {
       return { success: false, error: 'Resposta vazia do servidor' };
     }
     
+    // A função retorna 'sucesso' (português)
     return {
-      success: resultado.success !== false,
+      success: resultado.sucesso === true,
       cliente_id: resultado.cliente_id,
       emprestimo_id: resultado.emprestimo_id,
-      error: resultado.error,
+      error: resultado.mensagem || resultado.error,
     };
   },
 
@@ -380,10 +381,12 @@ export const clientesService = {
     
     const resultado = Array.isArray(data) ? data[0] : data;
     
+    // A função retorna 'sucesso' (português)
     return {
-      success: resultado?.success !== false,
+      success: resultado?.sucesso === true,
+      cliente_id: resultado?.cliente_id,
       emprestimo_id: resultado?.emprestimo_id,
-      error: resultado?.error,
+      error: resultado?.mensagem || resultado?.error,
     };
   },
 
@@ -421,10 +424,12 @@ export const clientesService = {
     
     const resultado = Array.isArray(data) ? data[0] : data;
     
+    // A função retorna 'sucesso' (português)
     return {
-      success: resultado?.success !== false,
+      success: resultado?.sucesso === true,
+      cliente_id: resultado?.cliente_id,
       emprestimo_id: resultado?.emprestimo_id,
-      error: resultado?.error,
+      error: resultado?.mensagem || resultado?.error,
     };
   },
 
