@@ -11,6 +11,7 @@ export type StatusPagamentoDia = 'PAGO' | 'PENDENTE' | 'VENCIDO' | 'PARCIAL';
 
 // =====================================================
 // INTERFACE PRINCIPAL - LIQUIDAÇÃO DIÁRIA
+// Campos exatamente como na tabela liquidacoes_diarias
 // =====================================================
 
 export interface LiquidacaoDiaria {
@@ -26,6 +27,10 @@ export interface LiquidacaoDiaria {
   // Status
   status: StatusLiquidacao;
   
+  // Aprovação
+  aprovado_por?: string;
+  data_aprovacao?: string;
+  
   // Caixa
   caixa_inicial: number;
   caixa_final: number;
@@ -33,30 +38,30 @@ export interface LiquidacaoDiaria {
   // Carteira
   carteira_inicial: number;
   carteira_final: number;
-  valor_sancao?: number; // Sanção/multa na carteira
   
   // Recaudo
-  valor_recebido_dia: number;
-  valor_recebido_dinheiro: number;
-  valor_recebido_transferencia: number;
   valor_esperado_dia: number;
+  valor_recebido_dia: number;
   percentual_recebimento: number;
   
-  // Empréstimos
-  total_emprestado_dia: number;
-  qtd_emprestimos_dia: number;
+  // Recaudo por tipo de pagamento
+  valor_dinheiro: number;
+  valor_transferencia: number;
   
   // Clientes
-  clientes_iniciais: number; // Clientes no início do dia
+  clientes_iniciais: number;
   clientes_novos: number;
   clientes_renovados: number;
   clientes_renegociados: number;
-  qtd_clientes_atendidos: number;
+  clientes_cancelados: number;
   
   // Pagamentos
   pagamentos_pagos: number;
   pagamentos_nao_pagos: number;
-  pagamentos_adiados: number; // Adiados para próximo dia
+  
+  // Empréstimos
+  total_emprestado_dia: number;
+  qtd_emprestimos_dia: number;
   
   // Despesas
   total_despesas_dia: number;
@@ -66,19 +71,10 @@ export interface LiquidacaoDiaria {
   total_microseguro_dia: number;
   qtd_microseguros_dia: number;
   
-  // GPS
-  latitude_abertura?: number;
-  longitude_abertura?: number;
-  precisao_gps_abertura?: number;
-  latitude_fechamento?: number;
-  longitude_fechamento?: number;
-  
   // Observações
   observacoes?: string;
   
   // Auditoria
-  aberto_por_user_id?: string;
-  fechado_por_user_id?: string;
   created_at: string;
   updated_at: string;
 }
