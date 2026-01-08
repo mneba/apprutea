@@ -54,7 +54,7 @@ export const liquidacaoService = {
     
     const { data, error } = await supabase
       .from('rotas')
-      .select('id, nome, codigo, empresa_id')
+      .select('id, nome, empresa_id')
       .eq('vendedor_id', vendedorId)
       .eq('status', 'ATIVA')
       .single();
@@ -67,9 +67,7 @@ export const liquidacaoService = {
     return {
       id: data.id,
       nome: data.nome,
-      codigo: data.codigo,
       empresa_id: data.empresa_id,
-      cidade_nome: undefined,
     };
   },
 
@@ -90,7 +88,7 @@ export const liquidacaoService = {
     // Query básica
     let query = supabase
       .from('rotas')
-      .select('id, nome, codigo, empresa_id')
+      .select('id, nome, empresa_id')
       .eq('id', rotaId);
     
     // Se tiver empresa_id, adicionar filtro (pode ser necessário para RLS)
@@ -117,9 +115,7 @@ export const liquidacaoService = {
     return {
       id: rota.id,
       nome: rota.nome,
-      codigo: rota.codigo,
       empresa_id: rota.empresa_id,
-      cidade_nome: undefined,
     };
   },
 

@@ -97,9 +97,7 @@ export interface VendedorLiquidacao {
 export interface RotaLiquidacao {
   id: string;
   nome: string;
-  codigo?: string;
   empresa_id: string;
-  cidade_nome?: string;
 }
 
 export interface ContaRota {
