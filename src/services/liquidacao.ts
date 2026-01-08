@@ -488,26 +488,30 @@ export const liquidacaoService = {
     quantidade: number;
     novos: number;
     renovacoes: number;
+    juros: number;
   }> {
     const supabase = createClient();
     
     const { data, error } = await supabase
       .from('emprestimos')
-      .select('id, valor_principal, tipo_emprestimo')
+      .select('id, valor_principal, valor_total, tipo_emprestimo')
       .eq('liquidacao_id', liquidacaoId);
     
     if (error) {
       console.error('Erro ao buscar empréstimos do dia:', error);
-      return { total: 0, quantidade: 0, novos: 0, renovacoes: 0 };
+      return { total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 };
     }
     
     const emprestimos = data || [];
+    const totalPrincipal = emprestimos.reduce((acc, e) => acc + Number(e.valor_principal || 0), 0);
+    const totalComJuros = emprestimos.reduce((acc, e) => acc + Number(e.valor_total || e.valor_principal || 0), 0);
     
     return {
-      total: emprestimos.reduce((acc, e) => acc + Number(e.valor_principal), 0),
+      total: totalPrincipal,
       quantidade: emprestimos.length,
       novos: emprestimos.filter(e => e.tipo_emprestimo === 'NOVO').length,
       renovacoes: emprestimos.filter(e => e.tipo_emprestimo === 'RENOVACAO').length,
+      juros: totalComJuros - totalPrincipal,
     };
   },
 

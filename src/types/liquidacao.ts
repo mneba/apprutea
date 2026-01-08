@@ -33,6 +33,7 @@ export interface LiquidacaoDiaria {
   // Carteira
   carteira_inicial: number;
   carteira_final: number;
+  valor_sancao?: number; // Sanção/multa na carteira
   
   // Recaudo
   valor_recebido_dia: number;
@@ -46,6 +47,7 @@ export interface LiquidacaoDiaria {
   qtd_emprestimos_dia: number;
   
   // Clientes
+  clientes_iniciais: number; // Clientes no início do dia
   clientes_novos: number;
   clientes_renovados: number;
   clientes_renegociados: number;
@@ -54,6 +56,7 @@ export interface LiquidacaoDiaria {
   // Pagamentos
   pagamentos_pagos: number;
   pagamentos_nao_pagos: number;
+  pagamentos_adiados: number; // Adiados para próximo dia
   
   // Despesas
   total_despesas_dia: number;
