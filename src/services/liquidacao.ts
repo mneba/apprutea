@@ -54,13 +54,7 @@ export const liquidacaoService = {
     
     const { data, error } = await supabase
       .from('rotas')
-      .select(`
-        id, 
-        nome, 
-        codigo,
-        empresa_id,
-        cidades (nome)
-      `)
+      .select('id, nome, codigo, empresa_id')
       .eq('vendedor_id', vendedorId)
       .eq('status', 'ATIVA')
       .single();
@@ -70,17 +64,12 @@ export const liquidacaoService = {
       return null;
     }
     
-    // Tipagem segura para o join
-    const cidadeNome = Array.isArray(data.cidades) 
-      ? data.cidades[0]?.nome 
-      : (data.cidades as any)?.nome;
-    
     return {
       id: data.id,
       nome: data.nome,
       codigo: data.codigo,
       empresa_id: data.empresa_id,
-      cidade_nome: cidadeNome,
+      cidade_nome: undefined,
     };
   },
 
@@ -92,13 +81,7 @@ export const liquidacaoService = {
     
     const { data, error } = await supabase
       .from('rotas')
-      .select(`
-        id, 
-        nome, 
-        codigo,
-        empresa_id,
-        cidades (nome)
-      `)
+      .select('id, nome, codigo, empresa_id')
       .eq('id', rotaId)
       .single();
     
@@ -107,16 +90,12 @@ export const liquidacaoService = {
       return null;
     }
     
-    const cidadeNome = Array.isArray(data.cidades) 
-      ? data.cidades[0]?.nome 
-      : (data.cidades as any)?.nome;
-    
     return {
       id: data.id,
       nome: data.nome,
       codigo: data.codigo,
       empresa_id: data.empresa_id,
-      cidade_nome: cidadeNome,
+      cidade_nome: undefined,
     };
   },
 

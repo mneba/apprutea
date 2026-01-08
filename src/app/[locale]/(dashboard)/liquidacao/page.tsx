@@ -483,6 +483,10 @@ export default function LiquidacaoDiariaPage() {
     setLoading(true);
     setSemRotaSelecionada(false);
     
+    console.log('=== carregarDados ===');
+    console.log('userId:', userId);
+    console.log('rotaIdContexto:', rotaIdContexto);
+    
     try {
       let rotaId: string | null = null;
       let vendedorData: VendedorLiquidacao | null = null;
@@ -490,29 +494,34 @@ export default function LiquidacaoDiariaPage() {
 
       // Estratégia 1: Tentar buscar como vendedor (user_id → vendedor → rota)
       vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
+      console.log('vendedorData:', vendedorData);
       
       if (vendedorData) {
         // Usuário é vendedor, buscar rota vinculada a ele
         rotaData = await liquidacaoService.buscarRotaVendedor(vendedorData.id);
         rotaId = rotaData?.id || null;
+        console.log('Rota do vendedor:', rotaData);
       }
       
       // Estratégia 2: Se não é vendedor, usar rota do contexto (admin/monitor)
       if (!rotaId && rotaIdContexto) {
         rotaId = rotaIdContexto;
+        console.log('Usando rota do contexto:', rotaIdContexto);
         
         // Buscar dados da rota pelo ID do contexto
         rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto);
+        console.log('rotaData via buscarRotaPorId:', rotaData);
         
         // Buscar vendedor vinculado a essa rota
         if (rotaData) {
           vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
+          console.log('vendedorData da rota:', vendedorData);
         }
       }
 
       // Se não tem rota de nenhuma forma
       if (!rotaId || !rotaData) {
-        console.log('Nenhuma rota encontrada');
+        console.log('Nenhuma rota encontrada - rotaId:', rotaId, 'rotaData:', rotaData);
         setSemRotaSelecionada(true);
         setLoading(false);
         return;
@@ -528,6 +537,7 @@ export default function LiquidacaoDiariaPage() {
       // Buscar liquidação aberta
       const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaId);
       setLiquidacao(liquidacaoData);
+      console.log('liquidacaoData:', liquidacaoData);
 
       if (liquidacaoData) {
         // Buscar dados complementares
