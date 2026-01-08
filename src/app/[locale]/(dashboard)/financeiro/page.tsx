@@ -578,13 +578,12 @@ export default function FinanceiroPage() {
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        <div className="mb-6">
+    <div className="space-y-6">
+        <div>
           <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
         </div>
 
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit mb-6">
+        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
           <button
             onClick={() => setAbaAtiva('resumo')}
             className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
@@ -746,7 +745,6 @@ export default function FinanceiroPage() {
             </div>
           </div>
         )}
-      </div>
 
       {/* Modais - Componentes externos padronizados */}
       <ModalNovaMovimentacao
