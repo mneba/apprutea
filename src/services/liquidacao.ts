@@ -76,8 +76,9 @@ export const liquidacaoService = {
   // ==================================================
   // BUSCAR ROTA POR ID (para admin/monitor)
   // ==================================================
-  async buscarRotaPorId(rotaId: string): Promise<RotaLiquidacao | null> {
+  async buscarRotaPorId(rotaId: string, empresaId?: string): Promise<RotaLiquidacao | null> {
     console.log('buscarRotaPorId - rotaId recebido:', rotaId);
+    console.log('buscarRotaPorId - empresaId recebido:', empresaId);
     
     if (!rotaId) {
       console.log('buscarRotaPorId - rotaId é null/undefined');
@@ -86,11 +87,18 @@ export const liquidacaoService = {
     
     const supabase = createClient();
     
-    const { data, error } = await supabase
+    // Query básica
+    let query = supabase
       .from('rotas')
       .select('id, nome, codigo, empresa_id')
-      .eq('id', rotaId)
-      .single();
+      .eq('id', rotaId);
+    
+    // Se tiver empresa_id, adicionar filtro (pode ser necessário para RLS)
+    if (empresaId) {
+      query = query.eq('empresa_id', empresaId);
+    }
+    
+    const { data, error } = await query;
     
     if (error) {
       console.error('Erro ao buscar rota por ID:', error);
@@ -99,11 +107,18 @@ export const liquidacaoService = {
     
     console.log('buscarRotaPorId - data retornado:', data);
     
+    if (!data || data.length === 0) {
+      console.log('buscarRotaPorId - Nenhuma rota encontrada com esse ID');
+      return null;
+    }
+    
+    const rota = data[0];
+    
     return {
-      id: data.id,
-      nome: data.nome,
-      codigo: data.codigo,
-      empresa_id: data.empresa_id,
+      id: rota.id,
+      nome: rota.nome,
+      codigo: rota.codigo,
+      empresa_id: rota.empresa_id,
       cidade_nome: undefined,
     };
   },

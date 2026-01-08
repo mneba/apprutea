@@ -518,8 +518,8 @@ export default function LiquidacaoDiariaPage() {
         rotaId = rotaIdContexto;
         console.log('Usando rota do contexto:', rotaIdContexto);
         
-        // Buscar dados da rota pelo ID do contexto
-        rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto);
+        // Buscar dados da rota pelo ID do contexto (passando empresa_id para RLS)
+        rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto, empresaId || undefined);
         console.log('rotaData via buscarRotaPorId:', rotaData);
         
         // Buscar vendedor vinculado a essa rota (se existir)
