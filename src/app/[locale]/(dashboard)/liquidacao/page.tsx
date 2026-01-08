@@ -452,6 +452,8 @@ function TelaIniciarDia({
 export default function LiquidacaoDiariaPage() {
   const { profile, localizacao } = useUser();
   const userId = profile?.user_id;
+  const rotaIdContexto = localizacao?.rota_id;
+  const empresaId = localizacao?.empresa_id;
 
   // States principais
   const [vendedor, setVendedor] = useState<VendedorLiquidacao | null>(null);
@@ -460,6 +462,7 @@ export default function LiquidacaoDiariaPage() {
   const [saldoConta, setSaldoConta] = useState(0);
   const [clientesDia, setClientesDia] = useState<ClienteDoDia[]>([]);
   const [estatisticas, setEstatisticas] = useState<EstatisticasClientesDia | null>(null);
+  const [semRotaSelecionada, setSemRotaSelecionada] = useState(false);
   
   // States de operações
   const [movimentacoes, setMovimentacoes] = useState({ receitas: 0, despesas: 0, retiradas: 0 });
@@ -478,40 +481,61 @@ export default function LiquidacaoDiariaPage() {
     if (!userId) return;
     
     setLoading(true);
+    setSemRotaSelecionada(false);
+    
     try {
-      // Buscar vendedor
-      const vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
-      if (!vendedorData) {
-        console.error('Vendedor não encontrado');
-        setLoading(false);
-        return;
-      }
-      setVendedor(vendedorData);
+      let rotaId: string | null = null;
+      let vendedorData: VendedorLiquidacao | null = null;
+      let rotaData: RotaLiquidacao | null = null;
 
-      // Buscar rota do vendedor
-      const rotaData = await liquidacaoService.buscarRotaVendedor(vendedorData.id);
-      if (!rotaData) {
-        console.error('Rota não encontrada');
+      // Estratégia 1: Tentar buscar como vendedor (user_id → vendedor → rota)
+      vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
+      
+      if (vendedorData) {
+        // Usuário é vendedor, buscar rota vinculada a ele
+        rotaData = await liquidacaoService.buscarRotaVendedor(vendedorData.id);
+        rotaId = rotaData?.id || null;
+      }
+      
+      // Estratégia 2: Se não é vendedor, usar rota do contexto (admin/monitor)
+      if (!rotaId && rotaIdContexto) {
+        rotaId = rotaIdContexto;
+        
+        // Buscar dados da rota pelo ID do contexto
+        rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto);
+        
+        // Buscar vendedor vinculado a essa rota
+        if (rotaData) {
+          vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
+        }
+      }
+
+      // Se não tem rota de nenhuma forma
+      if (!rotaId || !rotaData) {
+        console.log('Nenhuma rota encontrada');
+        setSemRotaSelecionada(true);
         setLoading(false);
         return;
       }
+
+      setVendedor(vendedorData);
       setRota(rotaData);
 
       // Buscar saldo da conta
-      const contaData = await liquidacaoService.buscarSaldoContaRota(rotaData.id);
+      const contaData = await liquidacaoService.buscarSaldoContaRota(rotaId);
       setSaldoConta(contaData?.saldo_atual || 0);
 
       // Buscar liquidação aberta
-      const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaData.id);
+      const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaId);
       setLiquidacao(liquidacaoData);
 
       if (liquidacaoData) {
         // Buscar dados complementares
-        await carregarDadosLiquidacao(liquidacaoData, rotaData.id);
+        await carregarDadosLiquidacao(liquidacaoData, rotaId);
       }
 
       // Buscar meta
-      const meta = await liquidacaoService.buscarMetaRota(rotaData.id);
+      const meta = await liquidacaoService.buscarMetaRota(rotaId);
       setMetaDia(meta);
 
     } catch (error) {
@@ -519,7 +543,7 @@ export default function LiquidacaoDiariaPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId]);
+  }, [userId, rotaIdContexto]);
 
   // Carregar dados específicos da liquidação
   const carregarDadosLiquidacao = async (liq: LiquidacaoDiaria, rotaId: string) => {
@@ -551,12 +575,12 @@ export default function LiquidacaoDiariaPage() {
 
   // Abrir liquidação
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
-    if (!vendedor || !rota || !userId) return;
+    if (!rota || !userId) return;
     
     setLoadingAcao(true);
     try {
       const resultado = await liquidacaoService.abrirLiquidacao({
-        vendedor_id: vendedor.id,
+        vendedor_id: vendedor?.id || '', // Pode ser vazio se admin está abrindo
         rota_id: rota.id,
         caixa_inicial: caixaInicial,
         user_id: userId,
@@ -613,14 +637,14 @@ export default function LiquidacaoDiariaPage() {
     );
   }
 
-  // Sem vendedor/rota
-  if (!vendedor || !rota) {
+  // Sem rota selecionada
+  if (semRotaSelecionada || !rota) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
         <AlertCircle className="w-16 h-16 text-amber-500 mb-4" />
-        <h2 className="text-xl font-semibold text-gray-900 mb-2">Configuração Necessária</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-2">Selecione uma Rota</h2>
         <p className="text-gray-500 text-center max-w-md">
-          Você precisa estar vinculado a uma rota como vendedor para acessar a liquidação diária.
+          Selecione uma rota no menu superior para visualizar a liquidação diária.
         </p>
       </div>
     );
@@ -628,10 +652,18 @@ export default function LiquidacaoDiariaPage() {
 
   // Sem liquidação aberta - mostrar tela de iniciar
   if (!liquidacao) {
+    // Se não tem vendedor, criar um placeholder
+    const vendedorExibicao = vendedor || {
+      id: '',
+      nome: 'Sem vendedor vinculado',
+      codigo_vendedor: '-',
+      status: 'INATIVO',
+    };
+    
     return (
       <>
         <TelaIniciarDia
-          vendedor={vendedor}
+          vendedor={vendedorExibicao}
           rota={rota}
           saldoConta={saldoConta}
           onAbrir={() => setModalAbrir(true)}
@@ -673,14 +705,14 @@ export default function LiquidacaoDiariaPage() {
           <div className="flex items-start justify-between mb-6">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
-                {vendedor.nome.charAt(0)}
+                {vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}
               </div>
               <div>
-                <h2 className="text-xl font-bold text-gray-900">{vendedor.nome}</h2>
+                <h2 className="text-xl font-bold text-gray-900">{vendedor?.nome || 'Vendedor não vinculado'}</h2>
                 <p className="text-gray-500 flex items-center gap-1">
                   <MapPin className="w-4 h-4" />
                   {rota.nome}
-                  {vendedor.telefone && (
+                  {vendedor?.telefone && (
                     <>
                       <Phone className="w-4 h-4 ml-2" />
                       {vendedor.telefone}

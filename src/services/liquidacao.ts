@@ -85,6 +85,75 @@ export const liquidacaoService = {
   },
 
   // ==================================================
+  // BUSCAR ROTA POR ID (para admin/monitor)
+  // ==================================================
+  async buscarRotaPorId(rotaId: string): Promise<RotaLiquidacao | null> {
+    const supabase = createClient();
+    
+    const { data, error } = await supabase
+      .from('rotas')
+      .select(`
+        id, 
+        nome, 
+        codigo,
+        empresa_id,
+        cidades (nome)
+      `)
+      .eq('id', rotaId)
+      .single();
+    
+    if (error) {
+      console.error('Erro ao buscar rota por ID:', error);
+      return null;
+    }
+    
+    const cidadeNome = Array.isArray(data.cidades) 
+      ? data.cidades[0]?.nome 
+      : (data.cidades as any)?.nome;
+    
+    return {
+      id: data.id,
+      nome: data.nome,
+      codigo: data.codigo,
+      empresa_id: data.empresa_id,
+      cidade_nome: cidadeNome,
+    };
+  },
+
+  // ==================================================
+  // BUSCAR VENDEDOR DA ROTA (para admin/monitor)
+  // ==================================================
+  async buscarVendedorDaRota(rotaId: string): Promise<VendedorLiquidacao | null> {
+    const supabase = createClient();
+    
+    // Primeiro buscar o vendedor_id da rota
+    const { data: rotaData, error: rotaError } = await supabase
+      .from('rotas')
+      .select('vendedor_id')
+      .eq('id', rotaId)
+      .single();
+    
+    if (rotaError || !rotaData?.vendedor_id) {
+      console.log('Rota sem vendedor vinculado');
+      return null;
+    }
+    
+    // Buscar dados do vendedor
+    const { data, error } = await supabase
+      .from('vendedores')
+      .select('id, nome, codigo_vendedor, telefone, email, foto_url, status')
+      .eq('id', rotaData.vendedor_id)
+      .single();
+    
+    if (error) {
+      console.error('Erro ao buscar vendedor da rota:', error);
+      return null;
+    }
+    
+    return data;
+  },
+
+  // ==================================================
   // BUSCAR SALDO DA CONTA DA ROTA
   // ==================================================
   async buscarSaldoContaRota(rotaId: string): Promise<ContaRota | null> {
