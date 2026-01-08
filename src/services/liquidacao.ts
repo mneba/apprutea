@@ -70,9 +70,17 @@ export const liquidacaoService = {
       return null;
     }
     
+    // Tipagem segura para o join
+    const cidadeNome = Array.isArray(data.cidades) 
+      ? data.cidades[0]?.nome 
+      : (data.cidades as any)?.nome;
+    
     return {
-      ...data,
-      cidade_nome: data.cidades?.nome,
+      id: data.id,
+      nome: data.nome,
+      codigo: data.codigo,
+      empresa_id: data.empresa_id,
+      cidade_nome: cidadeNome,
     };
   },
 
