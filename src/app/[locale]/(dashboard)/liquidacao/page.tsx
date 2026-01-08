@@ -17,18 +17,10 @@ import {
   Banknote,
   CreditCard,
   RefreshCw,
-  UserPlus,
-  UserMinus,
-  UserCheck,
   Target,
-  PieChart,
   Receipt,
   DollarSign,
-  ArrowUpRight,
-  ArrowDownRight,
-  Percent,
   MapPin,
-  Phone,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
@@ -62,6 +54,42 @@ function formatarDataHora(data: string | null | undefined): string {
 function calcularPercentual(atual: number, meta: number): number {
   if (meta === 0) return 0;
   return Math.round((atual / meta) * 100);
+}
+
+// =====================================================
+// VALIDAÇÃO DE PERMISSÃO POR TIPO DE USUÁRIO
+// =====================================================
+
+function validarPermissaoRota(
+  tipoUsuario: string | undefined,
+  rotaId: string,
+  userProfile: any
+): boolean {
+  if (!tipoUsuario || !rotaId) return false;
+  
+  // SUPER_ADMIN: acesso total
+  if (tipoUsuario === 'SUPER_ADMIN') {
+    return true;
+  }
+  
+  // ADMIN: verifica se tem empresas permitidas
+  if (tipoUsuario === 'ADMIN') {
+    const empresasPermitidas = userProfile?.empresas_ids || [];
+    return empresasPermitidas.length > 0;
+  }
+  
+  // MONITOR e USUARIO_PADRAO: verifica se rota está no array rotas_ids
+  if (tipoUsuario === 'MONITOR' || tipoUsuario === 'USUARIO_PADRAO') {
+    const rotasPermitidas = userProfile?.rotas_ids || [];
+    return rotasPermitidas.includes(rotaId);
+  }
+  
+  // VENDEDOR: não usa este fluxo (tem rota própria)
+  if (tipoUsuario === 'VENDEDOR') {
+    return true;
+  }
+  
+  return false;
 }
 
 // =====================================================
@@ -395,7 +423,6 @@ export default function LiquidacaoDiariaPage() {
   const [semRotaSelecionada, setSemRotaSelecionada] = useState(false);
   
   // States de operações
-  const [movimentacoes, setMovimentacoes] = useState({ receitas: 0, despesas: 0, retiradas: 0 });
   const [emprestimos, setEmprestimos] = useState({ total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 });
   const [metaDia, setMetaDia] = useState(0);
   
@@ -419,6 +446,9 @@ export default function LiquidacaoDiariaPage() {
       let vendedorData: VendedorLiquidacao | null = null;
       let rotaData: RotaLiquidacao | null = null;
 
+      // ==============================================
+      // VENDEDOR: Buscar sua rota diretamente
+      // ==============================================
       if (tipoUsuario === 'VENDEDOR') {
         vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
         if (vendedorData) {
@@ -427,11 +457,42 @@ export default function LiquidacaoDiariaPage() {
         }
       }
       
+      // ==============================================
+      // ADMIN/MONITOR/USUARIO_PADRAO: Usar contexto
+      // ==============================================
       if (!rotaId && rotaIdContexto) {
+        // Validar se o usuário tem permissão para esta rota
+        const temPermissao = validarPermissaoRota(tipoUsuario, rotaIdContexto, profile);
+        
+        if (!temPermissao) {
+          console.warn('Usuário não tem permissão para acessar esta rota');
+          setSemRotaSelecionada(true);
+          setLoading(false);
+          return;
+        }
+        
         rotaId = rotaIdContexto;
         rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto, empresaId || undefined);
+        
         if (rotaData) {
           vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
+        }
+      }
+      
+      // ==============================================
+      // FALLBACK: Usar última rota selecionada
+      // ==============================================
+      if (!rotaId && profile?.ultima_rota_id) {
+        const ultimaRotaId = profile.ultima_rota_id;
+        const temPermissao = validarPermissaoRota(tipoUsuario, ultimaRotaId, profile);
+        
+        if (temPermissao) {
+          rotaId = ultimaRotaId;
+          rotaData = await liquidacaoService.buscarRotaPorId(ultimaRotaId, empresaId || undefined);
+          
+          if (rotaData) {
+            vendedorData = await liquidacaoService.buscarVendedorDaRota(ultimaRotaId);
+          }
         }
       }
 
@@ -444,9 +505,11 @@ export default function LiquidacaoDiariaPage() {
       setVendedor(vendedorData);
       setRota(rotaData);
 
+      // Buscar saldo da conta
       const contaData = await liquidacaoService.buscarSaldoContaRota(rotaId);
       setSaldoConta(contaData?.saldo_atual || 0);
 
+      // Buscar liquidação aberta
       const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaId);
       setLiquidacao(liquidacaoData);
 
@@ -454,6 +517,7 @@ export default function LiquidacaoDiariaPage() {
         await carregarDadosLiquidacao(liquidacaoData, rotaId);
       }
 
+      // Buscar meta da rota
       const meta = await liquidacaoService.buscarMetaRota(rotaId);
       setMetaDia(meta);
 
@@ -462,21 +526,21 @@ export default function LiquidacaoDiariaPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, rotaIdContexto, empresaId, profile?.tipo_usuario]);
+  }, [userId, rotaIdContexto, empresaId, profile]);
 
   const carregarDadosLiquidacao = async (liq: LiquidacaoDiaria, rotaId: string) => {
     try {
       const dataVencimento = liq.data_abertura.split('T')[0];
       
+      // Buscar clientes do dia
       const clientes = await liquidacaoService.buscarClientesDoDia(rotaId, dataVencimento);
       setClientesDia(clientes);
       
+      // Calcular estatísticas
       const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
       setEstatisticas(stats);
 
-      const movs = await liquidacaoService.buscarMovimentacoesDoDia(liq.id);
-      setMovimentacoes(movs);
-
+      // Buscar empréstimos do dia
       const emps = await liquidacaoService.buscarEmprestimosDoDia(liq.id);
       setEmprestimos(emps);
 
@@ -907,27 +971,35 @@ export default function LiquidacaoDiariaPage() {
                       <div className="flex items-center gap-2">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
                           cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
-                          cliente.status_dia === 'VENCIDO' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                          cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                         }`}>
-                          {cliente.cliente_nome?.charAt(0)}
+                          {cliente.nome?.charAt(0)}
                         </div>
-                        <span className="font-medium text-gray-900">{cliente.cliente_nome}</span>
+                        <div>
+                          <span className="font-medium text-gray-900">{cliente.nome}</span>
+                          {cliente.tem_parcelas_vencidas && (
+                            <span className="ml-2 text-xs text-red-500">({cliente.total_parcelas_vencidas} vencida(s))</span>
+                          )}
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center text-gray-600">{cliente.numero_parcela}</td>
+                    <td className="px-4 py-3 text-center text-gray-600">
+                      {cliente.numero_parcela}/{cliente.numero_parcelas}
+                    </td>
                     <td className="px-4 py-3 text-right font-medium">{formatarMoeda(cliente.valor_parcela)}</td>
                     <td className="px-4 py-3 text-right">
-                      <span className={cliente.valor_pago > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
-                        {cliente.valor_pago > 0 ? formatarMoeda(cliente.valor_pago) : '-'}
+                      <span className={cliente.valor_pago_parcela > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
+                        {cliente.valor_pago_parcela > 0 ? formatarMoeda(cliente.valor_pago_parcela) : '-'}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
                         cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
-                        cliente.status_dia === 'VENCIDO' ? 'bg-red-100 text-red-700' : 
+                        cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 
+                        cliente.status_dia === 'PARCIAL' ? 'bg-amber-100 text-amber-700' :
                         'bg-yellow-100 text-yellow-700'
                       }`}>
-                        {cliente.status_dia}
+                        {cliente.status_dia === 'EM_ATRASO' ? 'ATRASADO' : cliente.status_dia}
                       </span>
                     </td>
                   </tr>

@@ -1,6 +1,6 @@
 // =====================================================
 // SERVICE DO MÓDULO DE LIQUIDAÇÃO DIÁRIA - SISTEMA APPRUTEA
-// Integrado com Functions do Supabase
+// Conectado ao Supabase Real
 // =====================================================
 
 import { createClient } from '@/lib/supabase/client';
@@ -27,7 +27,7 @@ import type {
 
 export const liquidacaoService = {
   // ==================================================
-  // BUSCAR VENDEDOR LOGADO
+  // BUSCAR VENDEDOR POR USER_ID (usuário logado)
   // ==================================================
   async buscarVendedorPorUserId(userId: string): Promise<VendedorLiquidacao | null> {
     const supabase = createClient();
@@ -75,9 +75,6 @@ export const liquidacaoService = {
   // BUSCAR ROTA POR ID (para admin/monitor)
   // ==================================================
   async buscarRotaPorId(rotaId: string, empresaId?: string): Promise<RotaLiquidacao | null> {
-    console.log('buscarRotaPorId - rotaId recebido:', rotaId);
-    console.log('buscarRotaPorId - empresaId recebido:', empresaId);
-    
     if (!rotaId) {
       console.log('buscarRotaPorId - rotaId é null/undefined');
       return null;
@@ -85,13 +82,11 @@ export const liquidacaoService = {
     
     const supabase = createClient();
     
-    // Query básica
     let query = supabase
       .from('rotas')
       .select('id, nome, empresa_id')
       .eq('id', rotaId);
     
-    // Se tiver empresa_id, adicionar filtro (pode ser necessário para RLS)
     if (empresaId) {
       query = query.eq('empresa_id', empresaId);
     }
@@ -103,10 +98,7 @@ export const liquidacaoService = {
       return null;
     }
     
-    console.log('buscarRotaPorId - data retornado:', data);
-    
     if (!data || data.length === 0) {
-      console.log('buscarRotaPorId - Nenhuma rota encontrada com esse ID');
       return null;
     }
     
@@ -164,7 +156,7 @@ export const liquidacaoService = {
       .eq('rota_id', rotaId)
       .eq('tipo_conta', 'ROTA')
       .eq('status', 'ATIVA')
-      .single();
+      .maybeSingle();
     
     if (error) {
       console.error('Erro ao buscar saldo da conta:', error);
@@ -255,7 +247,7 @@ export const liquidacaoService = {
   },
 
   // ==================================================
-  // ABRIR LIQUIDAÇÃO DIÁRIA
+  // ABRIR LIQUIDAÇÃO DIÁRIA (via RPC)
   // ==================================================
   async abrirLiquidacao(input: AbrirLiquidacaoInput): Promise<RespostaAbrirLiquidacao> {
     const supabase = createClient();
@@ -289,7 +281,7 @@ export const liquidacaoService = {
   },
 
   // ==================================================
-  // FECHAR LIQUIDAÇÃO DIÁRIA
+  // FECHAR LIQUIDAÇÃO DIÁRIA (via RPC)
   // ==================================================
   async fecharLiquidacao(input: FecharLiquidacaoInput): Promise<RespostaFecharLiquidacao> {
     const supabase = createClient();
@@ -329,7 +321,7 @@ export const liquidacaoService = {
   },
 
   // ==================================================
-  // REABRIR LIQUIDAÇÃO DIÁRIA
+  // REABRIR LIQUIDAÇÃO DIÁRIA (via RPC)
   // ==================================================
   async reabrirLiquidacao(input: ReabrirLiquidacaoInput): Promise<{ sucesso: boolean; mensagem: string }> {
     const supabase = createClient();
@@ -357,7 +349,7 @@ export const liquidacaoService = {
   },
 
   // ==================================================
-  // BUSCAR CLIENTES DO DIA
+  // BUSCAR CLIENTES DO DIA (via view vw_clientes_rota_dia)
   // ==================================================
   async buscarClientesDoDia(
     rotaId: string,
@@ -366,6 +358,7 @@ export const liquidacaoService = {
   ): Promise<ClienteDoDia[]> {
     const supabase = createClient();
     
+    // Query na view vw_clientes_rota_dia
     let query = supabase
       .from('vw_clientes_rota_dia')
       .select('*')
@@ -373,16 +366,13 @@ export const liquidacaoService = {
       .eq('data_vencimento', dataVencimento)
       .order('ordem_visita_dia', { ascending: true, nullsFirst: false });
     
+    // Aplicar filtros
     if (filtros?.status) {
       query = query.eq('status_dia', filtros.status);
     }
     
-    if (filtros?.forma_pagamento) {
-      query = query.eq('forma_pagamento', filtros.forma_pagamento);
-    }
-    
     if (filtros?.busca) {
-      query = query.ilike('cliente_nome', `%${filtros.busca}%`);
+      query = query.ilike('nome', `%${filtros.busca}%`);
     }
     
     const { data, error } = await query;
@@ -401,12 +391,12 @@ export const liquidacaoService = {
   calcularEstatisticasClientesDia(clientes: ClienteDoDia[]): EstatisticasClientesDia {
     return {
       total: clientes.length,
-      sincronizados: clientes.filter(c => c.valor_pago > 0 || c.status_dia === 'PAGO').length,
-      novos: 0, // Seria calculado de outra forma
+      sincronizados: clientes.filter(c => c.valor_pago_parcela > 0 || c.status_dia === 'PAGO').length,
+      novos: 0,
       renovados: 0,
       cancelados: 0,
-      pagos_dinheiro: clientes.filter(c => c.forma_pagamento === 'DINHEIRO' && c.status_dia === 'PAGO').length,
-      pagos_transferencia: clientes.filter(c => c.forma_pagamento === 'TRANSFERENCIA' && c.status_dia === 'PAGO').length,
+      pagos_dinheiro: 0, // Seria calculado se tivesse forma_pagamento
+      pagos_transferencia: 0,
     };
   },
 
@@ -423,7 +413,11 @@ export const liquidacaoService = {
         valor,
         emprestimo_id,
         data_venda,
-        clientes!inner (nome)
+        emprestimos!inner (
+          clientes!inner (
+            nome
+          )
+        )
       `)
       .eq('liquidacao_id', liquidacaoId)
       .order('created_at', { ascending: true });
@@ -435,9 +429,9 @@ export const liquidacaoService = {
     
     return (data || []).map((m: any) => ({
       id: m.id,
-      valor: m.valor,
+      valor: Number(m.valor) || 0,
       emprestimo_id: m.emprestimo_id,
-      cliente_nome: m.clientes?.nome || 'N/A',
+      cliente_nome: m.emprestimos?.clientes?.nome || 'N/A',
       data_venda: m.data_venda,
     }));
   },
@@ -521,19 +515,22 @@ export const liquidacaoService = {
   async buscarMetaRota(rotaId: string): Promise<number> {
     const supabase = createClient();
     
-    // Buscar meta configurada na rota ou calcular baseado em parcelas do dia
-    const { data, error } = await supabase
-      .from('rotas')
-      .select('meta_diaria')
-      .eq('id', rotaId)
-      .single();
+    // Calcular meta baseado nas parcelas pendentes do dia
+    const hoje = new Date().toISOString().split('T')[0];
     
-    if (error || !data?.meta_diaria) {
-      // Se não tem meta configurada, calcula baseado nas parcelas pendentes
+    const { data, error } = await supabase
+      .from('emprestimo_parcelas')
+      .select('valor_parcela')
+      .eq('rota_id', rotaId)
+      .eq('data_vencimento', hoje)
+      .in('status', ['PENDENTE', 'PARCIAL', 'VENCIDO']);
+    
+    if (error) {
+      console.error('Erro ao calcular meta:', error);
       return 0;
     }
     
-    return Number(data.meta_diaria) || 0;
+    return (data || []).reduce((acc, p) => acc + Number(p.valor_parcela || 0), 0);
   },
 
   // ==================================================
@@ -543,58 +540,43 @@ export const liquidacaoService = {
     const supabase = createClient();
     
     const { data: parcelas, error } = await supabase
-      .from('vw_clientes_rota_dia')
+      .from('emprestimo_parcelas')
       .select('valor_parcela')
       .eq('rota_id', rotaId)
-      .eq('data_vencimento', data);
+      .eq('data_vencimento', data)
+      .in('status', ['PENDENTE', 'PARCIAL', 'VENCIDO']);
     
     if (error) {
       console.error('Erro ao calcular valor esperado:', error);
       return 0;
     }
     
-    return (parcelas || []).reduce((acc, p) => acc + Number(p.valor_parcela), 0);
+    return (parcelas || []).reduce((acc, p) => acc + Number(p.valor_parcela || 0), 0);
   },
 
   // ==================================================
-  // HELPERS
+  // ATUALIZAR ÚLTIMA LOCALIZAÇÃO DO USUÁRIO
   // ==================================================
-  
-  formatarDataHora(dataISO: string): string {
-    if (!dataISO) return '-';
-    return new Date(dataISO).toLocaleString('pt-BR');
+  async atualizarUltimaLocalizacao(
+    userId: string,
+    empresaId?: string,
+    cidadeId?: string,
+    rotaId?: string
+  ): Promise<boolean> {
+    const supabase = createClient();
+    
+    const { error } = await supabase.rpc('fn_atualizar_ultima_localizacao', {
+      p_user_id: userId,
+      p_empresa_id: empresaId || null,
+      p_cidade_id: cidadeId || null,
+      p_rota_id: rotaId || null,
+    });
+    
+    if (error) {
+      console.error('Erro ao atualizar última localização:', error);
+      return false;
+    }
+    
+    return true;
   },
-
-  formatarData(dataISO: string): string {
-    if (!dataISO) return '-';
-    return new Date(dataISO + 'T00:00:00').toLocaleDateString('pt-BR');
-  },
-
-  formatarMoeda(valor: number): string {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL',
-    }).format(valor || 0);
-  },
-
-  calcularPercentual(atual: number, meta: number): number {
-    if (!meta || meta === 0) return 0;
-    return Math.round((atual / meta) * 100);
-  },
-
-  getDataHoje(): string {
-    return new Date().toISOString().split('T')[0];
-  },
-};
-
-// =====================================================
-// HOOKS DE CACHE (se usar React Query)
-// =====================================================
-
-export const liquidacaoKeys = {
-  all: ['liquidacao'] as const,
-  aberta: (rotaId: string) => [...liquidacaoKeys.all, 'aberta', rotaId] as const,
-  historico: (rotaId: string) => [...liquidacaoKeys.all, 'historico', rotaId] as const,
-  clientesDia: (rotaId: string, data: string) => [...liquidacaoKeys.all, 'clientes', rotaId, data] as const,
-  detalhe: (id: string) => [...liquidacaoKeys.all, 'detalhe', id] as const,
 };
