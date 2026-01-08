@@ -454,6 +454,13 @@ export default function LiquidacaoDiariaPage() {
   const userId = profile?.user_id;
   const rotaIdContexto = localizacao?.rota_id;
   const empresaId = localizacao?.empresa_id;
+  
+  // DEBUG: Ver estrutura completa do contexto
+  console.log('=== DEBUG CONTEXTO ===');
+  console.log('profile:', profile);
+  console.log('localizacao completo:', localizacao);
+  console.log('rotaIdContexto:', rotaIdContexto);
+  console.log('empresaId:', empresaId);
 
   // States principais
   const [vendedor, setVendedor] = useState<VendedorLiquidacao | null>(null);
@@ -483,8 +490,10 @@ export default function LiquidacaoDiariaPage() {
     setLoading(true);
     setSemRotaSelecionada(false);
     
+    const tipoUsuario = profile?.tipo_usuario;
     console.log('=== carregarDados ===');
     console.log('userId:', userId);
+    console.log('tipoUsuario:', tipoUsuario);
     console.log('rotaIdContexto:', rotaIdContexto);
     
     try {
@@ -492,18 +501,19 @@ export default function LiquidacaoDiariaPage() {
       let vendedorData: VendedorLiquidacao | null = null;
       let rotaData: RotaLiquidacao | null = null;
 
-      // Estratégia 1: Tentar buscar como vendedor (user_id → vendedor → rota)
-      vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
-      console.log('vendedorData:', vendedorData);
-      
-      if (vendedorData) {
-        // Usuário é vendedor, buscar rota vinculada a ele
-        rotaData = await liquidacaoService.buscarRotaVendedor(vendedorData.id);
-        rotaId = rotaData?.id || null;
-        console.log('Rota do vendedor:', rotaData);
+      // Se é vendedor, buscar sua rota
+      if (tipoUsuario === 'VENDEDOR') {
+        vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
+        console.log('vendedorData:', vendedorData);
+        
+        if (vendedorData) {
+          rotaData = await liquidacaoService.buscarRotaVendedor(vendedorData.id);
+          rotaId = rotaData?.id || null;
+          console.log('Rota do vendedor:', rotaData);
+        }
       }
       
-      // Estratégia 2: Se não é vendedor, usar rota do contexto (admin/monitor)
+      // Se não é vendedor ou não achou rota, usar contexto
       if (!rotaId && rotaIdContexto) {
         rotaId = rotaIdContexto;
         console.log('Usando rota do contexto:', rotaIdContexto);
@@ -512,7 +522,7 @@ export default function LiquidacaoDiariaPage() {
         rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto);
         console.log('rotaData via buscarRotaPorId:', rotaData);
         
-        // Buscar vendedor vinculado a essa rota
+        // Buscar vendedor vinculado a essa rota (se existir)
         if (rotaData) {
           vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
           console.log('vendedorData da rota:', vendedorData);
@@ -553,7 +563,7 @@ export default function LiquidacaoDiariaPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, rotaIdContexto]);
+  }, [userId, rotaIdContexto, profile?.tipo_usuario]);
 
   // Carregar dados específicos da liquidação
   const carregarDadosLiquidacao = async (liq: LiquidacaoDiaria, rotaId: string) => {

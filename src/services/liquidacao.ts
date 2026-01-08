@@ -77,6 +77,13 @@ export const liquidacaoService = {
   // BUSCAR ROTA POR ID (para admin/monitor)
   // ==================================================
   async buscarRotaPorId(rotaId: string): Promise<RotaLiquidacao | null> {
+    console.log('buscarRotaPorId - rotaId recebido:', rotaId);
+    
+    if (!rotaId) {
+      console.log('buscarRotaPorId - rotaId é null/undefined');
+      return null;
+    }
+    
     const supabase = createClient();
     
     const { data, error } = await supabase
@@ -89,6 +96,8 @@ export const liquidacaoService = {
       console.error('Erro ao buscar rota por ID:', error);
       return null;
     }
+    
+    console.log('buscarRotaPorId - data retornado:', data);
     
     return {
       id: data.id,
