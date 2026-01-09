@@ -350,57 +350,121 @@ function TelaIniciarDia({
   saldoConta,
   onAbrir,
   loading,
+  mostrarCalendario,
+  onToggleCalendario,
+  calendarioProps,
 }: {
   vendedor: VendedorLiquidacao | null;
   rota: RotaLiquidacao;
   saldoConta: number;
   onAbrir: () => void;
   loading: boolean;
+  mostrarCalendario: boolean;
+  onToggleCalendario: () => void;
+  calendarioProps: {
+    liquidacoesMes: LiquidacaoDiaria[];
+    resumoParcelas: Map<string, { quantidade: number; valor: number }>;
+    dataSelecionada: Date;
+    onSelecionarData: (data: Date) => void;
+    onMesChange: (ano: number, mes: number) => void;
+    loadingCalendario: boolean;
+  };
 }) {
   return (
-    <div className="min-h-[60vh] flex flex-col items-center justify-center p-8">
-      <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
-        <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-          <Play className="w-8 h-8 text-white" />
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
+          <p className="text-gray-500 text-sm flex items-center gap-2 mt-1">
+            <MapPin className="w-4 h-4" />
+            {rota.nome}
+            {vendedor && (
+              <>
+                <span className="text-gray-300">•</span>
+                {vendedor.nome}
+              </>
+            )}
+          </p>
         </div>
-        
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Iniciar o Dia</h2>
-        <p className="text-gray-500 text-sm mb-6">
-          Nenhuma liquidação aberta. Inicie sua sessão de trabalho.
-        </p>
-
-        <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-          <div className="flex items-center gap-3 mb-3">
-            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-              <span className="text-sm font-bold text-blue-600">
-                {vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}
-              </span>
-            </div>
-            <div>
-              <p className="font-medium text-gray-900 text-sm">{vendedor?.nome || 'Vendedor não vinculado'}</p>
-              <p className="text-xs text-gray-500">{rota.nome}</p>
-            </div>
-          </div>
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-gray-500">Saldo disponível:</span>
-            <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
-          </div>
-        </div>
-
         <button
-          onClick={onAbrir}
-          disabled={loading}
-          className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+          onClick={onToggleCalendario}
+          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+            mostrarCalendario 
+              ? 'bg-blue-100 text-blue-700' 
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
         >
-          {loading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <>
-              <Play className="w-5 h-5" />
-              Abrir Liquidação
-            </>
-          )}
+          <CalendarDays className="w-4 h-4" />
+          Calendário
         </button>
+      </div>
+
+      {/* Layout com ou sem calendário */}
+      <div className={`grid gap-6 ${mostrarCalendario ? 'lg:grid-cols-3' : ''}`}>
+        {/* Calendário */}
+        {mostrarCalendario && (
+          <div className="lg:col-span-1">
+            <CalendarioLiquidacao
+              rotaId={rota.id}
+              liquidacoesMes={calendarioProps.liquidacoesMes}
+              resumoParcelas={calendarioProps.resumoParcelas}
+              dataSelecionada={calendarioProps.dataSelecionada}
+              onSelecionarData={calendarioProps.onSelecionarData}
+              onMesChange={calendarioProps.onMesChange}
+              loading={calendarioProps.loadingCalendario}
+            />
+          </div>
+        )}
+
+        {/* Card Iniciar Dia */}
+        <div className={mostrarCalendario ? 'lg:col-span-2' : ''}>
+          <div className="flex items-center justify-center min-h-[50vh]">
+            <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
+              <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
+                <Play className="w-8 h-8 text-white" />
+              </div>
+              
+              <h2 className="text-xl font-bold text-gray-900 mb-2">Iniciar o Dia</h2>
+              <p className="text-gray-500 text-sm mb-6">
+                Nenhuma liquidação aberta. Inicie sua sessão de trabalho.
+              </p>
+
+              <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span className="text-sm font-bold text-blue-600">
+                      {vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900 text-sm">{vendedor?.nome || 'Vendedor não vinculado'}</p>
+                    <p className="text-xs text-gray-500">{rota.nome}</p>
+                  </div>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-gray-500">Saldo disponível:</span>
+                  <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
+                </div>
+              </div>
+
+              <button
+                onClick={onAbrir}
+                disabled={loading}
+                className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loading ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <>
+                    <Play className="w-5 h-5" />
+                    Abrir Liquidação
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -739,7 +803,7 @@ export default function LiquidacaoDiariaPage() {
   }
 
   // Sem liquidação
-  if (!liquidacao) {
+  if (!liquidacao && !visualizandoOutroDia) {
     return (
       <>
         <TelaIniciarDia
@@ -748,6 +812,16 @@ export default function LiquidacaoDiariaPage() {
           saldoConta={saldoConta}
           onAbrir={() => setModalAbrir(true)}
           loading={loadingAcao}
+          mostrarCalendario={mostrarCalendario}
+          onToggleCalendario={() => setMostrarCalendario(!mostrarCalendario)}
+          calendarioProps={{
+            liquidacoesMes,
+            resumoParcelas,
+            dataSelecionada,
+            onSelecionarData: handleSelecionarData,
+            onMesChange: handleMesChange,
+            loadingCalendario,
+          }}
         />
         <ModalAbrirLiquidacao
           isOpen={modalAbrir}
