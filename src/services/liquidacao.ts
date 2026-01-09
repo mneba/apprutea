@@ -579,4 +579,148 @@ export const liquidacaoService = {
     
     return true;
   },
+
+  // ==================================================
+  // BUSCAR LIQUIDAÇÕES DO MÊS (para calendário)
+  // ==================================================
+  async buscarLiquidacoesMes(
+    rotaId: string,
+    ano: number,
+    mes: number
+  ): Promise<LiquidacaoDiaria[]> {
+    const supabase = createClient();
+    
+    // Primeiro e último dia do mês
+    const primeiroDia = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    const ultimoDiaStr = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+    
+    const { data, error } = await supabase
+      .from('liquidacoes_diarias')
+      .select('*')
+      .eq('rota_id', rotaId)
+      .gte('data_abertura', primeiroDia)
+      .lte('data_abertura', ultimoDiaStr + 'T23:59:59')
+      .order('data_abertura', { ascending: true });
+    
+    if (error) {
+      console.error('Erro ao buscar liquidações do mês:', error);
+      return [];
+    }
+    
+    return data || [];
+  },
+
+  // ==================================================
+  // BUSCAR RESUMO DE PARCELAS POR DIA (para calendário)
+  // Retorna quantidade de parcelas e valor total por dia
+  // ==================================================
+  async buscarResumoParcelasMes(
+    rotaId: string,
+    ano: number,
+    mes: number
+  ): Promise<Map<string, { quantidade: number; valor: number }>> {
+    const supabase = createClient();
+    
+    const primeiroDia = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const ultimoDia = new Date(ano, mes, 0).getDate();
+    const ultimoDiaStr = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+    
+    const { data, error } = await supabase
+      .from('emprestimo_parcelas')
+      .select('data_vencimento, valor_parcela, status')
+      .eq('rota_id', rotaId)
+      .gte('data_vencimento', primeiroDia)
+      .lte('data_vencimento', ultimoDiaStr)
+      .in('status', ['PENDENTE', 'PARCIAL', 'VENCIDO']);
+    
+    if (error) {
+      console.error('Erro ao buscar resumo de parcelas:', error);
+      return new Map();
+    }
+    
+    // Agrupar por data
+    const resumo = new Map<string, { quantidade: number; valor: number }>();
+    
+    (data || []).forEach((parcela) => {
+      const dataStr = parcela.data_vencimento;
+      const atual = resumo.get(dataStr) || { quantidade: 0, valor: 0 };
+      resumo.set(dataStr, {
+        quantidade: atual.quantidade + 1,
+        valor: atual.valor + Number(parcela.valor_parcela || 0),
+      });
+    });
+    
+    return resumo;
+  },
+
+  // ==================================================
+  // BUSCAR LIQUIDAÇÃO POR DATA
+  // ==================================================
+  async buscarLiquidacaoPorData(
+    rotaId: string,
+    data: string
+  ): Promise<LiquidacaoDiaria | null> {
+    const supabase = createClient();
+    
+    const { data: liquidacoes, error } = await supabase
+      .from('liquidacoes_diarias')
+      .select('*')
+      .eq('rota_id', rotaId)
+      .gte('data_abertura', data)
+      .lt('data_abertura', data + 'T23:59:59')
+      .order('data_abertura', { ascending: false })
+      .limit(1);
+    
+    if (error) {
+      console.error('Erro ao buscar liquidação por data:', error);
+      return null;
+    }
+    
+    return liquidacoes?.[0] || null;
+  },
+
+  // ==================================================
+  // BUSCAR PREVISÃO DO DIA (para dias futuros)
+  // ==================================================
+  async buscarPrevisaoDia(
+    rotaId: string,
+    data: string
+  ): Promise<{
+    totalClientes: number;
+    totalParcelas: number;
+    valorEsperado: number;
+    parcelasVencidas: number;
+    valorVencido: number;
+  }> {
+    const supabase = createClient();
+    
+    const { data: parcelas, error } = await supabase
+      .from('vw_clientes_rota_dia')
+      .select('valor_parcela, status_dia, tem_parcelas_vencidas, valor_total_vencido, cliente_id')
+      .eq('rota_id', rotaId)
+      .eq('data_vencimento', data);
+    
+    if (error) {
+      console.error('Erro ao buscar previsão:', error);
+      return {
+        totalClientes: 0,
+        totalParcelas: 0,
+        valorEsperado: 0,
+        parcelasVencidas: 0,
+        valorVencido: 0,
+      };
+    }
+    
+    const dados = parcelas || [];
+    const clientesUnicos = new Set(dados.map(p => p.cliente_id));
+    
+    return {
+      totalClientes: clientesUnicos.size,
+      totalParcelas: dados.length,
+      valorEsperado: dados.reduce((acc, p) => acc + Number(p.valor_parcela || 0), 0),
+      parcelasVencidas: dados.filter(p => p.status_dia === 'EM_ATRASO').length,
+      valorVencido: dados.reduce((acc, p) => acc + Number(p.valor_total_vencido || 0), 0),
+    };
+  },
 };

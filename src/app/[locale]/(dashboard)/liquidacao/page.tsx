@@ -21,9 +21,12 @@ import {
   Receipt,
   DollarSign,
   MapPin,
+  CalendarDays,
+  ChevronLeft,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
+import { CalendarioLiquidacao } from '@/components/liquidacao/CalendarioLiquidacao';
 import type {
   LiquidacaoDiaria,
   VendedorLiquidacao,
@@ -426,8 +429,23 @@ export default function LiquidacaoDiariaPage() {
   const [emprestimos, setEmprestimos] = useState({ total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 });
   const [metaDia, setMetaDia] = useState(0);
   
+  // States do calendário
+  const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
+  const [liquidacoesMes, setLiquidacoesMes] = useState<LiquidacaoDiaria[]>([]);
+  const [resumoParcelas, setResumoParcelas] = useState<Map<string, { quantidade: number; valor: number }>>(new Map());
+  const [mostrarCalendario, setMostrarCalendario] = useState(false);
+  const [visualizandoOutroDia, setVisualizandoOutroDia] = useState(false);
+  const [previsaoDia, setPrevisaoDia] = useState<{
+    totalClientes: number;
+    totalParcelas: number;
+    valorEsperado: number;
+    parcelasVencidas: number;
+    valorVencido: number;
+  } | null>(null);
+  
   // States de UI
   const [loading, setLoading] = useState(true);
+  const [loadingCalendario, setLoadingCalendario] = useState(false);
   const [loadingAcao, setLoadingAcao] = useState(false);
   const [modalAbrir, setModalAbrir] = useState(false);
   const [modalFechar, setModalFechar] = useState(false);
@@ -549,9 +567,99 @@ export default function LiquidacaoDiariaPage() {
     }
   };
 
+  // Carregar dados do calendário (liquidações e parcelas do mês)
+  const carregarDadosCalendario = useCallback(async (rotaId: string, ano: number, mes: number) => {
+    setLoadingCalendario(true);
+    try {
+      const [liquidacoes, resumo] = await Promise.all([
+        liquidacaoService.buscarLiquidacoesMes(rotaId, ano, mes),
+        liquidacaoService.buscarResumoParcelasMes(rotaId, ano, mes),
+      ]);
+      
+      setLiquidacoesMes(liquidacoes);
+      setResumoParcelas(resumo);
+    } catch (error) {
+      console.error('Erro ao carregar dados do calendário:', error);
+    } finally {
+      setLoadingCalendario(false);
+    }
+  }, []);
+
+  // Quando o mês muda no calendário
+  const handleMesChange = useCallback((ano: number, mes: number) => {
+    if (rota) {
+      carregarDadosCalendario(rota.id, ano, mes);
+    }
+  }, [rota, carregarDadosCalendario]);
+
+  // Quando uma data é selecionada no calendário
+  const handleSelecionarData = useCallback(async (data: Date) => {
+    if (!rota) return;
+    
+    setDataSelecionada(data);
+    setLoadingCalendario(true);
+    
+    const dataStr = data.toISOString().split('T')[0];
+    const hoje = new Date().toISOString().split('T')[0];
+    
+    try {
+      // Verificar se é hoje
+      if (dataStr === hoje) {
+        setVisualizandoOutroDia(false);
+        setPrevisaoDia(null);
+        await carregarDados();
+        return;
+      }
+      
+      // Buscar liquidação para esta data
+      const liqData = await liquidacaoService.buscarLiquidacaoPorData(rota.id, dataStr);
+      
+      if (liqData) {
+        // Tem liquidação - carregar dados dela
+        setLiquidacao(liqData);
+        setVisualizandoOutroDia(true);
+        await carregarDadosLiquidacao(liqData, rota.id);
+        setPrevisaoDia(null);
+      } else {
+        // Não tem liquidação - carregar previsão
+        setLiquidacao(null);
+        setVisualizandoOutroDia(true);
+        
+        const previsao = await liquidacaoService.buscarPrevisaoDia(rota.id, dataStr);
+        setPrevisaoDia(previsao);
+        
+        // Buscar clientes do dia para a tabela
+        const clientes = await liquidacaoService.buscarClientesDoDia(rota.id, dataStr);
+        setClientesDia(clientes);
+      }
+      
+      setMostrarCalendario(false);
+    } catch (error) {
+      console.error('Erro ao selecionar data:', error);
+    } finally {
+      setLoadingCalendario(false);
+    }
+  }, [rota, carregarDados]);
+
+  // Voltar para hoje
+  const voltarParaHoje = useCallback(async () => {
+    setDataSelecionada(new Date());
+    setVisualizandoOutroDia(false);
+    setPrevisaoDia(null);
+    await carregarDados();
+  }, [carregarDados]);
+
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
+
+  // Carregar dados do calendário quando rota mudar
+  useEffect(() => {
+    if (rota) {
+      const agora = new Date();
+      carregarDadosCalendario(rota.id, agora.getFullYear(), agora.getMonth() + 1);
+    }
+  }, [rota, carregarDadosCalendario]);
 
   // Handlers
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
@@ -658,6 +766,35 @@ export default function LiquidacaoDiariaPage() {
 
   return (
     <div className="space-y-6">
+      {/* Banner - Visualizando outro dia */}
+      {visualizandoOutroDia && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CalendarDays className="w-5 h-5 text-amber-600" />
+            <div>
+              <p className="text-sm font-medium text-amber-800">
+                Visualizando {dataSelecionada.toLocaleDateString('pt-BR', { 
+                  weekday: 'long', 
+                  day: 'numeric', 
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </p>
+              <p className="text-xs text-amber-600">
+                {liquidacao ? `Liquidação ${liquidacao.status}` : 'Sem liquidação neste dia'}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={voltarParaHoje}
+            className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg text-sm font-medium transition-colors"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Voltar para Hoje
+          </button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -675,8 +812,22 @@ export default function LiquidacaoDiariaPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <BadgeStatus status={liquidacao.status} />
-          {liquidacao.status === 'ABERTO' && (
+          {/* Toggle Calendário */}
+          <button
+            onClick={() => setMostrarCalendario(!mostrarCalendario)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              mostrarCalendario 
+                ? 'bg-blue-100 text-blue-700' 
+                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+            }`}
+          >
+            <CalendarDays className="w-4 h-4" />
+            Calendário
+          </button>
+          
+          {liquidacao && <BadgeStatus status={liquidacao.status} />}
+          
+          {liquidacao?.status === 'ABERTO' && !visualizandoOutroDia && (
             <button
               onClick={() => setModalFechar(true)}
               className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
@@ -692,36 +843,89 @@ export default function LiquidacaoDiariaPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <CardResumo
           titulo="Caixa Inicial"
-          valor={formatarMoeda(liquidacao.caixa_inicial)}
+          valor={liquidacao ? formatarMoeda(liquidacao.caixa_inicial) : '-'}
           icone={Wallet}
           corIcone="text-blue-600"
           corFundo="bg-blue-50"
         />
         <CardResumo
           titulo="Caixa Final"
-          valor={formatarMoeda(liquidacao.caixa_final)}
+          valor={liquidacao ? formatarMoeda(liquidacao.caixa_final) : '-'}
           icone={Wallet}
           corIcone="text-green-600"
           corFundo="bg-green-50"
         />
         <CardResumo
           titulo="Carteira Inicial"
-          valor={formatarMoeda(liquidacao.carteira_inicial)}
+          valor={liquidacao ? formatarMoeda(liquidacao.carteira_inicial) : '-'}
           icone={TrendingUp}
           corIcone="text-purple-600"
           corFundo="bg-purple-50"
         />
         <CardResumo
           titulo="Carteira Final"
-          valor={formatarMoeda(liquidacao.carteira_final)}
+          valor={liquidacao ? formatarMoeda(liquidacao.carteira_final) : '-'}
           icone={TrendingUp}
           corIcone="text-indigo-600"
           corFundo="bg-indigo-50"
         />
       </div>
 
-      {/* Grid Principal */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Layout com Calendário */}
+      <div className={`grid gap-6 ${mostrarCalendario ? 'lg:grid-cols-4' : ''}`}>
+        {/* Calendário */}
+        {mostrarCalendario && rota && (
+          <div className="lg:col-span-1">
+            <CalendarioLiquidacao
+              rotaId={rota.id}
+              liquidacoesMes={liquidacoesMes}
+              resumoParcelas={resumoParcelas}
+              dataSelecionada={dataSelecionada}
+              onSelecionarData={handleSelecionarData}
+              onMesChange={handleMesChange}
+              loading={loadingCalendario}
+            />
+          </div>
+        )}
+
+        {/* Conteúdo Principal */}
+        <div className={mostrarCalendario ? 'lg:col-span-3' : ''}>
+          {/* Card de Previsão (quando não tem liquidação) */}
+          {!liquidacao && previsaoDia && visualizandoOutroDia && (
+            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 mb-6">
+              <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center gap-2">
+                <Target className="w-5 h-5" />
+                Previsão para {dataSelecionada.toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}
+              </h3>
+              
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="bg-white/70 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-blue-600">{previsaoDia.totalClientes}</p>
+                  <p className="text-sm text-gray-600">Clientes</p>
+                </div>
+                <div className="bg-white/70 rounded-lg p-4 text-center">
+                  <p className="text-3xl font-bold text-indigo-600">{previsaoDia.totalParcelas}</p>
+                  <p className="text-sm text-gray-600">Parcelas</p>
+                </div>
+                <div className="bg-white/70 rounded-lg p-4 text-center">
+                  <p className="text-2xl font-bold text-green-600">{formatarMoeda(previsaoDia.valorEsperado)}</p>
+                  <p className="text-sm text-gray-600">A Receber</p>
+                </div>
+                {previsaoDia.parcelasVencidas > 0 && (
+                  <div className="bg-white/70 rounded-lg p-4 text-center border border-red-200">
+                    <p className="text-2xl font-bold text-red-600">{previsaoDia.parcelasVencidas}</p>
+                    <p className="text-sm text-red-600">Em Atraso</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Grid Principal - só mostra se tem liquidação */}
+          {liquidacao && (
+            <>
+              {/* Grid de 3 colunas */}
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
         {/* Coluna 1 - Recaudo e Meta */}
         <div className="space-y-4">
           {/* Card Meta/Recaudo */}
@@ -939,6 +1143,10 @@ export default function LiquidacaoDiariaPage() {
               <p className="text-xs text-gray-500 mb-1">Observações</p>
               <p className="text-sm text-gray-700">{liquidacao.observacoes}</p>
             </div>
+          )}
+        </div>
+      </div>
+            </>
           )}
         </div>
       </div>
