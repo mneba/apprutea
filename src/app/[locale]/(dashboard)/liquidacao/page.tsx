@@ -131,15 +131,15 @@ function CardResumo({
   corFundo?: string;
 }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4">
+    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-gray-200/50 hover:-translate-y-1 hover:border-gray-300 cursor-default group">
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 ${corFundo} rounded-lg flex items-center justify-center`}>
-          <Icone className={`w-5 h-5 ${corIcone}`} />
+        <div className={`w-10 h-10 ${corFundo} rounded-lg flex items-center justify-center transition-transform duration-300 group-hover:scale-110`}>
+          <Icone className={`w-5 h-5 ${corIcone} transition-transform duration-300 group-hover:scale-110`} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-500 truncate">{titulo}</p>
-          <p className="text-lg font-bold text-gray-900">{valor}</p>
-          {subtitulo && <p className="text-xs text-gray-400">{subtitulo}</p>}
+          <p className="text-xs text-gray-500 truncate transition-colors duration-300 group-hover:text-gray-600">{titulo}</p>
+          <p className="text-lg font-bold text-gray-900 transition-colors duration-300 group-hover:text-gray-800">{valor}</p>
+          {subtitulo && <p className="text-xs text-gray-400 transition-colors duration-300 group-hover:text-gray-500">{subtitulo}</p>}
         </div>
       </div>
     </div>
@@ -1012,14 +1012,14 @@ export default function LiquidacaoDiariaPage() {
         {/* Coluna 1 - Recaudo e Meta */}
         <div className="space-y-4">
           {/* Card Meta/Recaudo */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Target className="w-4 h-4 text-blue-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
+              <Target className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:scale-110" />
               Meta do Dia
             </h3>
             
             <div className="text-center mb-4">
-              <p className="text-3xl font-bold text-gray-900">{percentualMeta}%</p>
+              <p className="text-3xl font-bold text-gray-900 transition-all duration-300 group-hover:scale-105">{percentualMeta}%</p>
               <p className="text-xs text-gray-500">de {formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</p>
             </div>
             
@@ -1033,14 +1033,14 @@ export default function LiquidacaoDiariaPage() {
           </div>
 
           {/* Card Pagamentos por Tipo */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-green-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
+              <CreditCard className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
               Recebimentos por Tipo
             </h3>
             
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
                 <div className="flex items-center gap-2">
                   <Banknote className="w-4 h-4 text-green-600" />
                   <span className="text-sm text-green-700">Dinheiro</span>
@@ -1048,7 +1048,7 @@ export default function LiquidacaoDiariaPage() {
                 <span className="font-semibold text-green-700">{formatarMoeda(liquidacao.valor_dinheiro)}</span>
               </div>
               
-              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg transition-all duration-300 group-hover:bg-blue-100">
                 <div className="flex items-center gap-2">
                   <CreditCard className="w-4 h-4 text-blue-600" />
                   <span className="text-sm text-blue-700">Transferência</span>
@@ -1062,26 +1062,26 @@ export default function LiquidacaoDiariaPage() {
         {/* Coluna 2 - Clientes e Pagamentos */}
         <div className="space-y-4">
           {/* Card Clientes */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Users className="w-4 h-4 text-blue-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
+              <Users className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:scale-110" />
               Clientes
             </h3>
             
             <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 bg-gray-50 rounded-lg">
+              <div className="text-center p-3 bg-gray-50 rounded-lg transition-all duration-300 group-hover:bg-gray-100">
                 <p className="text-2xl font-bold text-gray-900">{liquidacao.clientes_iniciais}</p>
                 <p className="text-xs text-gray-500">Iniciais</p>
               </div>
-              <div className="text-center p-3 bg-green-50 rounded-lg">
+              <div className="text-center p-3 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
                 <p className="text-2xl font-bold text-green-600">{liquidacao.clientes_novos}</p>
                 <p className="text-xs text-gray-500">Novos</p>
               </div>
-              <div className="text-center p-3 bg-blue-50 rounded-lg">
+              <div className="text-center p-3 bg-blue-50 rounded-lg transition-all duration-300 group-hover:bg-blue-100">
                 <p className="text-2xl font-bold text-blue-600">{liquidacao.clientes_renovados}</p>
                 <p className="text-xs text-gray-500">Renovados</p>
               </div>
-              <div className="text-center p-3 bg-purple-50 rounded-lg">
+              <div className="text-center p-3 bg-purple-50 rounded-lg transition-all duration-300 group-hover:bg-purple-100">
                 <p className="text-2xl font-bold text-purple-600">{liquidacao.clientes_renegociados}</p>
                 <p className="text-xs text-gray-500">Renegociados</p>
               </div>
@@ -1099,18 +1099,18 @@ export default function LiquidacaoDiariaPage() {
           </div>
 
           {/* Card Pagamentos */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4 text-green-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
+              <CheckCircle className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
               Pagamentos do Dia
             </h3>
             
             <div className="grid grid-cols-2 gap-3">
-              <div className="text-center p-3 bg-green-50 rounded-lg">
+              <div className="text-center p-3 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
                 <p className="text-2xl font-bold text-green-600">{liquidacao.pagamentos_pagos}</p>
                 <p className="text-xs text-gray-500">Pagos</p>
               </div>
-              <div className="text-center p-3 bg-red-50 rounded-lg">
+              <div className="text-center p-3 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
                 <p className="text-2xl font-bold text-red-600">{liquidacao.pagamentos_nao_pagos}</p>
                 <p className="text-xs text-gray-500">Não Pagos</p>
               </div>
@@ -1139,14 +1139,14 @@ export default function LiquidacaoDiariaPage() {
         {/* Coluna 3 - Operações Financeiras */}
         <div className="space-y-4">
           {/* Card Empréstimos */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-green-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
+              <DollarSign className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
               Empréstimos do Dia
             </h3>
             
-            <div className="text-center p-3 bg-green-50 rounded-lg mb-3">
-              <p className="text-2xl font-bold text-green-600">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
+            <div className="text-center p-3 bg-green-50 rounded-lg mb-3 transition-all duration-300 group-hover:bg-green-100">
+              <p className="text-2xl font-bold text-green-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
               <p className="text-xs text-gray-500">{liquidacao.qtd_emprestimos_dia} empréstimo(s)</p>
             </div>
             
@@ -1156,27 +1156,27 @@ export default function LiquidacaoDiariaPage() {
           </div>
 
           {/* Card Despesas */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Receipt className="w-4 h-4 text-red-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-red-700">
+              <Receipt className="w-4 h-4 text-red-600 transition-transform duration-300 group-hover:scale-110" />
               Despesas do Dia
             </h3>
             
-            <div className="text-center p-3 bg-red-50 rounded-lg">
-              <p className="text-2xl font-bold text-red-600">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
+            <div className="text-center p-3 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
+              <p className="text-2xl font-bold text-red-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
               <p className="text-xs text-gray-500">{liquidacao.qtd_despesas_dia} lançamento(s)</p>
             </div>
           </div>
 
           {/* Card Microseguro */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Shield className="w-4 h-4 text-teal-600" />
+          <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-teal-700">
+              <Shield className="w-4 h-4 text-teal-600 transition-transform duration-300 group-hover:scale-110" />
               Microseguro
             </h3>
             
-            <div className="text-center p-3 bg-teal-50 rounded-lg">
-              <p className="text-2xl font-bold text-teal-600">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
+            <div className="text-center p-3 bg-teal-50 rounded-lg transition-all duration-300 group-hover:bg-teal-100">
+              <p className="text-2xl font-bold text-teal-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
               <p className="text-xs text-gray-500">{liquidacao.qtd_microseguros_dia} contrato(s)</p>
             </div>
           </div>
@@ -1184,15 +1184,15 @@ export default function LiquidacaoDiariaPage() {
       </div>
 
       {/* Card Informações da Sessão */}
-      <div className="bg-white rounded-xl border border-gray-200 p-4">
-        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-gray-600" />
+      <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-gray-200/50 hover:border-gray-300 group">
+        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-gray-700">
+          <Clock className="w-4 h-4 text-gray-600 transition-transform duration-300 group-hover:scale-110" />
           Informações da Sessão
         </h3>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-3 transition-transform duration-300 group-hover:translate-x-1">
+            <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center transition-colors duration-300 group-hover:bg-green-200">
               <Calendar className="w-4 h-4 text-green-600" />
             </div>
             <div>
@@ -1201,8 +1201,8 @@ export default function LiquidacaoDiariaPage() {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-3 transition-transform duration-300 group-hover:translate-x-1">
+            <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center transition-colors duration-300 group-hover:bg-blue-200">
               <Calendar className="w-4 h-4 text-blue-600" />
             </div>
             <div>
@@ -1211,8 +1211,8 @@ export default function LiquidacaoDiariaPage() {
             </div>
           </div>
           
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+          <div className="flex items-center gap-3 transition-transform duration-300 group-hover:translate-x-1">
+            <div className="w-8 h-8 bg-gray-100 rounded-lg flex items-center justify-center transition-colors duration-300 group-hover:bg-gray-200">
               <RefreshCw className="w-4 h-4 text-gray-600" />
             </div>
             <div>
@@ -1235,10 +1235,10 @@ export default function LiquidacaoDiariaPage() {
       </div>
 
       {/* Lista de Clientes do Dia */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 ease-out hover:shadow-lg hover:shadow-gray-200/50 hover:border-gray-300">
         <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
           <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
-          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full transition-all duration-300 hover:bg-blue-200 hover:scale-105">
             {clientesDia.length}
           </span>
         </div>
@@ -1257,7 +1257,7 @@ export default function LiquidacaoDiariaPage() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {clientesDia.slice(0, 10).map((cliente) => (
-                  <tr key={cliente.parcela_id} className="hover:bg-gray-50">
+                  <tr key={cliente.parcela_id} className="hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer">
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
