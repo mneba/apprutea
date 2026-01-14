@@ -48,13 +48,12 @@ export const organizacaoService = {
     const { count: countRotas } = await queryRotas;
     totalRotas = countRotas || 0;
 
-    // Total de clientes
-    let queryClientes = supabase
+    // Total de clientes (tabela clientes não tem empresa_id, contar todos ativos)
+    const { count: countClientes } = await supabase
       .from('clientes')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'ATIVO');
 
-    const { count: countClientes } = await queryClientes;
     totalClientes = countClientes || 0;
 
     // Total de empréstimos ativos
@@ -62,6 +61,17 @@ export const organizacaoService = {
       .from('emprestimos')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'ATIVO');
+
+    if (hierarquiaId) {
+      const { data: empresasIds } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq('hierarquia_id', hierarquiaId);
+      
+      if (empresasIds && empresasIds.length > 0) {
+        queryEmprestimos = queryEmprestimos.in('empresa_id', empresasIds.map(e => e.id));
+      }
+    }
 
     const { count: countEmprestimos } = await queryEmprestimos;
     totalEmprestimos = countEmprestimos || 0;
@@ -99,21 +109,34 @@ export const organizacaoService = {
     // Para cada empresa, buscar contagens
     const empresasComResumo: EmpresaResumo[] = await Promise.all(
       empresas.map(async (empresa) => {
-        // Contar rotas
+        // Contar rotas da empresa
         const { count: totalRotas } = await supabase
           .from('rotas')
           .select('id', { count: 'exact', head: true })
           .eq('empresa_id', empresa.id)
           .eq('status', 'ATIVA');
 
-        // Contar clientes
-        const { count: totalClientes } = await supabase
-          .from('clientes')
-          .select('id', { count: 'exact', head: true })
+        // Buscar IDs das rotas da empresa para contar clientes
+        const { data: rotasEmpresa } = await supabase
+          .from('rotas')
+          .select('id')
           .eq('empresa_id', empresa.id)
-          .eq('status', 'ATIVO');
+          .eq('status', 'ATIVA');
 
-        // Contar empréstimos
+        const rotasIds = rotasEmpresa?.map(r => r.id) || [];
+
+        // Contar clientes via tabela rota_clientes
+        let totalClientes = 0;
+        if (rotasIds.length > 0) {
+          const { count } = await supabase
+            .from('rota_clientes')
+            .select('cliente_id', { count: 'exact', head: true })
+            .in('rota_id', rotasIds)
+            .eq('status', 'ATIVO');
+          totalClientes = count || 0;
+        }
+
+        // Contar empréstimos da empresa
         const { count: totalEmprestimos } = await supabase
           .from('emprestimos')
           .select('id', { count: 'exact', head: true })
@@ -128,7 +151,7 @@ export const organizacaoService = {
           email: empresa.email,
           endereco: empresa.endereco,
           total_rotas: totalRotas || 0,
-          total_clientes: totalClientes || 0,
+          total_clientes: totalClientes,
           total_emprestimos: totalEmprestimos || 0,
         };
       })
@@ -156,12 +179,25 @@ export const organizacaoService = {
       .eq('empresa_id', empresaId)
       .eq('status', 'ATIVA');
 
-    // Contar clientes
-    const { count: totalClientes } = await supabase
-      .from('clientes')
-      .select('id', { count: 'exact', head: true })
+    // Buscar IDs das rotas da empresa para contar clientes
+    const { data: rotasEmpresa } = await supabase
+      .from('rotas')
+      .select('id')
       .eq('empresa_id', empresaId)
-      .eq('status', 'ATIVO');
+      .eq('status', 'ATIVA');
+
+    const rotasIds = rotasEmpresa?.map(r => r.id) || [];
+
+    // Contar clientes via tabela rota_clientes
+    let totalClientes = 0;
+    if (rotasIds.length > 0) {
+      const { count } = await supabase
+        .from('rota_clientes')
+        .select('cliente_id', { count: 'exact', head: true })
+        .in('rota_id', rotasIds)
+        .eq('status', 'ATIVO');
+      totalClientes = count || 0;
+    }
 
     // Contar empréstimos
     const { count: totalEmprestimos } = await supabase
@@ -173,7 +209,7 @@ export const organizacaoService = {
     return {
       ...data,
       total_rotas: totalRotas || 0,
-      total_clientes: totalClientes || 0,
+      total_clientes: totalClientes,
       total_emprestimos: totalEmprestimos || 0,
     };
   },
@@ -265,10 +301,10 @@ export const organizacaoService = {
     // Para cada rota, buscar contagens
     const rotasComResumo: RotaResumo[] = await Promise.all(
       rotas.map(async (rota: any) => {
-        // Contar clientes na rota
+        // Contar clientes na rota via tabela rota_clientes
         const { count: totalClientes } = await supabase
-          .from('clientes')
-          .select('id', { count: 'exact', head: true })
+          .from('rota_clientes')
+          .select('cliente_id', { count: 'exact', head: true })
           .eq('rota_id', rota.id)
           .eq('status', 'ATIVO');
 
@@ -304,7 +340,7 @@ export const organizacaoService = {
       .eq('empresa_id', empresaId)
       .not('vendedor_id', 'is', null);
 
-    const vendedoresComRota = rotasComVendedor?.map(r => r.vendedor_id) || [];
+    const vendedoresComRota = rotasComVendedor?.map(r => r.vendedor_id).filter(Boolean) || [];
 
     // Buscar vendedores da empresa que não têm rota
     let query = supabase
@@ -358,6 +394,23 @@ export const organizacaoService = {
       total_clientes: 0,
       total_emprestimos: 0,
     };
+  },
+
+  async atualizarRota(rotaId: string, dados: {
+    nome?: string;
+    descricao?: string;
+    vendedor_id?: string | null;
+    status?: string;
+  }): Promise<void> {
+    const { error } = await supabase
+      .from('rotas')
+      .update(dados)
+      .eq('id', rotaId);
+
+    if (error) {
+      console.error('Erro ao atualizar rota:', error);
+      throw error;
+    }
   },
 
   // ============================================
