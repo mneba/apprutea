@@ -125,13 +125,14 @@ export const organizacaoService = {
 
         const rotasIds = rotasEmpresa?.map(r => r.id) || [];
 
-        // Contar clientes via tabela rota_clientes
+        // Contar clientes que têm alguma das rotas no array rotas_ids
         let totalClientes = 0;
         if (rotasIds.length > 0) {
+          // Usar overlaps para verificar se rotas_ids contém algum dos IDs
           const { count } = await supabase
-            .from('rota_clientes')
-            .select('cliente_id', { count: 'exact', head: true })
-            .in('rota_id', rotasIds)
+            .from('clientes')
+            .select('id', { count: 'exact', head: true })
+            .overlaps('rotas_ids', rotasIds)
             .eq('status', 'ATIVO');
           totalClientes = count || 0;
         }
@@ -188,13 +189,13 @@ export const organizacaoService = {
 
     const rotasIds = rotasEmpresa?.map(r => r.id) || [];
 
-    // Contar clientes via tabela rota_clientes
+    // Contar clientes que têm alguma das rotas no array rotas_ids
     let totalClientes = 0;
     if (rotasIds.length > 0) {
       const { count } = await supabase
-        .from('rota_clientes')
-        .select('cliente_id', { count: 'exact', head: true })
-        .in('rota_id', rotasIds)
+        .from('clientes')
+        .select('id', { count: 'exact', head: true })
+        .overlaps('rotas_ids', rotasIds)
         .eq('status', 'ATIVO');
       totalClientes = count || 0;
     }
@@ -301,11 +302,11 @@ export const organizacaoService = {
     // Para cada rota, buscar contagens
     const rotasComResumo: RotaResumo[] = await Promise.all(
       rotas.map(async (rota: any) => {
-        // Contar clientes na rota via tabela rota_clientes
+        // Contar clientes na rota usando contains no array JSONB rotas_ids
         const { count: totalClientes } = await supabase
-          .from('rota_clientes')
-          .select('cliente_id', { count: 'exact', head: true })
-          .eq('rota_id', rota.id)
+          .from('clientes')
+          .select('id', { count: 'exact', head: true })
+          .contains('rotas_ids', [rota.id])
           .eq('status', 'ATIVO');
 
         // Contar empréstimos na rota
