@@ -152,7 +152,7 @@ export const liquidacaoService = {
     
     const { data, error } = await supabase
       .from('contas')
-      .select('id, rota_id, tipo_conta, saldo_atual, saldo_inicial')
+      .select('id, rota_id, tipo_conta, saldo_atual')
       .eq('rota_id', rotaId)
       .eq('tipo_conta', 'ROTA')
       .eq('status', 'ATIVA')
@@ -163,7 +163,21 @@ export const liquidacaoService = {
       return null;
     }
     
-    return data;
+    // Se não encontrou, retornar objeto com saldo zero
+    if (!data) {
+      return {
+        id: '',
+        rota_id: rotaId,
+        tipo_conta: 'ROTA',
+        saldo_atual: 0,
+        saldo_inicial: 0,
+      };
+    }
+    
+    return {
+      ...data,
+      saldo_inicial: data.saldo_atual, // Usar saldo_atual como inicial se não houver
+    };
   },
 
   // ==================================================

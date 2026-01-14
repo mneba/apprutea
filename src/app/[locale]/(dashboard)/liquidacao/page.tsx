@@ -793,11 +793,20 @@ export default function LiquidacaoDiariaPage() {
   if (semRotaSelecionada || !rota) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
-        <AlertCircle className="w-12 h-12 text-amber-500 mb-4" />
-        <h2 className="text-lg font-semibold text-gray-900 mb-2">Selecione uma Rota</h2>
-        <p className="text-gray-500 text-center text-sm max-w-md">
-          Selecione uma rota no menu superior para visualizar a liquidação diária.
-        </p>
+        <div className="bg-white rounded-xl border border-amber-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Selecione uma Rota Específica</h2>
+          <p className="text-gray-500 text-sm mb-4">
+            O módulo de Liquidação Diária requer uma rota específica selecionada.
+          </p>
+          <p className="text-gray-400 text-xs">
+            Use o seletor no topo da página para escolher uma rota.
+            <br />
+            A opção "Todas as rotas" não é permitida neste módulo.
+          </p>
+        </div>
       </div>
     );
   }
