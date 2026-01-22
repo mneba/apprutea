@@ -802,10 +802,15 @@ export default function LiquidacaoDiariaPage() {
       created_at: '',
       updated_at: '',
       qtd_emprestimos_ativos: 0,
+      qtd_emprestimos_total: 0,
       valor_total_emprestimos: 0,
       valor_total_pago: 0,
       valor_saldo_devedor: 0,
       parcelas_atrasadas: cliente.total_parcelas_vencidas || 0,
+      parcelas_pendentes: 0,
+      data_cadastro: '',
+      rotas_ids: [],
+      permite_emprestimo_adicional: true,
     };
     
     setClienteSelecionado(clienteParaModal);
