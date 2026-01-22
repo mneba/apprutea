@@ -355,13 +355,13 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
               </div>
             )}
             <div>
-              <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white">{dadosExibicao.nome}</h2>
+              <div className="flex items-center gap-2 mt-1">
                 <span className="bg-white/20 px-2 py-0.5 rounded font-mono text-white/90 text-sm">
-                  #{cliente.codigo_cliente}
+                  #{dadosExibicao.codigo_cliente || cliente.codigo_cliente || '...'}
                 </span>
                 <BadgeStatus status={dadosExibicao.status} tipo="cliente" />
               </div>
-              <h2 className="text-xl font-bold text-white mt-1">{dadosExibicao.nome}</h2>
             </div>
           </div>
           <button
