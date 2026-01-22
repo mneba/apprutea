@@ -788,29 +788,29 @@ export default function LiquidacaoDiariaPage() {
     // Converter ClienteDoDia para ClienteComTotais (parcial)
     const clienteParaModal: ClienteComTotais = {
       id: cliente.cliente_id,
-      codigo_cliente: 0, // Será carregado pelo modal
+      codigo_cliente: parseInt(cliente.consecutivo) || 0, // Usar consecutivo como código
       nome: cliente.nome,
       documento: '',
-      telefone_celular: '',
+      telefone_celular: cliente.telefone_celular || '',
       telefone_fixo: '',
       email: '',
-      endereco: '',
+      endereco: cliente.endereco || '',
       endereco_comercial: '',
       foto_url: '',
       empresa_id: '',
       status: 'ATIVO',
       created_at: '',
       updated_at: '',
-      qtd_emprestimos_ativos: 0,
+      qtd_emprestimos_ativos: 1,
       qtd_emprestimos_total: 0,
-      valor_total_emprestimos: 0,
+      valor_total_emprestimos: cliente.valor_principal || 0,
       valor_total_pago: 0,
-      valor_saldo_devedor: 0,
+      valor_saldo_devedor: cliente.saldo_emprestimo || 0,
       parcelas_atrasadas: cliente.total_parcelas_vencidas || 0,
       parcelas_pendentes: 0,
       data_cadastro: '',
-      rotas_ids: [],
-      permite_emprestimo_adicional: true,
+      rotas_ids: [cliente.rota_id],
+      permite_emprestimo_adicional: cliente.permite_emprestimo_adicional,
     };
     
     setClienteSelecionado(clienteParaModal);
@@ -1070,9 +1070,9 @@ export default function LiquidacaoDiariaPage() {
           {/* Grid Principal - só mostra se tem liquidação */}
           {liquidacao && (
             <>
-              {/* Grid de 3 colunas */}
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-                {/* Coluna 1 - Recaudo e Meta */}
+              {/* Grid de 2 colunas balanceadas */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                {/* Coluna 1 - Meta, Clientes e Pagamentos */}
                 <div className="space-y-4">
                   {/* Card Meta/Recaudo */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
@@ -1089,15 +1089,12 @@ export default function LiquidacaoDiariaPage() {
                     <ProgressBar percentual={percentualMeta} />
                     
                     <div className="mt-4 pt-4 border-t space-y-2">
-                      <ItemInfo label="Valor Esperado" valor={formatarMoeda(liquidacao.valor_esperado_dia)} />
+                      <ItemInfo label="Valor Esperado" valor={formatarMoeda(liquidacao.valor_esperado_dia || metaDia)} />
                       <ItemInfo label="Valor Recebido" valor={formatarMoeda(liquidacao.valor_recebido_dia)} corValor="text-green-600" />
                       <ItemInfo label="Percentual" valor={`${liquidacao.percentual_recebimento || percentualMeta}%`} />
                     </div>
                   </div>
-                </div>
 
-                {/* Coluna 2 - Clientes e Pagamentos */}
-                <div className="space-y-4">
                   {/* Card Clientes */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
@@ -1105,7 +1102,7 @@ export default function LiquidacaoDiariaPage() {
                       Clientes
                     </h3>
                     
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-4 gap-3">
                       <div className="text-center p-3 bg-gray-50 rounded-lg transition-all duration-300 group-hover:bg-gray-100">
                         <p className="text-2xl font-bold text-gray-900">{liquidacao.clientes_iniciais}</p>
                         <p className="text-xs text-gray-500">Iniciais</p>
@@ -1134,7 +1131,10 @@ export default function LiquidacaoDiariaPage() {
                       </div>
                     </div>
                   </div>
+                </div>
 
+                {/* Coluna 2 - Pagamentos e Operações Financeiras */}
+                <div className="space-y-4">
                   {/* Card Pagamentos do Dia (UNIFICADO com Recebimentos por Tipo) */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
                     <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
@@ -1190,50 +1190,46 @@ export default function LiquidacaoDiariaPage() {
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Coluna 3 - Operações Financeiras */}
-                <div className="space-y-4">
-                  {/* Card Empréstimos */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
-                      <DollarSign className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
-                      Empréstimos do Dia
-                    </h3>
-                    
-                    <div className="text-center p-3 bg-green-50 rounded-lg mb-3 transition-all duration-300 group-hover:bg-green-100">
-                      <p className="text-2xl font-bold text-green-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
-                      <p className="text-xs text-gray-500">{liquidacao.qtd_emprestimos_dia} empréstimo(s)</p>
+                  {/* Grid de 3 cards financeiros na mesma linha */}
+                  <div className="grid grid-cols-3 gap-4">
+                    {/* Card Empréstimos */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-green-700">
+                        <DollarSign className="w-3.5 h-3.5 text-green-600 transition-transform duration-300 group-hover:scale-110" />
+                        Empréstimos
+                      </h3>
+                      
+                      <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
+                        <p className="text-lg font-bold text-green-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
+                        <p className="text-xs text-gray-500">{liquidacao.qtd_emprestimos_dia} emp.</p>
+                      </div>
                     </div>
-                    
-                    <div className="space-y-2 text-sm">
-                      <ItemInfo label="Juros" valor={formatarMoeda(emprestimos.juros)} corValor="text-amber-600" />
-                    </div>
-                  </div>
 
-                  {/* Card Despesas */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-red-700">
-                      <Receipt className="w-4 h-4 text-red-600 transition-transform duration-300 group-hover:scale-110" />
-                      Despesas do Dia
-                    </h3>
-                    
-                    <div className="text-center p-3 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
-                      <p className="text-2xl font-bold text-red-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
-                      <p className="text-xs text-gray-500">{liquidacao.qtd_despesas_dia} lançamento(s)</p>
+                    {/* Card Despesas */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-red-700">
+                        <Receipt className="w-3.5 h-3.5 text-red-600 transition-transform duration-300 group-hover:scale-110" />
+                        Despesas
+                      </h3>
+                      
+                      <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
+                        <p className="text-lg font-bold text-red-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
+                        <p className="text-xs text-gray-500">{liquidacao.qtd_despesas_dia} lanç.</p>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Card Microseguro */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-teal-700">
-                      <Shield className="w-4 h-4 text-teal-600 transition-transform duration-300 group-hover:scale-110" />
-                      Microseguro
-                    </h3>
-                    
-                    <div className="text-center p-3 bg-teal-50 rounded-lg transition-all duration-300 group-hover:bg-teal-100">
-                      <p className="text-2xl font-bold text-teal-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
-                      <p className="text-xs text-gray-500">{liquidacao.qtd_microseguros_dia} contrato(s)</p>
+                    {/* Card Microseguro */}
+                    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-teal-700">
+                        <Shield className="w-3.5 h-3.5 text-teal-600 transition-transform duration-300 group-hover:scale-110" />
+                        Microseguro
+                      </h3>
+                      
+                      <div className="text-center p-2 bg-teal-50 rounded-lg transition-all duration-300 group-hover:bg-teal-100">
+                        <p className="text-lg font-bold text-teal-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
+                        <p className="text-xs text-gray-500">{liquidacao.qtd_microseguros_dia} cont.</p>
+                      </div>
                     </div>
                   </div>
                 </div>
