@@ -1071,163 +1071,128 @@ export default function LiquidacaoDiariaPage() {
           {liquidacao && (
             <>
               {/* Grid de 2 colunas balanceadas */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-                {/* Coluna 1 - Meta, Clientes e Pagamentos */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+                {/* Coluna 1 */}
                 <div className="space-y-4">
                   {/* Card Meta/Recaudo */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
                       <Target className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:scale-110" />
                       Meta do Dia
                     </h3>
                     
-                    <div className="text-center mb-4">
+                    <div className="text-center mb-3">
                       <p className="text-3xl font-bold text-gray-900 transition-all duration-300 group-hover:scale-105">{percentualMeta}%</p>
                       <p className="text-xs text-gray-500">de {formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</p>
                     </div>
                     
                     <ProgressBar percentual={percentualMeta} />
                     
-                    <div className="mt-4 pt-4 border-t space-y-2">
+                    <div className="mt-3 pt-3 border-t space-y-1.5">
                       <ItemInfo label="Valor Esperado" valor={formatarMoeda(liquidacao.valor_esperado_dia || metaDia)} />
                       <ItemInfo label="Valor Recebido" valor={formatarMoeda(liquidacao.valor_recebido_dia)} corValor="text-green-600" />
-                      <ItemInfo label="Percentual" valor={`${liquidacao.percentual_recebimento || percentualMeta}%`} />
                     </div>
                   </div>
 
                   {/* Card Clientes */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
                       <Users className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:scale-110" />
                       Clientes
                     </h3>
                     
-                    <div className="grid grid-cols-4 gap-3">
-                      <div className="text-center p-3 bg-gray-50 rounded-lg transition-all duration-300 group-hover:bg-gray-100">
-                        <p className="text-2xl font-bold text-gray-900">{liquidacao.clientes_iniciais}</p>
+                    <div className="grid grid-cols-5 gap-2">
+                      <div className="text-center p-2 bg-gray-50 rounded-lg transition-all duration-300 group-hover:bg-gray-100">
+                        <p className="text-xl font-bold text-gray-900">{liquidacao.clientes_iniciais}</p>
                         <p className="text-xs text-gray-500">Iniciais</p>
                       </div>
-                      <div className="text-center p-3 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
-                        <p className="text-2xl font-bold text-green-600">{liquidacao.clientes_novos}</p>
+                      <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
+                        <p className="text-xl font-bold text-green-600">{liquidacao.clientes_novos}</p>
                         <p className="text-xs text-gray-500">Novos</p>
                       </div>
-                      <div className="text-center p-3 bg-blue-50 rounded-lg transition-all duration-300 group-hover:bg-blue-100">
-                        <p className="text-2xl font-bold text-blue-600">{liquidacao.clientes_renovados}</p>
-                        <p className="text-xs text-gray-500">Renovados</p>
+                      <div className="text-center p-2 bg-blue-50 rounded-lg transition-all duration-300 group-hover:bg-blue-100">
+                        <p className="text-xl font-bold text-blue-600">{liquidacao.clientes_renovados}</p>
+                        <p className="text-xs text-gray-500">Renov.</p>
                       </div>
-                      <div className="text-center p-3 bg-purple-50 rounded-lg transition-all duration-300 group-hover:bg-purple-100">
-                        <p className="text-2xl font-bold text-purple-600">{liquidacao.clientes_renegociados}</p>
-                        <p className="text-xs text-gray-500">Renegociados</p>
+                      <div className="text-center p-2 bg-purple-50 rounded-lg transition-all duration-300 group-hover:bg-purple-100">
+                        <p className="text-xl font-bold text-purple-600">{liquidacao.clientes_renegociados}</p>
+                        <p className="text-xs text-gray-500">Reneg.</p>
                       </div>
-                    </div>
-                    
-                    <div className="mt-3 pt-3 border-t">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-gray-500 flex items-center gap-1">
-                          <XCircle className="w-3.5 h-3.5 text-red-500" />
-                          Cancelados
-                        </span>
-                        <span className="font-medium text-red-600">{liquidacao.clientes_cancelados}</span>
+                      <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
+                        <p className="text-xl font-bold text-red-600">{liquidacao.clientes_cancelados}</p>
+                        <p className="text-xs text-gray-500">Canc.</p>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* Coluna 2 - Pagamentos e Operações Financeiras */}
+                {/* Coluna 2 */}
                 <div className="space-y-4">
-                  {/* Card Pagamentos do Dia (UNIFICADO com Recebimentos por Tipo) */}
+                  {/* Card Pagamentos do Dia - Compacto */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
-                    <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
+                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
                       <CheckCircle className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
                       Pagamentos do Dia
                     </h3>
                     
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="text-center p-3 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
-                        <p className="text-2xl font-bold text-green-600">{liquidacao.pagamentos_pagos}</p>
+                    <div className="grid grid-cols-4 gap-2">
+                      <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
+                        <p className="text-xl font-bold text-green-600">{liquidacao.pagamentos_pagos}</p>
                         <p className="text-xs text-gray-500">Pagos</p>
                       </div>
-                      <div className="text-center p-3 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
-                        <p className="text-2xl font-bold text-red-600">{liquidacao.pagamentos_nao_pagos}</p>
+                      <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
+                        <p className="text-xl font-bold text-red-600">{liquidacao.pagamentos_nao_pagos}</p>
                         <p className="text-xs text-gray-500">Não Pagos</p>
                       </div>
-                    </div>
-                    
-                    <div className="mt-3">
-                      <div className="flex justify-between text-xs text-gray-500 mb-1">
-                        <span>Efetividade</span>
-                        <span>
-                          {liquidacao.pagamentos_pagos + liquidacao.pagamentos_nao_pagos > 0
-                            ? Math.round((liquidacao.pagamentos_pagos / (liquidacao.pagamentos_pagos + liquidacao.pagamentos_nao_pagos)) * 100)
-                            : 0}%
-                        </span>
+                      <div className="text-center p-2 bg-emerald-50 rounded-lg transition-all duration-300 group-hover:bg-emerald-100">
+                        <p className="text-sm font-bold text-emerald-600">{formatarMoeda(liquidacao.valor_dinheiro)}</p>
+                        <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                          <Banknote className="w-3 h-3" /> Dinheiro
+                        </p>
                       </div>
-                      <ProgressBar 
-                        percentual={
-                          liquidacao.pagamentos_pagos + liquidacao.pagamentos_nao_pagos > 0
-                            ? (liquidacao.pagamentos_pagos / (liquidacao.pagamentos_pagos + liquidacao.pagamentos_nao_pagos)) * 100
-                            : 0
-                        } 
-                      />
-                    </div>
-
-                    {/* Recebimentos por Tipo (integrado) */}
-                    <div className="mt-4 pt-4 border-t space-y-2">
-                      <p className="text-xs font-medium text-gray-500 mb-2">Por Tipo de Recebimento</p>
-                      <div className="flex items-center justify-between p-2 bg-green-50 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <Banknote className="w-4 h-4 text-green-600" />
-                          <span className="text-sm text-green-700">Dinheiro</span>
-                        </div>
-                        <span className="font-semibold text-green-700">{formatarMoeda(liquidacao.valor_dinheiro)}</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
-                        <div className="flex items-center gap-2">
-                          <CreditCard className="w-4 h-4 text-blue-600" />
-                          <span className="text-sm text-blue-700">Transferência</span>
-                        </div>
-                        <span className="font-semibold text-blue-700">{formatarMoeda(liquidacao.valor_transferencia)}</span>
+                      <div className="text-center p-2 bg-sky-50 rounded-lg transition-all duration-300 group-hover:bg-sky-100">
+                        <p className="text-sm font-bold text-sky-600">{formatarMoeda(liquidacao.valor_transferencia)}</p>
+                        <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                          <CreditCard className="w-3 h-3" /> Transf.
+                        </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Grid de 3 cards financeiros na mesma linha */}
-                  <div className="grid grid-cols-3 gap-4">
+                  {/* Grid de 3 cards financeiros */}
+                  <div className="grid grid-cols-3 gap-3">
                     {/* Card Empréstimos */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
-                      <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-green-700">
-                        <DollarSign className="w-3.5 h-3.5 text-green-600 transition-transform duration-300 group-hover:scale-110" />
+                    <div className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-green-700">
+                        <DollarSign className="w-3.5 h-3.5 text-green-600" />
                         Empréstimos
                       </h3>
-                      
-                      <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
-                        <p className="text-lg font-bold text-green-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
+                      <div className="text-center p-2 bg-green-50 rounded-lg">
+                        <p className="text-lg font-bold text-green-600">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
                         <p className="text-xs text-gray-500">{liquidacao.qtd_emprestimos_dia} emp.</p>
                       </div>
                     </div>
 
                     {/* Card Despesas */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group">
-                      <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-red-700">
-                        <Receipt className="w-3.5 h-3.5 text-red-600 transition-transform duration-300 group-hover:scale-110" />
+                    <div className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-red-700">
+                        <Receipt className="w-3.5 h-3.5 text-red-600" />
                         Despesas
                       </h3>
-                      
-                      <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
-                        <p className="text-lg font-bold text-red-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
+                      <div className="text-center p-2 bg-red-50 rounded-lg">
+                        <p className="text-lg font-bold text-red-600">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
                         <p className="text-xs text-gray-500">{liquidacao.qtd_despesas_dia} lanç.</p>
                       </div>
                     </div>
 
                     {/* Card Microseguro */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group">
-                      <h3 className="text-xs font-semibold text-gray-900 mb-3 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-teal-700">
-                        <Shield className="w-3.5 h-3.5 text-teal-600 transition-transform duration-300 group-hover:scale-110" />
+                    <div className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group">
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-teal-700">
+                        <Shield className="w-3.5 h-3.5 text-teal-600" />
                         Microseguro
                       </h3>
-                      
-                      <div className="text-center p-2 bg-teal-50 rounded-lg transition-all duration-300 group-hover:bg-teal-100">
-                        <p className="text-lg font-bold text-teal-600 transition-transform duration-300 group-hover:scale-105">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
+                      <div className="text-center p-2 bg-teal-50 rounded-lg">
+                        <p className="text-lg font-bold text-teal-600">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
                         <p className="text-xs text-gray-500">{liquidacao.qtd_microseguros_dia} cont.</p>
                       </div>
                     </div>
