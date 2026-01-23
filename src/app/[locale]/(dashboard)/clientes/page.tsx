@@ -14,13 +14,26 @@ import {
   ChevronDown,
   Loader2,
   AlertCircle,
-  X
+  X,
+  ArrowUpAZ,
+  ArrowDownAZ,
+  LayoutGrid,
+  List,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
+
+// =====================================================
+// TIPOS
+// =====================================================
+
+type TipoOrdenacao = 'nome_asc' | 'nome_desc' | 'codigo_asc' | 'codigo_desc' | 'data_asc' | 'data_desc';
+type TipoVisualizacao = 'cards' | 'tabela';
 
 // =====================================================
 // COMPONENTES AUXILIARES
@@ -148,6 +161,84 @@ function CardCliente({
   );
 }
 
+function TabelaClientes({
+  clientes,
+  onDetalhes,
+  onNovaVenda
+}: {
+  clientes: ClienteComTotais[];
+  onDetalhes: (cliente: ClienteComTotais) => void;
+  onNovaVenda: (cliente: ClienteComTotais) => void;
+}) {
+  const formatarMoeda = (valor: number) => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Código</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Nome</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Documento</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Telefone</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Endereço</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700">Rota</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700">Saldo Devedor</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Emp. Ativos</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700">Ações</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {clientes.map((cliente) => (
+              <tr 
+                key={cliente.id} 
+                className="hover:bg-gray-50 transition-colors cursor-pointer"
+                onClick={() => onDetalhes(cliente)}
+              >
+                <td className="px-4 py-3">
+                  <span className="font-mono text-gray-600">#{cliente.codigo_cliente}</span>
+                </td>
+                <td className="px-4 py-3">
+                  <span className="font-medium text-gray-900">{cliente.nome}</span>
+                </td>
+                <td className="px-4 py-3 text-gray-600">{cliente.documento || '-'}</td>
+                <td className="px-4 py-3 text-gray-600">{cliente.telefone_celular || '-'}</td>
+                <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{cliente.endereco || '-'}</td>
+                <td className="px-4 py-3 text-gray-600">{cliente.rotas_nomes || '-'}</td>
+                <td className="px-4 py-3 text-right font-medium text-gray-900">
+                  {formatarMoeda(cliente.valor_saldo_devedor)}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
+                    cliente.qtd_emprestimos_ativos > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+                  }`}>
+                    {cliente.qtd_emprestimos_ativos}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <BadgeStatus status={cliente.status} />
+                </td>
+                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => onNovaVenda(cliente)}
+                    className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                  >
+                    Nova Venda
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 function AvisoSelecioneEmpresa() {
   return (
     <div className="flex flex-col items-center justify-center py-20">
@@ -177,6 +268,101 @@ function AvisoSemRotas() {
 }
 
 // =====================================================
+// FUNÇÕES DE EXPORTAÇÃO
+// =====================================================
+
+function exportarCSV(clientes: ClienteComTotais[]) {
+  const headers = [
+    'Código',
+    'Nome',
+    'Documento',
+    'Telefone',
+    'Email',
+    'Endereço',
+    'Rota',
+    'Saldo Devedor',
+    'Emp. Ativos',
+    'Total Empréstimos',
+    'Status',
+    'Data Cadastro'
+  ];
+
+  const linhas = clientes.map(c => [
+    c.codigo_cliente,
+    `"${c.nome}"`,
+    c.documento || '',
+    c.telefone_celular || '',
+    c.email || '',
+    `"${c.endereco || ''}"`,
+    `"${c.rotas_nomes || ''}"`,
+    c.valor_saldo_devedor || 0,
+    c.qtd_emprestimos_ativos || 0,
+    c.qtd_emprestimos_total || 0,
+    c.status,
+    c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''
+  ]);
+
+  const csv = [headers.join(';'), ...linhas.map(l => l.join(';'))].join('\n');
+  
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportarExcel(clientes: ClienteComTotais[]) {
+  // Usando formato XLSX simples (XML-based)
+  const headers = [
+    'Código', 'Nome', 'Documento', 'Telefone', 'Email', 'Endereço', 
+    'Rota', 'Saldo Devedor', 'Emp. Ativos', 'Total Empréstimos', 'Status', 'Data Cadastro'
+  ];
+
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
+  xml += '<?mso-application progid="Excel.Sheet"?>\n';
+  xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n';
+  xml += '  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
+  xml += '<Worksheet ss:Name="Clientes">\n<Table>\n';
+
+  // Headers
+  xml += '<Row>\n';
+  headers.forEach(h => {
+    xml += `<Cell><Data ss:Type="String">${h}</Data></Cell>\n`;
+  });
+  xml += '</Row>\n';
+
+  // Dados
+  clientes.forEach(c => {
+    xml += '<Row>\n';
+    xml += `<Cell><Data ss:Type="Number">${c.codigo_cliente}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.nome}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.documento || ''}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.telefone_celular || ''}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.email || ''}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.endereco || ''}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.rotas_nomes || ''}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="Number">${c.valor_saldo_devedor || 0}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="Number">${c.qtd_emprestimos_ativos || 0}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="Number">${c.qtd_emprestimos_total || 0}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.status}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''}</Data></Cell>\n`;
+    xml += '</Row>\n';
+  });
+
+  xml += '</Table>\n</Worksheet>\n</Workbook>';
+
+  const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `clientes_${new Date().toISOString().split('T')[0]}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// =====================================================
 // PÁGINA PRINCIPAL
 // =====================================================
 
@@ -194,12 +380,39 @@ export default function ClientesPage() {
   const [statusFiltro, setStatusFiltro] = useState<string>('');
   const [rotaFiltro, setRotaFiltro] = useState<string>('');
   
+  // Novos estados para ordenação e visualização
+  const [ordenacao, setOrdenacao] = useState<TipoOrdenacao>('nome_asc');
+  const [visualizacao, setVisualizacao] = useState<TipoVisualizacao>('cards');
+  const [menuExportarAberto, setMenuExportarAberto] = useState(false);
+  
   const [modalNovaVenda, setModalNovaVenda] = useState(false);
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
   
   // Modal de detalhes
   const [modalDetalhes, setModalDetalhes] = useState(false);
   const [clienteDetalhes, setClienteDetalhes] = useState<ClienteComTotais | null>(null);
+
+  // Ordenar clientes
+  const clientesOrdenados = useMemo(() => {
+    const lista = [...clientes];
+    
+    switch (ordenacao) {
+      case 'nome_asc':
+        return lista.sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
+      case 'nome_desc':
+        return lista.sort((a, b) => b.nome.localeCompare(a.nome, 'pt-BR'));
+      case 'codigo_asc':
+        return lista.sort((a, b) => (a.codigo_cliente || 0) - (b.codigo_cliente || 0));
+      case 'codigo_desc':
+        return lista.sort((a, b) => (b.codigo_cliente || 0) - (a.codigo_cliente || 0));
+      case 'data_asc':
+        return lista.sort((a, b) => new Date(a.data_cadastro || 0).getTime() - new Date(b.data_cadastro || 0).getTime());
+      case 'data_desc':
+        return lista.sort((a, b) => new Date(b.data_cadastro || 0).getTime() - new Date(a.data_cadastro || 0).getTime());
+      default:
+        return lista;
+    }
+  }, [clientes, ordenacao]);
 
   const estatisticas = useMemo(() => {
     const total = clientes.length;
@@ -363,8 +576,9 @@ export default function ClientesPage() {
           />
         </div>
 
-        {/* Filtros */}
+        {/* Filtros e Controles */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
+          {/* Busca */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
@@ -376,6 +590,7 @@ export default function ClientesPage() {
             />
           </div>
 
+          {/* Filtro de Rota */}
           {rotas.length > 1 && (
             <div className="relative">
               <select
@@ -392,6 +607,93 @@ export default function ClientesPage() {
             </div>
           )}
 
+          {/* Ordenação */}
+          <div className="relative">
+            <select
+              value={ordenacao}
+              onChange={(e) => setOrdenacao(e.target.value as TipoOrdenacao)}
+              className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
+            >
+              <option value="nome_asc">Nome A-Z</option>
+              <option value="nome_desc">Nome Z-A</option>
+              <option value="codigo_asc">Código ↑</option>
+              <option value="codigo_desc">Código ↓</option>
+              <option value="data_desc">Mais recentes</option>
+              <option value="data_asc">Mais antigos</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+          </div>
+
+          {/* Toggle Visualização */}
+          <div className="flex border border-gray-300 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setVisualizacao('cards')}
+              className={`px-3 py-2.5 flex items-center gap-1 transition-colors ${
+                visualizacao === 'cards' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+              title="Visualização em Cards"
+            >
+              <LayoutGrid className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setVisualizacao('tabela')}
+              className={`px-3 py-2.5 flex items-center gap-1 transition-colors ${
+                visualizacao === 'tabela' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-white text-gray-600 hover:bg-gray-50'
+              }`}
+              title="Visualização em Tabela"
+            >
+              <List className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Exportar */}
+          <div className="relative">
+            <button
+              onClick={() => setMenuExportarAberto(!menuExportarAberto)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+            >
+              <Download className="w-4 h-4" />
+              Exportar
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            
+            {menuExportarAberto && (
+              <>
+                <div 
+                  className="fixed inset-0 z-10" 
+                  onClick={() => setMenuExportarAberto(false)} 
+                />
+                <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 min-w-[160px]">
+                  <button
+                    onClick={() => {
+                      exportarCSV(clientesOrdenados);
+                      setMenuExportarAberto(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Exportar CSV
+                  </button>
+                  <button
+                    onClick={() => {
+                      exportarExcel(clientesOrdenados);
+                      setMenuExportarAberto(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                  >
+                    <FileSpreadsheet className="w-4 h-4" />
+                    Exportar Excel
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Limpar Filtros */}
           {(busca || statusFiltro || rotaFiltro) && (
             <button
               onClick={limparFiltros}
@@ -408,20 +710,31 @@ export default function ClientesPage() {
           <div className="flex items-center justify-center py-20">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
           </div>
-        ) : clientes.length > 0 ? (
-          <div className="space-y-3">
-            {clientes.map(cliente => (
-              <CardCliente
-                key={cliente.id}
-                cliente={cliente}
-                onDetalhes={() => {
-                  setClienteDetalhes(cliente);
-                  setModalDetalhes(true);
-                }}
-                onNovaVenda={() => handleNovaVenda(cliente)}
-              />
-            ))}
-          </div>
+        ) : clientesOrdenados.length > 0 ? (
+          visualizacao === 'cards' ? (
+            <div className="space-y-3">
+              {clientesOrdenados.map(cliente => (
+                <CardCliente
+                  key={cliente.id}
+                  cliente={cliente}
+                  onDetalhes={() => {
+                    setClienteDetalhes(cliente);
+                    setModalDetalhes(true);
+                  }}
+                  onNovaVenda={() => handleNovaVenda(cliente)}
+                />
+              ))}
+            </div>
+          ) : (
+            <TabelaClientes
+              clientes={clientesOrdenados}
+              onDetalhes={(cliente) => {
+                setClienteDetalhes(cliente);
+                setModalDetalhes(true);
+              }}
+              onNovaVenda={(cliente) => handleNovaVenda(cliente)}
+            />
+          )
         ) : (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
             <Users className="w-16 h-16 text-gray-300 mb-4" />
