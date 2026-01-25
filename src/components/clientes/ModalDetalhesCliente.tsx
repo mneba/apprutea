@@ -40,16 +40,8 @@ import type {
   EmprestimoHistorico, 
   ParcelaView,
   ClienteComTotais,
+  Segmento,
 } from '@/types/clientes';
-
-// Interface local para segmentos (retorno de fn_listar_segmentos)
-interface SegmentoLocal {
-  id: string;
-  grupo: string;
-  nome: string;
-  ordem_grupo: number;
-  ordem: number;
-}
 
 // =====================================================
 // HELPERS
@@ -343,7 +335,7 @@ function FormularioEdicao({
   salvando,
 }: {
   cliente: Cliente;
-  segmentos: SegmentoLocal[];
+  segmentos: Segmento[];
   microseguros: MicroseguroInfo[];
   onSalvar: (dados: FormEdicaoCliente) => void;
   onCancelar: () => void;
@@ -444,7 +436,7 @@ function FormularioEdicao({
           >
             <option value="">Selecione um segmento</option>
             {segmentos.map(seg => (
-              <option key={seg.id} value={seg.id}>{seg.nome}</option>
+              <option key={seg.id} value={seg.id}>{seg.nome_pt}</option>
             ))}
           </select>
         </div>
@@ -622,7 +614,7 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
   const [carregandoParcelas, setCarregandoParcelas] = useState<string | null>(null);
   
   // Dados auxiliares
-  const [segmentos, setSegmentos] = useState<SegmentoLocal[]>([]);
+  const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [microseguros, setMicroseguros] = useState<MicroseguroInfo[]>([]);
   
   // Estados de edição
