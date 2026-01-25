@@ -40,7 +40,7 @@ export const clientesService = {
       p_rota_id: filtros.rota_id || null,
       p_status: filtros.status || null,
       p_busca: filtros.busca || null,
-      p_limite: filtros.limite || 50,
+      p_limite: filtros.limite || 1000,
       p_offset: filtros.offset || 0,
     });
     
