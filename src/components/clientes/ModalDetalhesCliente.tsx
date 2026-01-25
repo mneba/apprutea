@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   X,
   User,
@@ -29,6 +29,10 @@ import {
   Tag,
   Shield,
   Route,
+  Camera,
+  Upload,
+  ShieldCheck,
+  Banknote,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import type { 
@@ -135,6 +139,34 @@ function ItemInfo({
         <p className="font-medium text-gray-900 break-words">{valor}</p>
       </div>
     </div>
+  );
+}
+
+// Toggle Switch Component
+function Toggle({ 
+  checked, 
+  onChange, 
+  disabled = false 
+}: { 
+  checked: boolean; 
+  onChange: (value: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => !disabled && onChange(!checked)}
+      disabled={disabled}
+      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
+        checked ? 'bg-blue-600' : 'bg-gray-300'
+      } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <span
+        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+          checked ? 'translate-x-6' : 'translate-x-1'
+        }`}
+      />
+    </button>
   );
 }
 
@@ -282,15 +314,29 @@ interface FormEdicaoCliente {
   endereco_comercial: string;
   observacoes: string;
   status: string;
+  segmento_id: string;
+  permite_emprestimo_adicional: boolean;
+  foto_url: string;
+}
+
+interface MicroseguroInfo {
+  id: string;
+  valor: number;
+  data_venda: string;
+  emprestimo_id?: string;
 }
 
 function FormularioEdicao({
   cliente,
+  segmentos,
+  microseguros,
   onSalvar,
   onCancelar,
   salvando,
 }: {
   cliente: Cliente;
+  segmentos: Segmento[];
+  microseguros: MicroseguroInfo[];
   onSalvar: (dados: FormEdicaoCliente) => void;
   onCancelar: () => void;
   salvando: boolean;
@@ -305,36 +351,62 @@ function FormularioEdicao({
     endereco_comercial: cliente.endereco_comercial || '',
     observacoes: cliente.observacoes || '',
     status: cliente.status || 'ATIVO',
+    segmento_id: cliente.segmento_id || '',
+    permite_emprestimo_adicional: cliente.permite_emprestimo_adicional || false,
+    foto_url: cliente.foto_url || '',
   });
 
-  const handleChange = (campo: keyof FormEdicaoCliente, valor: string) => {
+  const handleChange = (campo: keyof FormEdicaoCliente, valor: string | boolean) => {
     setForm(prev => ({ ...prev, [campo]: valor }));
   };
 
+  // Agrupar segmentos por grupo
+  const segmentosAgrupados = segmentos.reduce((acc, seg) => {
+    const grupo = seg.grupo || 'Outros';
+    if (!acc[grupo]) acc[grupo] = [];
+    acc[grupo].push(seg);
+    return acc;
+  }, {} as Record<string, Segmento[]>);
+
   return (
-    <div className="space-y-4">
-      {/* Nome */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
-        <input
-          type="text"
-          value={form.nome}
-          onChange={(e) => handleChange('nome', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Nome completo"
-        />
+    <div className="space-y-5">
+      {/* Foto do Cliente */}
+      <div className="flex items-center gap-4">
+        <div className="relative">
+          {form.foto_url ? (
+            <img 
+              src={form.foto_url} 
+              alt="Foto do cliente" 
+              className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+            />
+          ) : (
+            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200">
+              <Camera className="w-8 h-8 text-gray-400" />
+            </div>
+          )}
+        </div>
+        <div className="flex-1">
+          <label className="block text-sm font-medium text-gray-700 mb-1">URL da Foto</label>
+          <input
+            type="url"
+            value={form.foto_url}
+            onChange={(e) => handleChange('foto_url', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+            placeholder="https://exemplo.com/foto.jpg"
+          />
+        </div>
       </div>
 
-      {/* Documento e Status */}
-      <div className="grid grid-cols-2 gap-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Documento</label>
+      {/* Nome e Status */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">Nome Completo *</label>
           <input
             type="text"
-            value={form.documento}
-            onChange={(e) => handleChange('documento', e.target.value)}
+            value={form.nome}
+            onChange={(e) => handleChange('nome', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="CPF / CNPJ"
+            placeholder="Nome completo do cliente"
           />
         </div>
         <div>
@@ -351,10 +423,44 @@ function FormularioEdicao({
         </div>
       </div>
 
-      {/* Telefones */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Documento e Segmento */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Celular</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Documento (CPF/CNPJ)</label>
+          <input
+            type="text"
+            value={form.documento}
+            onChange={(e) => handleChange('documento', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="000.000.000-00"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Segmento</label>
+          <select
+            value={form.segmento_id}
+            onChange={(e) => handleChange('segmento_id', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Selecione um segmento</option>
+            {Object.entries(segmentosAgrupados).map(([grupo, segs]) => (
+              <optgroup key={grupo} label={grupo}>
+                {segs.map(seg => (
+                  <option key={seg.id} value={seg.id}>{seg.nome}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {/* Telefones */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            <Phone className="w-4 h-4 inline mr-1" />
+            Celular
+          </label>
           <input
             type="tel"
             value={form.telefone_celular}
@@ -364,7 +470,10 @@ function FormularioEdicao({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Telefone Fixo</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            <Phone className="w-4 h-4 inline mr-1" />
+            Telefone Fixo
+          </label>
           <input
             type="tel"
             value={form.telefone_fixo}
@@ -377,7 +486,10 @@ function FormularioEdicao({
 
       {/* Email */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          <Mail className="w-4 h-4 inline mr-1" />
+          E-mail
+        </label>
         <input
           type="email"
           value={form.email}
@@ -389,37 +501,79 @@ function FormularioEdicao({
 
       {/* Endereço Residencial */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Residencial</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          <MapPin className="w-4 h-4 inline mr-1" />
+          Endereço Residencial
+        </label>
         <textarea
           value={form.endereco}
           onChange={(e) => handleChange('endereco', e.target.value)}
           rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Rua, número, bairro, cidade..."
+          placeholder="Rua, número, bairro, cidade, estado, CEP"
         />
       </div>
 
       {/* Endereço Comercial */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Comercial</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          <Building2 className="w-4 h-4 inline mr-1" />
+          Endereço Comercial
+        </label>
         <textarea
           value={form.endereco_comercial}
           onChange={(e) => handleChange('endereco_comercial', e.target.value)}
           rows={2}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Endereço do trabalho..."
+          placeholder="Endereço do trabalho ou comércio"
         />
       </div>
 
+      {/* Toggle Empréstimo Adicional */}
+      <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100">
+        <div className="flex items-center gap-3">
+          <ShieldCheck className="w-5 h-5 text-blue-600" />
+          <div>
+            <p className="font-medium text-gray-900">Permite Empréstimo Adicional</p>
+            <p className="text-sm text-gray-500">Autoriza novo empréstimo mesmo com outro ativo</p>
+          </div>
+        </div>
+        <Toggle
+          checked={form.permite_emprestimo_adicional}
+          onChange={(value) => handleChange('permite_emprestimo_adicional', value)}
+        />
+      </div>
+
+      {/* Microseguros (somente leitura) */}
+      {microseguros.length > 0 && (
+        <div className="p-4 bg-purple-50 rounded-xl border border-purple-100">
+          <div className="flex items-center gap-2 mb-3">
+            <Banknote className="w-5 h-5 text-purple-600" />
+            <h4 className="font-medium text-gray-900">Microseguros Contratados</h4>
+          </div>
+          <div className="space-y-2">
+            {microseguros.map((ms, idx) => (
+              <div key={ms.id || idx} className="flex justify-between items-center text-sm bg-white p-2 rounded-lg">
+                <span className="text-gray-600">{formatarData(ms.data_venda)}</span>
+                <span className="font-medium text-purple-700">{formatarMoeda(ms.valor)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Observações */}
       <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          <FileText className="w-4 h-4 inline mr-1" />
+          Observações
+        </label>
         <textarea
           value={form.observacoes}
           onChange={(e) => handleChange('observacoes', e.target.value)}
           rows={3}
           className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          placeholder="Informações adicionais..."
+          placeholder="Informações adicionais sobre o cliente..."
         />
       </div>
 
@@ -443,7 +597,7 @@ function FormularioEdicao({
           ) : (
             <Save className="w-4 h-4" />
           )}
-          Salvar
+          Salvar Alterações
         </button>
       </div>
     </div>
@@ -471,6 +625,10 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
   const [parcelas, setParcelas] = useState<Record<string, ParcelaView[]>>({});
   const [carregandoParcelas, setCarregandoParcelas] = useState<string | null>(null);
   
+  // Dados auxiliares
+  const [segmentos, setSegmentos] = useState<Segmento[]>([]);
+  const [microseguros, setMicroseguros] = useState<MicroseguroInfo[]>([]);
+  
   // Estados de edição
   const [modoEdicao, setModoEdicao] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -481,6 +639,8 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
   useEffect(() => {
     if (isOpen && cliente?.id) {
       carregarDadosCompletos();
+      carregarSegmentos();
+      carregarMicroseguros();
       setModoEdicao(false);
       setErro(null);
       setSucesso(null);
@@ -519,6 +679,27 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
     }
   };
 
+  const carregarSegmentos = async () => {
+    try {
+      const data = await clientesService.buscarSegmentos();
+      setSegmentos(data);
+    } catch (error) {
+      console.error('Erro ao carregar segmentos:', error);
+    }
+  };
+
+  const carregarMicroseguros = async () => {
+    if (!cliente?.id) return;
+    try {
+      // Buscar microseguros do cliente
+      const data = await clientesService.buscarMicrosegurosCliente(cliente.id);
+      setMicroseguros(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar microseguros:', error);
+      setMicroseguros([]);
+    }
+  };
+
   const carregarParcelas = async (emprestimoId: string) => {
     setCarregandoParcelas(emprestimoId);
     try {
@@ -550,6 +731,9 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
         endereco_comercial: dados.endereco_comercial || undefined,
         observacoes: dados.observacoes || undefined,
         status: dados.status as 'ATIVO' | 'INATIVO' | 'SUSPENSO',
+        segmento_id: dados.segmento_id || undefined,
+        foto_url: dados.foto_url || undefined,
+        permite_emprestimo_adicional: dados.permite_emprestimo_adicional,
       });
       
       if (resultado.success) {
@@ -701,12 +885,25 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                 modoEdicao && clienteCompleto ? (
                   <FormularioEdicao
                     cliente={clienteCompleto}
+                    segmentos={segmentos}
+                    microseguros={microseguros}
                     onSalvar={handleSalvar}
                     onCancelar={() => setModoEdicao(false)}
                     salvando={salvando}
                   />
                 ) : (
                   <div className="space-y-6">
+                    {/* Foto e Info Principal */}
+                    {dadosExibicao.foto_url && (
+                      <div className="flex justify-center">
+                        <img 
+                          src={dadosExibicao.foto_url} 
+                          alt="Foto do cliente" 
+                          className="w-24 h-24 rounded-full object-cover border-4 border-gray-100 shadow-lg"
+                        />
+                      </div>
+                    )}
+
                     {/* Informações de contato */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       <ItemInfo icone={FileText} label="Documento" valor={dadosExibicao.documento} />
@@ -738,6 +935,10 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                         label="Segmento" 
                         valor={dadosExibicao.segmento_nome} 
                       />
+                    </div>
+
+                    {/* GPS e Empréstimo Adicional */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {dadosExibicao.latitude && dadosExibicao.longitude && (
                         <ItemInfo 
                           icone={MapPinned} 
@@ -745,12 +946,34 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                           valor={`${dadosExibicao.latitude}, ${dadosExibicao.longitude}`} 
                         />
                       )}
-                      <ItemInfo 
-                        icone={Shield} 
-                        label="Empréstimo Adicional" 
-                        valor={dadosExibicao.permite_emprestimo_adicional ? 'Permitido' : 'Não permitido'} 
-                      />
+                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
+                        <ShieldCheck className={`w-5 h-5 ${dadosExibicao.permite_emprestimo_adicional ? 'text-green-500' : 'text-gray-400'}`} />
+                        <div>
+                          <p className="text-xs text-gray-500">Empréstimo Adicional</p>
+                          <p className={`font-medium ${dadosExibicao.permite_emprestimo_adicional ? 'text-green-600' : 'text-gray-600'}`}>
+                            {dadosExibicao.permite_emprestimo_adicional ? 'Permitido' : 'Não permitido'}
+                          </p>
+                        </div>
+                      </div>
                     </div>
+
+                    {/* Microseguros */}
+                    {microseguros.length > 0 && (
+                      <div className="bg-purple-50 rounded-xl p-5 border border-purple-100">
+                        <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                          <Banknote className="w-5 h-5 text-purple-600" />
+                          Microseguros Contratados ({microseguros.length})
+                        </h3>
+                        <div className="space-y-2">
+                          {microseguros.map((ms, idx) => (
+                            <div key={ms.id || idx} className="flex justify-between items-center bg-white p-3 rounded-lg">
+                              <span className="text-gray-600">{formatarData(ms.data_venda)}</span>
+                              <span className="font-semibold text-purple-700">{formatarMoeda(ms.valor)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Resumo financeiro */}
                     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">

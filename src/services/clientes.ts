@@ -498,6 +498,7 @@ export const clientesService = {
   async atualizarCliente(input: AtualizarClienteInput): Promise<{ success: boolean; error?: string }> {
     const supabase = createClient();
     
+    // Primeiro, tenta usar a RPC para os campos suportados
     const { data, error } = await supabase.rpc('fn_atualizar_cliente', {
       p_cliente_id: input.cliente_id,
       p_nome: input.nome || null,
@@ -516,6 +517,19 @@ export const clientesService = {
     if (error) {
       console.error('Erro ao atualizar cliente:', error);
       return { success: false, error: error.message };
+    }
+    
+    // Atualizar campo permite_emprestimo_adicional diretamente se fornecido
+    if (input.permite_emprestimo_adicional !== undefined) {
+      const { error: errorAdicional } = await supabase
+        .from('clientes')
+        .update({ permite_emprestimo_adicional: input.permite_emprestimo_adicional })
+        .eq('id', input.cliente_id);
+      
+      if (errorAdicional) {
+        console.error('Erro ao atualizar permissão adicional:', errorAdicional);
+        // Não retorna erro, já que o principal funcionou
+      }
     }
     
     const resultado = Array.isArray(data) ? data[0] : data;
@@ -610,6 +624,31 @@ export const clientesService = {
     const emprestimos = await this.buscarHistoricoEmprestimosCliente(clienteId);
     
     return { cliente, emprestimos };
+  },
+
+  // ==================================================
+  // BUSCAR MICROSEGUROS DO CLIENTE
+  // ==================================================
+  async buscarMicrosegurosCliente(clienteId: string): Promise<{
+    id: string;
+    valor: number;
+    data_venda: string;
+    emprestimo_id?: string;
+  }[]> {
+    const supabase = createClient();
+    
+    const { data, error } = await supabase
+      .from('microseguro_vendas')
+      .select('id, valor, data_venda, emprestimo_id')
+      .eq('cliente_id', clienteId)
+      .order('data_venda', { ascending: false });
+    
+    if (error) {
+      console.error('Erro ao buscar microseguros do cliente:', error);
+      return [];
+    }
+    
+    return data || [];
   },
 
   // ==================================================
