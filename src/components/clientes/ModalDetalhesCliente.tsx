@@ -360,14 +360,6 @@ function FormularioEdicao({
     setForm(prev => ({ ...prev, [campo]: valor }));
   };
 
-  // Agrupar segmentos por grupo
-  const segmentosAgrupados = segmentos.reduce((acc, seg) => {
-    const grupo = seg.grupo || 'Outros';
-    if (!acc[grupo]) acc[grupo] = [];
-    acc[grupo].push(seg);
-    return acc;
-  }, {} as Record<string, Segmento[]>);
-
   return (
     <div className="space-y-5">
       {/* Foto do Cliente */}
@@ -443,12 +435,8 @@ function FormularioEdicao({
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           >
             <option value="">Selecione um segmento</option>
-            {Object.entries(segmentosAgrupados).map(([grupo, segs]) => (
-              <optgroup key={grupo} label={grupo}>
-                {segs.map(seg => (
-                  <option key={seg.id} value={seg.id}>{seg.nome}</option>
-                ))}
-              </optgroup>
+            {segmentos.map(seg => (
+              <option key={seg.id} value={seg.id}>{seg.nome}</option>
             ))}
           </select>
         </div>
