@@ -35,6 +35,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
+import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
 import type { 
   Cliente, 
   EmprestimoHistorico, 
@@ -362,31 +363,14 @@ function FormularioEdicao({
 
   return (
     <div className="space-y-5">
-      {/* Foto do Cliente */}
-      <div className="flex items-center gap-4">
-        <div className="relative">
-          {form.foto_url ? (
-            <img 
-              src={form.foto_url} 
-              alt="Foto do cliente" 
-              className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
-            />
-          ) : (
-            <div className="w-20 h-20 rounded-full bg-gray-100 flex items-center justify-center border-2 border-gray-200">
-              <Camera className="w-8 h-8 text-gray-400" />
-            </div>
-          )}
-        </div>
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">URL da Foto</label>
-          <input
-            type="url"
-            value={form.foto_url}
-            onChange={(e) => handleChange('foto_url', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
-            placeholder="https://exemplo.com/foto.jpg"
-          />
-        </div>
+      {/* Foto do Cliente com Upload */}
+      <div className="flex flex-col items-center">
+        <FotoClienteUpload
+          clienteId={cliente.id}
+          fotoUrl={form.foto_url || null}
+          onFotoChange={(url) => handleChange('foto_url', url || '')}
+          tamanho="lg"
+        />
       </div>
 
       {/* Nome e Status */}
@@ -760,17 +744,12 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b bg-gradient-to-r from-blue-600 to-blue-700">
           <div className="flex items-center gap-4">
-            {dadosExibicao.foto_url ? (
-              <img 
-                src={dadosExibicao.foto_url} 
-                alt="" 
-                className="w-14 h-14 rounded-full object-cover border-2 border-white/30" 
-              />
-            ) : (
-              <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center">
-                <User className="w-7 h-7 text-white" />
-              </div>
-            )}
+            <AvatarCliente
+              fotoUrl={dadosExibicao.foto_url}
+              nome={dadosExibicao.nome}
+              tamanho="lg"
+              className="border-2 border-white/30"
+            />
             <div>
               <h2 className="text-xl font-bold text-white">{dadosExibicao.nome}</h2>
               <div className="flex items-center gap-2 mt-1">
@@ -888,13 +867,14 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                   />
                 ) : (
                   <div className="space-y-6">
-                    {/* Foto e Info Principal */}
+                    {/* Foto centralizada */}
                     {dadosExibicao.foto_url && (
                       <div className="flex justify-center">
-                        <img 
-                          src={dadosExibicao.foto_url} 
-                          alt="Foto do cliente" 
-                          className="w-24 h-24 rounded-full object-cover border-4 border-gray-100 shadow-lg"
+                        <AvatarCliente
+                          fotoUrl={dadosExibicao.foto_url}
+                          nome={dadosExibicao.nome}
+                          tamanho="xl"
+                          className="border-4 border-gray-100 shadow-lg"
                         />
                       </div>
                     )}
