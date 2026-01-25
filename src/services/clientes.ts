@@ -498,7 +498,6 @@ export const clientesService = {
   async atualizarCliente(input: AtualizarClienteInput): Promise<{ success: boolean; error?: string }> {
     const supabase = createClient();
     
-    // Primeiro, tenta usar a RPC para os campos suportados
     const { data, error } = await supabase.rpc('fn_atualizar_cliente', {
       p_cliente_id: input.cliente_id,
       p_nome: input.nome || null,
@@ -519,25 +518,34 @@ export const clientesService = {
       return { success: false, error: error.message };
     }
     
-    // Atualizar campo permite_emprestimo_adicional diretamente se fornecido
-    if (input.permite_emprestimo_adicional !== undefined) {
-      const { error: errorAdicional } = await supabase
-        .from('clientes')
-        .update({ permite_emprestimo_adicional: input.permite_emprestimo_adicional })
-        .eq('id', input.cliente_id);
-      
-      if (errorAdicional) {
-        console.error('Erro ao atualizar permissão adicional:', errorAdicional);
-        // Não retorna erro, já que o principal funcionou
-      }
-    }
-    
     const resultado = Array.isArray(data) ? data[0] : data;
     
     return {
       success: resultado?.success !== false,
       error: resultado?.error,
     };
+  },
+
+  // ==================================================
+  // ATUALIZAR PERMITE EMPRESTIMO ADICIONAL
+  // ==================================================
+  async atualizarPermiteEmprestimoAdicional(
+    clienteId: string, 
+    permite: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    const supabase = createClient();
+    
+    const { error } = await supabase
+      .from('clientes')
+      .update({ permite_emprestimo_adicional: permite })
+      .eq('id', clienteId);
+    
+    if (error) {
+      console.error('Erro ao atualizar permissão adicional:', error);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true };
   },
 
   // ==================================================

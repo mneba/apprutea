@@ -721,8 +721,15 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
         status: dados.status as 'ATIVO' | 'INATIVO' | 'SUSPENSO',
         segmento_id: dados.segmento_id || undefined,
         foto_url: dados.foto_url || undefined,
-        permite_emprestimo_adicional: dados.permite_emprestimo_adicional,
       });
+      
+      // Atualizar permite_emprestimo_adicional separadamente via service
+      if (dados.permite_emprestimo_adicional !== undefined) {
+        await clientesService.atualizarPermiteEmprestimoAdicional(
+          cliente.id, 
+          dados.permite_emprestimo_adicional
+        );
+      }
       
       if (resultado.success) {
         setSucesso('Cliente atualizado com sucesso!');
