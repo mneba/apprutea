@@ -22,13 +22,21 @@ import {
   Percent,
   TrendingUp,
   History,
+  Edit3,
+  Save,
+  XCircle,
+  MapPinned,
+  Tag,
+  Shield,
+  Route,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import type { 
   Cliente, 
   EmprestimoHistorico, 
   ParcelaView,
-  ClienteComTotais 
+  ClienteComTotais,
+  Segmento,
 } from '@/types/clientes';
 
 // =====================================================
@@ -39,7 +47,7 @@ function formatarMoeda(valor: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
-  }).format(valor);
+  }).format(valor || 0);
 }
 
 function formatarData(data: string): string {
@@ -98,14 +106,39 @@ function ProgressBar({ percentual, cor = 'blue' }: { percentual: number; cor?: s
 
   return (
     <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-      <div 
-        className={`h-full ${cores[cor] || cores.blue} transition-all`}
-        style={{ width: `${Math.min(100, percentual)}%` }}
+      <div
+        className={`h-full ${cores[cor] || cores.blue} transition-all duration-500`}
+        style={{ width: `${Math.min(percentual, 100)}%` }}
       />
     </div>
   );
 }
 
+function ItemInfo({ 
+  icone: Icone, 
+  label, 
+  valor, 
+  className = '' 
+}: { 
+  icone: React.ElementType; 
+  label: string; 
+  valor: string | number | undefined | null;
+  className?: string;
+}) {
+  if (!valor && valor !== 0) return null;
+  
+  return (
+    <div className={`flex items-start gap-3 p-4 bg-gray-50 rounded-xl ${className}`}>
+      <Icone className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-gray-500">{label}</p>
+        <p className="font-medium text-gray-900 break-words">{valor}</p>
+      </div>
+    </div>
+  );
+}
+
+// Card de Empréstimo com parcelas expansíveis
 function CardEmprestimo({
   emprestimo,
   expandido,
@@ -119,53 +152,37 @@ function CardEmprestimo({
   parcelas: ParcelaView[];
   carregandoParcelas: boolean;
 }) {
-  const isAtivo = emprestimo.emprestimo_status === 'ATIVO';
+  const percentualPago = emprestimo.percentual_valor_pago || 0;
   
   return (
-    <div className={`border rounded-xl overflow-hidden ${isAtivo ? 'border-blue-200 bg-blue-50/30' : 'border-gray-200 bg-white'}`}>
-      {/* Header do empréstimo */}
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      {/* Header do Card */}
       <button
         onClick={onToggle}
-        className="w-full p-4 flex items-center justify-between hover:bg-gray-50/50 transition-colors"
+        className="w-full p-4 bg-white hover:bg-gray-50 transition-colors flex items-center justify-between"
       >
         <div className="flex items-center gap-4">
-          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${isAtivo ? 'bg-blue-100' : 'bg-gray-100'}`}>
-            <CreditCard className={`w-5 h-5 ${isAtivo ? 'text-blue-600' : 'text-gray-500'}`} />
+          <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+            <CreditCard className="w-5 h-5 text-blue-600" />
           </div>
           <div className="text-left">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-gray-900">{formatarMoeda(emprestimo.valor_principal)}</span>
+              <span className="font-semibold text-gray-900">
+                {formatarMoeda(emprestimo.valor_principal)}
+              </span>
               <BadgeStatus status={emprestimo.emprestimo_status} tipo="emprestimo" />
-              {emprestimo.tipo_emprestimo && (
-                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                  {emprestimo.tipo_emprestimo}
-                </span>
-              )}
             </div>
-            <div className="flex items-center gap-3 text-sm text-gray-500 mt-1">
-              <span className="flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5" />
-                {formatarData(emprestimo.data_emprestimo)}
-              </span>
-              <span className="flex items-center gap-1">
-                <Hash className="w-3.5 h-3.5" />
-                {emprestimo.numero_parcelas}x de {formatarMoeda(emprestimo.valor_parcela)}
-              </span>
-              <span className="flex items-center gap-1">
-                <Percent className="w-3.5 h-3.5" />
-                {emprestimo.taxa_juros}%
-              </span>
-            </div>
+            <p className="text-sm text-gray-500">
+              {formatarData(emprestimo.data_emprestimo)} • {emprestimo.numero_parcelas}x de {formatarMoeda(emprestimo.valor_parcela)}
+            </p>
           </div>
         </div>
         
         <div className="flex items-center gap-4">
           <div className="text-right">
-            <p className="text-sm font-medium text-gray-900">
-              {emprestimo.parcelas_pagas}/{emprestimo.numero_parcelas} parcelas
-            </p>
+            <p className="text-sm font-medium text-gray-900">{percentualPago.toFixed(0)}% pago</p>
             <p className="text-xs text-gray-500">
-              {emprestimo.percentual_quitado.toFixed(0)}% quitado
+              {emprestimo.parcelas_pagas}/{emprestimo.numero_parcelas} parcelas
             </p>
           </div>
           {expandido ? (
@@ -176,65 +193,65 @@ function CardEmprestimo({
         </div>
       </button>
 
-      {/* Resumo financeiro */}
-      <div className="px-4 pb-3 grid grid-cols-4 gap-3 border-t border-gray-100 pt-3">
-        <div>
-          <p className="text-xs text-gray-500">Total</p>
-          <p className="text-sm font-semibold text-gray-900">{formatarMoeda(emprestimo.valor_total)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Pago</p>
-          <p className="text-sm font-semibold text-green-600">{formatarMoeda(emprestimo.total_pago_parcelas)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Saldo</p>
-          <p className="text-sm font-semibold text-amber-600">{formatarMoeda(emprestimo.total_saldo_parcelas)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-gray-500">Vencidas</p>
-          <p className={`text-sm font-semibold ${emprestimo.parcelas_vencidas > 0 ? 'text-red-600' : 'text-gray-900'}`}>
-            {emprestimo.parcelas_vencidas}
-          </p>
-        </div>
-      </div>
-
-      {/* Progress bar */}
-      <div className="px-4 pb-4">
-        <ProgressBar 
-          percentual={emprestimo.percentual_valor_pago} 
-          cor={emprestimo.parcelas_vencidas > 0 ? 'red' : 'green'}
-        />
-      </div>
-
-      {/* Parcelas expandidas */}
+      {/* Conteúdo Expandido */}
       {expandido && (
-        <div className="border-t border-gray-200 bg-gray-50/50">
+        <div className="border-t border-gray-200 bg-gray-50 p-4">
+          {/* Resumo Financeiro */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            <div className="bg-white p-3 rounded-lg">
+              <p className="text-xs text-gray-500">Valor Total</p>
+              <p className="font-semibold text-gray-900">{formatarMoeda(emprestimo.valor_total)}</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg">
+              <p className="text-xs text-gray-500">Total Pago</p>
+              <p className="font-semibold text-green-600">{formatarMoeda(emprestimo.total_pago_parcelas)}</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg">
+              <p className="text-xs text-gray-500">Saldo Restante</p>
+              <p className="font-semibold text-amber-600">{formatarMoeda(emprestimo.total_saldo_parcelas)}</p>
+            </div>
+            <div className="bg-white p-3 rounded-lg">
+              <p className="text-xs text-gray-500">Taxa de Juros</p>
+              <p className="font-semibold text-gray-900">{emprestimo.taxa_juros}%</p>
+            </div>
+          </div>
+
+          {/* Barra de Progresso */}
+          <div className="mb-4">
+            <div className="flex justify-between text-xs text-gray-500 mb-1">
+              <span>Progresso do Pagamento</span>
+              <span>{percentualPago.toFixed(1)}%</span>
+            </div>
+            <ProgressBar percentual={percentualPago} cor="green" />
+          </div>
+
+          {/* Tabela de Parcelas */}
           {carregandoParcelas ? (
             <div className="flex items-center justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
             </div>
           ) : parcelas.length > 0 ? (
-            <div className="max-h-64 overflow-y-auto">
+            <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
               <table className="w-full text-sm">
-                <thead className="bg-gray-100 sticky top-0">
-                  <tr>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">#</th>
-                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500">Vencimento</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Valor</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Pago</th>
-                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-500">Saldo</th>
-                    <th className="px-4 py-2 text-center text-xs font-medium text-gray-500">Status</th>
+                <thead>
+                  <tr className="bg-gray-50 border-b">
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">#</th>
+                    <th className="px-3 py-2 text-left font-medium text-gray-700">Vencimento</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Pago</th>
+                    <th className="px-3 py-2 text-right font-medium text-gray-700">Saldo</th>
+                    <th className="px-3 py-2 text-center font-medium text-gray-700">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {parcelas.map((parcela) => (
                     <tr key={parcela.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-900 font-medium">{parcela.numero_parcela}</td>
-                      <td className="px-4 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
-                      <td className="px-4 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
-                      <td className="px-4 py-2 text-right text-green-600">{formatarMoeda(parcela.valor_pago)}</td>
-                      <td className="px-4 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
-                      <td className="px-4 py-2 text-center">
+                      <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
+                      <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
+                      <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
+                      <td className="px-3 py-2 text-right text-green-600">{formatarMoeda(parcela.valor_pago)}</td>
+                      <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
+                      <td className="px-3 py-2 text-center">
                         <BadgeStatus status={parcela.status} tipo="parcela" />
                       </td>
                     </tr>
@@ -243,9 +260,7 @@ function CardEmprestimo({
               </table>
             </div>
           ) : (
-            <div className="py-8 text-center text-gray-500">
-              Nenhuma parcela encontrada
-            </div>
+            <p className="text-center text-gray-500 py-4">Nenhuma parcela encontrada</p>
           )}
         </div>
       )}
@@ -254,85 +269,308 @@ function CardEmprestimo({
 }
 
 // =====================================================
-// MODAL PRINCIPAL
+// COMPONENTE DE EDIÇÃO
+// =====================================================
+
+interface FormEdicaoCliente {
+  nome: string;
+  documento: string;
+  telefone_celular: string;
+  telefone_fixo: string;
+  email: string;
+  endereco: string;
+  endereco_comercial: string;
+  observacoes: string;
+  status: string;
+}
+
+function FormularioEdicao({
+  cliente,
+  onSalvar,
+  onCancelar,
+  salvando,
+}: {
+  cliente: Cliente;
+  onSalvar: (dados: FormEdicaoCliente) => void;
+  onCancelar: () => void;
+  salvando: boolean;
+}) {
+  const [form, setForm] = useState<FormEdicaoCliente>({
+    nome: cliente.nome || '',
+    documento: cliente.documento || '',
+    telefone_celular: cliente.telefone_celular || '',
+    telefone_fixo: cliente.telefone_fixo || '',
+    email: cliente.email || '',
+    endereco: cliente.endereco || '',
+    endereco_comercial: cliente.endereco_comercial || '',
+    observacoes: cliente.observacoes || '',
+    status: cliente.status || 'ATIVO',
+  });
+
+  const handleChange = (campo: keyof FormEdicaoCliente, valor: string) => {
+    setForm(prev => ({ ...prev, [campo]: valor }));
+  };
+
+  return (
+    <div className="space-y-4">
+      {/* Nome */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Nome *</label>
+        <input
+          type="text"
+          value={form.nome}
+          onChange={(e) => handleChange('nome', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Nome completo"
+        />
+      </div>
+
+      {/* Documento e Status */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Documento</label>
+          <input
+            type="text"
+            value={form.documento}
+            onChange={(e) => handleChange('documento', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="CPF / CNPJ"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <select
+            value={form.status}
+            onChange={(e) => handleChange('status', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="ATIVO">Ativo</option>
+            <option value="INATIVO">Inativo</option>
+            <option value="SUSPENSO">Suspenso</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Telefones */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Celular</label>
+          <input
+            type="tel"
+            value={form.telefone_celular}
+            onChange={(e) => handleChange('telefone_celular', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="(00) 00000-0000"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Telefone Fixo</label>
+          <input
+            type="tel"
+            value={form.telefone_fixo}
+            onChange={(e) => handleChange('telefone_fixo', e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            placeholder="(00) 0000-0000"
+          />
+        </div>
+      </div>
+
+      {/* Email */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">E-mail</label>
+        <input
+          type="email"
+          value={form.email}
+          onChange={(e) => handleChange('email', e.target.value)}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="email@exemplo.com"
+        />
+      </div>
+
+      {/* Endereço Residencial */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Residencial</label>
+        <textarea
+          value={form.endereco}
+          onChange={(e) => handleChange('endereco', e.target.value)}
+          rows={2}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Rua, número, bairro, cidade..."
+        />
+      </div>
+
+      {/* Endereço Comercial */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Endereço Comercial</label>
+        <textarea
+          value={form.endereco_comercial}
+          onChange={(e) => handleChange('endereco_comercial', e.target.value)}
+          rows={2}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Endereço do trabalho..."
+        />
+      </div>
+
+      {/* Observações */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700 mb-1">Observações</label>
+        <textarea
+          value={form.observacoes}
+          onChange={(e) => handleChange('observacoes', e.target.value)}
+          rows={3}
+          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          placeholder="Informações adicionais..."
+        />
+      </div>
+
+      {/* Botões */}
+      <div className="flex justify-end gap-3 pt-4 border-t">
+        <button
+          onClick={onCancelar}
+          disabled={salvando}
+          className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg font-medium transition-colors flex items-center gap-2"
+        >
+          <XCircle className="w-4 h-4" />
+          Cancelar
+        </button>
+        <button
+          onClick={() => onSalvar(form)}
+          disabled={salvando || !form.nome.trim()}
+          className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {salvando ? (
+            <Loader2 className="w-4 h-4 animate-spin" />
+          ) : (
+            <Save className="w-4 h-4" />
+          )}
+          Salvar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// COMPONENTE PRINCIPAL
 // =====================================================
 
 interface Props {
   isOpen: boolean;
   onClose: () => void;
   cliente: ClienteComTotais | null;
+  onClienteAtualizado?: () => void;
 }
 
-export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
-  const [carregando, setCarregando] = useState(true);
+export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtualizado }: Props) {
+  const [abaAtiva, setAbaAtiva] = useState<'dados' | 'ativos' | 'historico'>('dados');
   const [clienteCompleto, setClienteCompleto] = useState<Cliente | null>(null);
   const [emprestimosAtivos, setEmprestimosAtivos] = useState<EmprestimoHistorico[]>([]);
   const [emprestimosFinalizados, setEmprestimosFinalizados] = useState<EmprestimoHistorico[]>([]);
+  const [carregando, setCarregando] = useState(false);
   const [emprestimoExpandido, setEmprestimoExpandido] = useState<string | null>(null);
   const [parcelas, setParcelas] = useState<Record<string, ParcelaView[]>>({});
   const [carregandoParcelas, setCarregandoParcelas] = useState<string | null>(null);
-  const [abaAtiva, setAbaAtiva] = useState<'dados' | 'ativos' | 'historico'>('dados');
+  
+  // Estados de edição
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState<string | null>(null);
 
   // Carregar dados completos do cliente
   useEffect(() => {
-    async function carregar() {
-      if (!cliente?.id || !isOpen) return;
-      
-      setCarregando(true);
-      try {
-        const { cliente: clienteData, emprestimos } = await clientesService.buscarClienteCompleto(cliente.id);
-        
-        setClienteCompleto(clienteData);
-        setEmprestimosAtivos(emprestimos.ativos);
-        setEmprestimosFinalizados(emprestimos.finalizados);
-        
-        // Se tem empréstimos ativos, expande o primeiro
-        if (emprestimos.ativos.length > 0) {
-          setAbaAtiva('ativos');
-        }
-      } catch (error) {
-        console.error('Erro ao carregar detalhes:', error);
-      } finally {
-        setCarregando(false);
-      }
+    if (isOpen && cliente?.id) {
+      carregarDadosCompletos();
+      setModoEdicao(false);
+      setErro(null);
+      setSucesso(null);
     }
-    
-    carregar();
-  }, [cliente?.id, isOpen]);
+  }, [isOpen, cliente?.id]);
 
-  // Carregar parcelas quando expandir empréstimo
+  // Carregar parcelas ao expandir empréstimo
   useEffect(() => {
-    async function carregarParcelas() {
-      if (!emprestimoExpandido || parcelas[emprestimoExpandido]) return;
-      
-      setCarregandoParcelas(emprestimoExpandido);
-      try {
-        const parcelasData = await clientesService.buscarParcelasViaView(emprestimoExpandido);
-        setParcelas(prev => ({ ...prev, [emprestimoExpandido]: parcelasData }));
-      } catch (error) {
-        console.error('Erro ao carregar parcelas:', error);
-      } finally {
-        setCarregandoParcelas(null);
-      }
+    if (emprestimoExpandido && !parcelas[emprestimoExpandido]) {
+      carregarParcelas(emprestimoExpandido);
     }
-    
-    carregarParcelas();
-  }, [emprestimoExpandido, parcelas]);
+  }, [emprestimoExpandido]);
 
-  // Reset ao fechar
+  // Definir aba inicial baseado nos empréstimos
   useEffect(() => {
-    if (!isOpen) {
-      setClienteCompleto(null);
-      setEmprestimosAtivos([]);
-      setEmprestimosFinalizados([]);
-      setEmprestimoExpandido(null);
-      setParcelas({});
+    if (emprestimosAtivos.length > 0) {
+      setAbaAtiva('ativos');
+    } else {
       setAbaAtiva('dados');
     }
-  }, [isOpen]);
+  }, [emprestimosAtivos]);
+
+  const carregarDadosCompletos = async () => {
+    if (!cliente?.id) return;
+    
+    setCarregando(true);
+    try {
+      const resultado = await clientesService.buscarClienteCompleto(cliente.id);
+      setClienteCompleto(resultado.cliente);
+      setEmprestimosAtivos(resultado.emprestimos.ativos);
+      setEmprestimosFinalizados(resultado.emprestimos.finalizados);
+    } catch (error) {
+      console.error('Erro ao carregar dados do cliente:', error);
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const carregarParcelas = async (emprestimoId: string) => {
+    setCarregandoParcelas(emprestimoId);
+    try {
+      const data = await clientesService.buscarParcelasViaView(emprestimoId);
+      setParcelas(prev => ({ ...prev, [emprestimoId]: data }));
+    } catch (error) {
+      console.error('Erro ao carregar parcelas:', error);
+    } finally {
+      setCarregandoParcelas(null);
+    }
+  };
+
+  const handleSalvar = async (dados: FormEdicaoCliente) => {
+    if (!cliente?.id) return;
+    
+    setSalvando(true);
+    setErro(null);
+    setSucesso(null);
+    
+    try {
+      const resultado = await clientesService.atualizarCliente({
+        cliente_id: cliente.id,
+        nome: dados.nome,
+        documento: dados.documento || undefined,
+        telefone_celular: dados.telefone_celular || undefined,
+        telefone_fixo: dados.telefone_fixo || undefined,
+        email: dados.email || undefined,
+        endereco: dados.endereco || undefined,
+        endereco_comercial: dados.endereco_comercial || undefined,
+        observacoes: dados.observacoes || undefined,
+        status: dados.status as 'ATIVO' | 'INATIVO' | 'SUSPENSO',
+      });
+      
+      if (resultado.success) {
+        setSucesso('Cliente atualizado com sucesso!');
+        setModoEdicao(false);
+        await carregarDadosCompletos();
+        onClienteAtualizado?.();
+      } else {
+        setErro(resultado.error || 'Erro ao atualizar cliente');
+      }
+    } catch (error) {
+      console.error('Erro ao salvar:', error);
+      setErro('Erro ao salvar alterações');
+    } finally {
+      setSalvando(false);
+    }
+  };
 
   if (!isOpen || !cliente) return null;
 
+  // Usar dados completos se disponíveis, senão usar dados básicos
   const dadosExibicao = clienteCompleto || cliente;
 
   return (
@@ -355,27 +593,52 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
               </div>
             )}
             <div>
-              <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white">{dadosExibicao.nome}</h2>
+              <div className="flex items-center gap-2 mt-1">
                 <span className="bg-white/20 px-2 py-0.5 rounded font-mono text-white/90 text-sm">
-                  #{cliente.codigo_cliente}
+                  #{dadosExibicao.codigo_cliente || cliente.codigo_cliente || '...'}
                 </span>
                 <BadgeStatus status={dadosExibicao.status} tipo="cliente" />
               </div>
-              <h2 className="text-xl font-bold text-white mt-1">{dadosExibicao.nome}</h2>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 rounded-full hover:bg-white/10 transition-colors"
-          >
-            <X className="w-6 h-6 text-white" />
-          </button>
+          <div className="flex items-center gap-2">
+            {!modoEdicao && abaAtiva === 'dados' && (
+              <button
+                onClick={() => setModoEdicao(true)}
+                className="p-2 rounded-full hover:bg-white/10 transition-colors text-white"
+                title="Editar cliente"
+              >
+                <Edit3 className="w-5 h-5" />
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 rounded-full hover:bg-white/10 transition-colors"
+            >
+              <X className="w-6 h-6 text-white" />
+            </button>
+          </div>
         </div>
+
+        {/* Mensagens de Feedback */}
+        {erro && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-center gap-2 text-red-700">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm">{erro}</p>
+          </div>
+        )}
+        {sucesso && (
+          <div className="mx-6 mt-4 p-3 bg-green-50 border border-green-200 rounded-lg flex items-center gap-2 text-green-700">
+            <CheckCircle className="w-5 h-5 flex-shrink-0" />
+            <p className="text-sm">{sucesso}</p>
+          </div>
+        )}
 
         {/* Tabs */}
         <div className="flex border-b bg-gray-50">
           <button
-            onClick={() => setAbaAtiva('dados')}
+            onClick={() => { setAbaAtiva('dados'); setModoEdicao(false); }}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               abaAtiva === 'dados'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
@@ -388,7 +651,7 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
             </div>
           </button>
           <button
-            onClick={() => setAbaAtiva('ativos')}
+            onClick={() => { setAbaAtiva('ativos'); setModoEdicao(false); }}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               abaAtiva === 'ativos'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
@@ -406,7 +669,7 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
             </div>
           </button>
           <button
-            onClick={() => setAbaAtiva('historico')}
+            onClick={() => { setAbaAtiva('historico'); setModoEdicao(false); }}
             className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
               abaAtiva === 'historico'
                 ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
@@ -435,113 +698,104 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
             <>
               {/* ABA: DADOS DO CLIENTE */}
               {abaAtiva === 'dados' && (
-                <div className="space-y-6">
-                  {/* Informações de contato */}
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {dadosExibicao.documento && (
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                        <FileText className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-xs text-gray-500">Documento</p>
-                          <p className="font-medium text-gray-900">{dadosExibicao.documento}</p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {dadosExibicao.telefone_celular && (
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                        <Phone className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-xs text-gray-500">Celular</p>
-                          <p className="font-medium text-gray-900">{dadosExibicao.telefone_celular}</p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {dadosExibicao.telefone_fixo && (
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                        <Phone className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-xs text-gray-500">Telefone Fixo</p>
-                          <p className="font-medium text-gray-900">{dadosExibicao.telefone_fixo}</p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {dadosExibicao.email && (
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
-                        <Mail className="w-5 h-5 text-gray-400" />
-                        <div>
-                          <p className="text-xs text-gray-500">E-mail</p>
-                          <p className="font-medium text-gray-900">{dadosExibicao.email}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Endereços */}
-                  <div className="space-y-3">
-                    {dadosExibicao.endereco && (
-                      <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
-                        <MapPin className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs text-gray-500">Endereço Residencial</p>
-                          <p className="font-medium text-gray-900">{dadosExibicao.endereco}</p>
-                        </div>
-                      </div>
-                    )}
-                    
-                    {dadosExibicao.endereco_comercial && (
-                      <div className="flex items-start gap-3 p-4 bg-gray-50 rounded-xl">
-                        <Building2 className="w-5 h-5 text-gray-400 flex-shrink-0 mt-0.5" />
-                        <div>
-                          <p className="text-xs text-gray-500">Endereço Comercial</p>
-                          <p className="font-medium text-gray-900">{dadosExibicao.endereco_comercial}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Resumo financeiro */}
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
-                    <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-                      <DollarSign className="w-5 h-5 text-blue-600" />
-                      Resumo Financeiro
-                    </h3>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500">Empréstimos Ativos</p>
-                        <p className="text-xl font-bold text-blue-600">{cliente.qtd_emprestimos_ativos}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Total Emprestado</p>
-                        <p className="text-xl font-bold text-gray-900">{formatarMoeda(cliente.valor_total_emprestimos)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Total Pago</p>
-                        <p className="text-xl font-bold text-green-600">{formatarMoeda(cliente.valor_total_pago)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500">Saldo Devedor</p>
-                        <p className="text-xl font-bold text-amber-600">{formatarMoeda(cliente.valor_saldo_devedor)}</p>
-                      </div>
+                modoEdicao && clienteCompleto ? (
+                  <FormularioEdicao
+                    cliente={clienteCompleto}
+                    onSalvar={handleSalvar}
+                    onCancelar={() => setModoEdicao(false)}
+                    salvando={salvando}
+                  />
+                ) : (
+                  <div className="space-y-6">
+                    {/* Informações de contato */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <ItemInfo icone={FileText} label="Documento" valor={dadosExibicao.documento} />
+                      <ItemInfo icone={Phone} label="Celular" valor={dadosExibicao.telefone_celular} />
+                      <ItemInfo icone={Phone} label="Telefone Fixo" valor={dadosExibicao.telefone_fixo} />
+                      <ItemInfo icone={Mail} label="E-mail" valor={dadosExibicao.email} />
                     </div>
-                    {(cliente.parcelas_atrasadas || 0) > 0 && (
-                      <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-lg">
-                        <AlertCircle className="w-4 h-4" />
-                        <span className="text-sm font-medium">{cliente.parcelas_atrasadas} parcela(s) em atraso</span>
+
+                    {/* Endereços */}
+                    <div className="grid grid-cols-1 gap-4">
+                      <ItemInfo icone={MapPin} label="Endereço Residencial" valor={dadosExibicao.endereco} />
+                      <ItemInfo icone={Building2} label="Endereço Comercial" valor={dadosExibicao.endereco_comercial} />
+                    </div>
+
+                    {/* Informações adicionais */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      <ItemInfo 
+                        icone={Calendar} 
+                        label="Data de Cadastro" 
+                        valor={dadosExibicao.data_cadastro ? formatarData(dadosExibicao.data_cadastro) : null} 
+                      />
+                      <ItemInfo 
+                        icone={Route} 
+                        label="Rotas" 
+                        valor={dadosExibicao.rotas_nomes || (dadosExibicao.rotas_ids?.length ? `${dadosExibicao.rotas_ids.length} rota(s)` : null)} 
+                      />
+                      <ItemInfo 
+                        icone={Tag} 
+                        label="Segmento" 
+                        valor={dadosExibicao.segmento_nome} 
+                      />
+                      {dadosExibicao.latitude && dadosExibicao.longitude && (
+                        <ItemInfo 
+                          icone={MapPinned} 
+                          label="Localização GPS" 
+                          valor={`${dadosExibicao.latitude}, ${dadosExibicao.longitude}`} 
+                        />
+                      )}
+                      <ItemInfo 
+                        icone={Shield} 
+                        label="Empréstimo Adicional" 
+                        valor={dadosExibicao.permite_emprestimo_adicional ? 'Permitido' : 'Não permitido'} 
+                      />
+                    </div>
+
+                    {/* Resumo financeiro */}
+                    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
+                      <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                        <DollarSign className="w-5 h-5 text-blue-600" />
+                        Resumo Financeiro
+                      </h3>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Empréstimos Ativos</p>
+                          <p className="text-xl font-bold text-blue-600">{cliente.qtd_emprestimos_ativos}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Total Emprestado</p>
+                          <p className="text-xl font-bold text-gray-900">{formatarMoeda(cliente.valor_total_emprestimos)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Total Pago</p>
+                          <p className="text-xl font-bold text-green-600">{formatarMoeda(cliente.valor_total_pago)}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Saldo Devedor</p>
+                          <p className="text-xl font-bold text-amber-600">{formatarMoeda(cliente.valor_saldo_devedor)}</p>
+                        </div>
+                      </div>
+                      {(cliente.parcelas_atrasadas || 0) > 0 && (
+                        <div className="mt-4 flex items-center gap-2 text-red-600 bg-red-50 px-3 py-2 rounded-lg">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-sm font-medium">{cliente.parcelas_atrasadas} parcela(s) em atraso</span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Observações */}
+                    {dadosExibicao.observacoes && (
+                      <div className="bg-gray-50 rounded-xl p-4">
+                        <h3 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
+                          <FileText className="w-4 h-4 text-gray-500" />
+                          Observações
+                        </h3>
+                        <p className="text-gray-600 whitespace-pre-wrap">{dadosExibicao.observacoes}</p>
                       </div>
                     )}
                   </div>
-
-                  {/* Observações */}
-                  {dadosExibicao.observacoes && (
-                    <div className="bg-gray-50 rounded-xl p-4">
-                      <h3 className="font-semibold text-gray-900 mb-2">Observações</h3>
-                      <p className="text-gray-600">{dadosExibicao.observacoes}</p>
-                    </div>
-                  )}
-                </div>
+                )
               )}
 
               {/* ABA: EMPRÉSTIMOS ATIVOS */}
@@ -593,24 +847,14 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente }: Props) {
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
                         <History className="w-8 h-8 text-gray-400" />
                       </div>
-                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Sem histórico</h3>
-                      <p className="text-gray-500">Nenhum empréstimo finalizado encontrado.</p>
+                      <h3 className="text-lg font-semibold text-gray-900 mb-1">Nenhum histórico</h3>
+                      <p className="text-gray-500">Este cliente ainda não possui empréstimos finalizados.</p>
                     </div>
                   )}
                 </div>
               )}
             </>
           )}
-        </div>
-
-        {/* Footer */}
-        <div className="flex justify-end gap-3 px-6 py-4 border-t bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-6 py-2.5 text-gray-700 font-medium hover:bg-gray-200 rounded-xl transition-colors"
-          >
-            Fechar
-          </button>
         </div>
       </div>
     </div>
