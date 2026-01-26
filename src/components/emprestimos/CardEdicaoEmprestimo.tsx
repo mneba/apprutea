@@ -7,12 +7,8 @@ import {
   AlertCircle,
   CheckCircle,
   Calendar,
-  CalendarDays,
   AlertTriangle,
-  ChevronDown,
-  ChevronUp,
   Edit3,
-  X,
   RefreshCw,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
@@ -37,9 +33,6 @@ interface EmprestimoParaEdicao {
   dias_mes_cobranca?: number[] | null;
   status: string;
   observacoes?: string;
-  // Campos calculados
-  parcelas_atrasadas?: number;
-  tem_atraso?: boolean;
 }
 
 interface CardEdicaoEmprestimoProps {
@@ -71,17 +64,6 @@ const DIAS_SEMANA = [
 ];
 
 // =====================================================
-// HELPERS
-// =====================================================
-
-function formatarMoeda(valor: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor);
-}
-
-// =====================================================
 // COMPONENTE PRINCIPAL
 // =====================================================
 
@@ -96,6 +78,7 @@ export function CardEdicaoEmprestimo({
   const [diaSemana, setDiaSemana] = useState<number | null>(emprestimo.dia_semana_cobranca ?? null);
   const [diaMes, setDiaMes] = useState<number | null>(emprestimo.dia_mes_cobranca ?? null);
   const [diasFlexiveis, setDiasFlexiveis] = useState<number[]>(emprestimo.dias_mes_cobranca ?? []);
+  const [dataPrimeiraParcela, setDataPrimeiraParcela] = useState<string>(''); // ⭐ NOVO
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -108,21 +91,61 @@ export function CardEdicaoEmprestimo({
     setDiaSemana(emprestimo.dia_semana_cobranca ?? null);
     setDiaMes(emprestimo.dia_mes_cobranca ?? null);
     setDiasFlexiveis(emprestimo.dias_mes_cobranca ?? []);
+    setDataPrimeiraParcela('');
     setEditando(false);
     setErro(null);
     setSucesso(null);
     setRequerRenegociacao(false);
   }, [emprestimo.id]);
 
-  // Verificar se houve mudança
+  // Verificar se houve mudança de frequência
+  const mudouFrequencia = frequencia !== emprestimo.frequencia_pagamento;
+  
+  // Verificar se houve alguma mudança
   const houveMudanca = 
-    frequencia !== emprestimo.frequencia_pagamento ||
+    mudouFrequencia ||
     diaSemana !== emprestimo.dia_semana_cobranca ||
     diaMes !== emprestimo.dia_mes_cobranca ||
     JSON.stringify(diasFlexiveis) !== JSON.stringify(emprestimo.dias_mes_cobranca || []);
 
+  // ⭐ Validar se pode salvar
+  const podeSalvar = () => {
+    if (!houveMudanca) return false;
+    
+    // Se mudou frequência, data é obrigatória
+    if (mudouFrequencia && !dataPrimeiraParcela) return false;
+    
+    // Validar parâmetros específicos
+    if (frequencia === 'SEMANAL' && diaSemana === null) return false;
+    if (frequencia === 'MENSAL' && diaMes === null) return false;
+    if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0) return false;
+    
+    return true;
+  };
+
   // Handler para salvar
   const handleSalvar = async () => {
+    // Validações
+    if (mudouFrequencia && !dataPrimeiraParcela) {
+      setErro('Informe a data da primeira parcela pendente.');
+      return;
+    }
+    
+    if (frequencia === 'SEMANAL' && diaSemana === null) {
+      setErro('Selecione o dia da semana para cobrança.');
+      return;
+    }
+    
+    if (frequencia === 'MENSAL' && diaMes === null) {
+      setErro('Selecione o dia do mês para cobrança.');
+      return;
+    }
+    
+    if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0) {
+      setErro('Selecione pelo menos um dia do mês.');
+      return;
+    }
+
     setSalvando(true);
     setErro(null);
     setSucesso(null);
@@ -141,7 +164,7 @@ export function CardEdicaoEmprestimo({
         p_dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemana : null,
         p_dia_mes_cobranca: frequencia === 'MENSAL' ? diaMes : null,
         p_dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasFlexiveis : null,
-        p_recalcular_parcelas: true,
+        p_data_primeira_parcela: mudouFrequencia ? dataPrimeiraParcela : null,
       });
 
       if (error) throw error;
@@ -156,7 +179,6 @@ export function CardEdicaoEmprestimo({
           onSucesso?.();
         }, 2000);
       } else {
-        // Verificar se requer renegociação
         if (resultado?.requer_renegociacao) {
           setRequerRenegociacao(true);
           setParcelasAtrasadas(resultado.parcelas_atrasadas || 0);
@@ -177,6 +199,7 @@ export function CardEdicaoEmprestimo({
     setDiaSemana(emprestimo.dia_semana_cobranca ?? null);
     setDiaMes(emprestimo.dia_mes_cobranca ?? null);
     setDiasFlexiveis(emprestimo.dias_mes_cobranca ?? []);
+    setDataPrimeiraParcela('');
     setEditando(false);
     setErro(null);
     setRequerRenegociacao(false);
@@ -195,6 +218,9 @@ export function CardEdicaoEmprestimo({
   if (emprestimo.status !== 'ATIVO') {
     return null;
   }
+
+  // Data mínima = hoje
+  const dataMinima = new Date().toISOString().split('T')[0];
 
   return (
     <div className="border-t border-gray-100 pt-3 mt-3">
@@ -296,7 +322,9 @@ export function CardEdicaoEmprestimo({
           {/* Dia da semana (SEMANAL) */}
           {frequencia === 'SEMANAL' && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-2">Dia da Semana</label>
+              <label className="block text-xs font-medium text-gray-600 mb-2">
+                Dia da Semana <span className="text-red-500">*</span>
+              </label>
               <div className="grid grid-cols-7 gap-1">
                 {DIAS_SEMANA.map((dia) => (
                   <button
@@ -319,7 +347,9 @@ export function CardEdicaoEmprestimo({
           {/* Dia do mês (MENSAL) */}
           {frequencia === 'MENSAL' && (
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-2">Dia do Mês</label>
+              <label className="block text-xs font-medium text-gray-600 mb-2">
+                Dia do Mês <span className="text-red-500">*</span>
+              </label>
               <div className="grid grid-cols-10 gap-1">
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => (
                   <button
@@ -343,7 +373,7 @@ export function CardEdicaoEmprestimo({
           {frequencia === 'FLEXIVEL' && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-2">
-                Dias do Mês (selecione múltiplos)
+                Dias do Mês (selecione múltiplos) <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-10 gap-1">
                 {Array.from({ length: 31 }, (_, i) => i + 1).map((dia) => (
@@ -369,14 +399,33 @@ export function CardEdicaoEmprestimo({
             </div>
           )}
 
+          {/* ⭐ DATA DA PRIMEIRA PARCELA (obrigatório se mudou frequência) */}
+          {mudouFrequencia && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <label className="block text-xs font-medium text-amber-800 mb-2">
+                <AlertTriangle className="w-3 h-3 inline mr-1" />
+                Data da Primeira Parcela Pendente <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="date"
+                value={dataPrimeiraParcela}
+                onChange={(e) => setDataPrimeiraParcela(e.target.value)}
+                min={dataMinima}
+                className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 text-sm bg-white"
+                required
+              />
+              <p className="mt-1 text-xs text-amber-600">
+                Esta data será usada como base para recalcular todas as parcelas pendentes.
+              </p>
+            </div>
+          )}
+
           {/* Aviso de recálculo */}
-          {houveMudanca && (
-            <div className="p-2 bg-amber-50 border border-amber-200 rounded-lg">
-              <div className="flex items-start gap-2 text-amber-700 text-xs">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>
-                  As datas das parcelas pendentes serão recalculadas automaticamente.
-                </p>
+          {houveMudanca && !mudouFrequencia && (
+            <div className="p-2 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start gap-2 text-blue-700 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <p>As configurações do empréstimo serão atualizadas.</p>
               </div>
             </div>
           )}
@@ -392,7 +441,7 @@ export function CardEdicaoEmprestimo({
             </button>
             <button
               onClick={handleSalvar}
-              disabled={salvando || !houveMudanca}
+              disabled={salvando || !podeSalvar()}
               className="px-3 py-1.5 text-white bg-blue-600 rounded-lg hover:bg-blue-700 text-sm font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {salvando ? (
