@@ -174,9 +174,11 @@ export function CardEdicaoEmprestimo({
       if (resultado?.sucesso) {
         setSucesso(resultado.mensagem);
         setEditando(false);
+        // Chamar onSucesso imediatamente para recarregar os dados
+        onSucesso?.();
+        // Limpar mensagem de sucesso após 2 segundos
         setTimeout(() => {
           setSucesso(null);
-          onSucesso?.();
         }, 2000);
       } else {
         if (resultado?.requer_renegociacao) {
