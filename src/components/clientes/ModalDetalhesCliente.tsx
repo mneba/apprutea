@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
+import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
 import type { 
   Cliente, 
   EmprestimoHistorico, 
@@ -178,12 +179,16 @@ function CardEmprestimo({
   onToggle,
   parcelas,
   carregandoParcelas,
+  onRecarregar,
+  onRenegociar,
 }: {
   emprestimo: EmprestimoHistorico;
   expandido: boolean;
   onToggle: () => void;
   parcelas: ParcelaView[];
   carregandoParcelas: boolean;
+  onRecarregar?: () => void;
+  onRenegociar?: (emprestimoId: string) => void;
 }) {
   const percentualPago = emprestimo.percentual_valor_pago || 0;
   
@@ -294,6 +299,28 @@ function CardEmprestimo({
             </div>
           ) : (
             <p className="text-center text-gray-500 py-4">Nenhuma parcela encontrada</p>
+          )}
+
+          {/* Seção de Alteração de Frequência - apenas para empréstimos ATIVOS */}
+          {emprestimo.emprestimo_status === 'ATIVO' && (
+            <CardEdicaoEmprestimo
+              emprestimo={{
+                id: emprestimo.emprestimo_id,
+                valor_principal: emprestimo.valor_principal,
+                valor_total: emprestimo.valor_total,
+                valor_saldo: emprestimo.total_saldo_parcelas || emprestimo.valor_total - (emprestimo.total_pago_parcelas || 0),
+                numero_parcelas: emprestimo.numero_parcelas,
+                parcelas_pagas: emprestimo.parcelas_pagas,
+                taxa_juros: emprestimo.taxa_juros,
+                frequencia_pagamento: (emprestimo as any).frequencia_pagamento || 'DIARIO',
+                dia_semana_cobranca: (emprestimo as any).dia_semana_cobranca,
+                dia_mes_cobranca: (emprestimo as any).dia_mes_cobranca,
+                dias_mes_cobranca: (emprestimo as any).dias_mes_cobranca,
+                status: emprestimo.emprestimo_status,
+              }}
+              onSucesso={onRecarregar}
+              onRenegociar={onRenegociar}
+            />
           )}
         </div>
       )}
@@ -1010,6 +1037,11 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                         )}
                         parcelas={parcelas[emp.emprestimo_id] || []}
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
+                        onRecarregar={() => carregarDadosCompletos()}
+                        onRenegociar={(emprestimoId) => {
+                          console.log('Renegociar empréstimo:', emprestimoId);
+                          // TODO: Implementar modal de renegociação
+                        }}
                       />
                     ))
                   ) : (
