@@ -275,22 +275,22 @@ export function CardEdicaoEmprestimo({
       {!editando && (
         <div className="flex items-center gap-2">
           <span className="px-3 py-1.5 bg-blue-100 text-blue-700 rounded-lg text-sm font-medium">
-            {FREQUENCIAS.find(f => f.value === emprestimo.frequencia_pagamento)?.icone}{' '}
-            {FREQUENCIAS.find(f => f.value === emprestimo.frequencia_pagamento)?.label}
+            {FREQUENCIAS.find(f => f.value === frequencia)?.icone}{' '}
+            {FREQUENCIAS.find(f => f.value === frequencia)?.label}
           </span>
-          {emprestimo.frequencia_pagamento === 'SEMANAL' && emprestimo.dia_semana_cobranca !== null && (
+          {frequencia === 'SEMANAL' && diaSemana !== null && (
             <span className="text-sm text-gray-500">
-              ({DIAS_SEMANA.find(d => d.value === emprestimo.dia_semana_cobranca)?.completo})
+              ({DIAS_SEMANA.find(d => d.value === diaSemana)?.completo})
             </span>
           )}
-          {emprestimo.frequencia_pagamento === 'MENSAL' && emprestimo.dia_mes_cobranca && (
+          {frequencia === 'MENSAL' && diaMes && (
             <span className="text-sm text-gray-500">
-              (Dia {emprestimo.dia_mes_cobranca})
+              (Dia {diaMes})
             </span>
           )}
-          {emprestimo.frequencia_pagamento === 'FLEXIVEL' && emprestimo.dias_mes_cobranca?.length && (
+          {frequencia === 'FLEXIVEL' && diasFlexiveis?.length > 0 && (
             <span className="text-sm text-gray-500">
-              (Dias: {emprestimo.dias_mes_cobranca.join(', ')})
+              (Dias: {diasFlexiveis.join(', ')})
             </span>
           )}
         </div>
