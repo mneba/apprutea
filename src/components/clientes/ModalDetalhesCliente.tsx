@@ -711,6 +711,22 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
     }
   };
 
+  // ⭐ Função para recarregar tudo após alteração de empréstimo
+  const recarregarTudo = async (emprestimoId?: string) => {
+    await carregarDadosCompletos();
+    // Recarregar parcelas do empréstimo específico ou do expandido
+    const idParaRecarregar = emprestimoId || emprestimoExpandido;
+    if (idParaRecarregar) {
+      // Limpar cache das parcelas para forçar recarga
+      setParcelas(prev => {
+        const novo = { ...prev };
+        delete novo[idParaRecarregar];
+        return novo;
+      });
+      await carregarParcelas(idParaRecarregar);
+    }
+  };
+
   const handleSalvar = async (dados: FormEdicaoCliente) => {
     if (!cliente?.id) return;
     
@@ -1037,7 +1053,7 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                         )}
                         parcelas={parcelas[emp.emprestimo_id] || []}
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
-                        onRecarregar={() => carregarDadosCompletos()}
+                        onRecarregar={() => recarregarTudo(emp.emprestimo_id)}
                         onRenegociar={(emprestimoId) => {
                           console.log('Renegociar empréstimo:', emprestimoId);
                           // TODO: Implementar modal de renegociação
