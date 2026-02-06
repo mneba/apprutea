@@ -1169,7 +1169,14 @@ export default function LiquidacaoDiariaPage() {
                       </h3>
                       <div className="text-center p-2 bg-green-50 rounded-lg">
                         <p className="text-lg font-bold text-green-600">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
-                        <p className="text-xs text-gray-500">{liquidacao.qtd_emprestimos_dia} emp.</p>
+                        <p className="text-xs text-gray-500">
+                          {liquidacao.qtd_emprestimos_dia} emp.
+                          {(liquidacao.total_juros_dia ?? 0) > 0 && (
+                            <span className="ml-1 text-emerald-600 font-medium">
+                              (Juros {formatarMoeda(liquidacao.total_juros_dia)})
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
 

@@ -62,6 +62,7 @@ export interface LiquidacaoDiaria {
   
   // Empréstimos
   total_emprestado_dia: number;
+  total_juros_dia: number;  // ✅ NOVO: Juros dos empréstimos do dia
   qtd_emprestimos_dia: number;
   
   // Despesas
