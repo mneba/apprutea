@@ -190,6 +190,11 @@ export default function OrganizacaoPage() {
     setSalvandoRota(true);
     try {
       if (rotaEditando) {
+        // Verificar se trabalha_domingo está sendo DESATIVADO (de true para false)
+        const trabalhaAntes = rotaEditando.trabalha_domingo ?? false;
+        const trabalhaDepois = trabalhaDomingo;
+        const desativouTrabalhaDomingo = trabalhaAntes && !trabalhaDepois;
+
         // Atualizar rota existente
         await organizacaoService.atualizarRota(rotaEditando.id, {
           nome: nomeRota.trim(),
@@ -197,6 +202,17 @@ export default function OrganizacaoPage() {
           vendedor_id: vendedorRotaId || null,
           trabalha_domingo: trabalhaDomingo,
         });
+
+        // Se DESATIVOU trabalha_domingo, mover parcelas de domingo para segunda
+        if (desativouTrabalhaDomingo) {
+          const resultado = await organizacaoService.deslocarParcelasDomingoPorRota(rotaEditando.id);
+          if (resultado.sucesso) {
+            console.log('Parcelas deslocadas:', resultado.mensagem);
+          } else {
+            console.error('Erro ao deslocar parcelas:', resultado.mensagem);
+            // Não bloquear a operação, apenas logar o erro
+          }
+        }
       } else {
         // Criar nova rota
         await organizacaoService.criarRota(empresaParaRota.id, {

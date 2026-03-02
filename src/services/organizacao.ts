@@ -477,4 +477,50 @@ export const organizacaoService = {
       email: '',
     }));
   },
+
+  // ============================================
+  // DESLOCAMENTO DE PARCELAS
+  // ============================================
+
+  /**
+   * Move parcelas de uma rota específica com vencimento no domingo para segunda-feira (+1 dia).
+   * Afeta apenas parcelas com status PENDENTE, VENCIDO ou PARCIAL com vencimento >= hoje.
+   */
+  async deslocarParcelasDomingoPorRota(rotaId: string): Promise<{ sucesso: boolean; mensagem: string }> {
+    const { data, error } = await supabase
+      .rpc('fn_deslocar_parcelas_domingo_por_rota', {
+        p_rota_id: rotaId,
+      });
+
+    if (error) {
+      console.error('Erro ao deslocar parcelas de domingo:', error);
+      return {
+        sucesso: false,
+        mensagem: error.message,
+      };
+    }
+
+    return {
+      sucesso: true,
+      mensagem: data || 'Parcelas deslocadas com sucesso',
+    };
+  },
+
+  /**
+   * Busca o valor atual de trabalha_domingo de uma rota
+   */
+  async buscarTrabalhaDomingoRota(rotaId: string): Promise<boolean> {
+    const { data, error } = await supabase
+      .from('rotas')
+      .select('trabalha_domingo')
+      .eq('id', rotaId)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar trabalha_domingo:', error);
+      return false;
+    }
+
+    return data?.trabalha_domingo ?? false;
+  },
 };
