@@ -16,6 +16,9 @@ import {
   Trash2,
   Edit,
   Calendar,
+  Settings,
+  CalendarOff,
+  CalendarCheck,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { organizacaoService } from '@/services/organizacao';
@@ -41,6 +44,7 @@ export default function OrganizacaoPage() {
   
   // Modal de nova/editar rota
   const [modalRota, setModalRota] = useState(false);
+  const [rotaEditando, setRotaEditando] = useState<RotaResumo | null>(null);
   const [nomeRota, setNomeRota] = useState('');
   const [descricaoRota, setDescricaoRota] = useState('');
   const [vendedorRotaId, setVendedorRotaId] = useState('');
@@ -135,6 +139,7 @@ export default function OrganizacaoPage() {
 
   const handleAbrirModalNovaRota = async (empresa: EmpresaResumo) => {
     setEmpresaParaRota(empresa);
+    setRotaEditando(null);
     setNomeRota('');
     setDescricaoRota('');
     setVendedorRotaId('');
@@ -147,7 +152,36 @@ export default function OrganizacaoPage() {
     setModalRota(true);
   };
 
-  const handleCriarRota = async () => {
+  const handleAbrirModalEditarRota = async (rota: RotaResumo) => {
+    if (!empresaSelecionada) return;
+    
+    setEmpresaParaRota(empresaSelecionada);
+    setRotaEditando(rota);
+    setNomeRota(rota.nome);
+    setDescricaoRota(rota.descricao || '');
+    setVendedorRotaId(rota.vendedor_id || '');
+    setTrabalhaDomingo(rota.trabalha_domingo ?? false);
+    
+    // Carregar vendedores disponíveis + o vendedor atual da rota
+    const vendedores = await organizacaoService.buscarVendedoresDisponiveis(empresaSelecionada.id);
+    
+    // Se a rota já tem um vendedor, adicionar ele à lista
+    if (rota.vendedor_id && rota.vendedor_nome) {
+      const vendedorAtual = vendedores.find(v => v.id === rota.vendedor_id);
+      if (!vendedorAtual) {
+        vendedores.unshift({
+          id: rota.vendedor_id,
+          nome: rota.vendedor_nome,
+          codigo_vendedor: '',
+        });
+      }
+    }
+    
+    setVendedoresDisponiveis(vendedores);
+    setModalRota(true);
+  };
+
+  const handleSalvarRota = async () => {
     if (!nomeRota.trim() || !empresaParaRota) {
       alert('Digite o nome da rota');
       return;
@@ -155,12 +189,24 @@ export default function OrganizacaoPage() {
 
     setSalvandoRota(true);
     try {
-      await organizacaoService.criarRota(empresaParaRota.id, {
-        nome: nomeRota.trim(),
-        descricao: descricaoRota.trim() || undefined,
-        vendedor_id: vendedorRotaId || undefined,
-        trabalha_domingo: trabalhaDomingo,
-      });
+      if (rotaEditando) {
+        // Atualizar rota existente
+        await organizacaoService.atualizarRota(rotaEditando.id, {
+          nome: nomeRota.trim(),
+          descricao: descricaoRota.trim() || undefined,
+          vendedor_id: vendedorRotaId || null,
+          trabalha_domingo: trabalhaDomingo,
+        });
+      } else {
+        // Criar nova rota
+        await organizacaoService.criarRota(empresaParaRota.id, {
+          nome: nomeRota.trim(),
+          descricao: descricaoRota.trim() || undefined,
+          vendedor_id: vendedorRotaId || undefined,
+          trabalha_domingo: trabalhaDomingo,
+        });
+      }
+      
       setModalRota(false);
       
       // Recarregar dados
@@ -171,8 +217,8 @@ export default function OrganizacaoPage() {
         carregarDados();
       }
     } catch (err: any) {
-      console.error('Erro ao criar rota:', err);
-      alert(`Erro ao criar rota: ${err.message}`);
+      console.error('Erro ao salvar rota:', err);
+      alert(`Erro ao salvar rota: ${err.message}`);
     } finally {
       setSalvandoRota(false);
     }
@@ -563,6 +609,21 @@ export default function OrganizacaoPage() {
                     </div>
                   </div>
 
+                  {/* Badge Trabalha Domingo */}
+                  <div className="mt-3">
+                    {rota.trabalha_domingo ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-medium">
+                        <CalendarCheck className="w-3.5 h-3.5" />
+                        Trabalha Domingo
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium">
+                        <CalendarOff className="w-3.5 h-3.5" />
+                        Não trabalha Domingo
+                      </span>
+                    )}
+                  </div>
+
                   {/* Estatísticas */}
                   <div className="mt-4 flex items-center gap-6">
                     <div className="flex flex-col items-center">
@@ -577,13 +638,22 @@ export default function OrganizacaoPage() {
                     </div>
                   </div>
 
-                  {/* Botão Clientes */}
-                  <button
-                    className="mt-4 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors"
-                  >
-                    <Users className="w-4 h-4" />
-                    Clientes
-                  </button>
+                  {/* Botões de Ação */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <button
+                      className="flex-1 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors justify-center"
+                    >
+                      <Users className="w-4 h-4" />
+                      Clientes
+                    </button>
+                    <button
+                      onClick={() => handleAbrirModalEditarRota(rota)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      <Settings className="w-4 h-4" />
+                      Configurações
+                    </button>
+                  </div>
                 </div>
               ))
             )}
@@ -594,7 +664,7 @@ export default function OrganizacaoPage() {
       )}
 
       {/* ============================================ */}
-      {/* MODAL NOVA ROTA */}
+      {/* MODAL NOVA/EDITAR ROTA */}
       {/* ============================================ */}
       {modalRota && empresaParaRota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -603,7 +673,9 @@ export default function OrganizacaoPage() {
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
             {/* Header */}
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-900">Nova Rota</h3>
+              <h3 className="text-lg font-semibold text-gray-900">
+                {rotaEditando ? 'Configurações da Rota' : 'Nova Rota'}
+              </h3>
               <button
                 onClick={() => setModalRota(false)}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
@@ -615,8 +687,15 @@ export default function OrganizacaoPage() {
             {/* Body */}
             <div className="p-6 space-y-4">
               {/* Badge empresa */}
-              <div className="px-4 py-2.5 bg-green-100 border border-green-300 rounded-xl text-green-800 font-medium">
-                Nova Rota para : {empresaParaRota.nome}
+              <div className={`px-4 py-2.5 rounded-xl font-medium ${
+                rotaEditando 
+                  ? 'bg-blue-100 border border-blue-300 text-blue-800'
+                  : 'bg-green-100 border border-green-300 text-green-800'
+              }`}>
+                {rotaEditando 
+                  ? `Editando: ${rotaEditando.nome}`
+                  : `Nova Rota para: ${empresaParaRota.nome}`
+                }
               </div>
 
               {/* Nome */}
@@ -660,7 +739,7 @@ export default function OrganizacaoPage() {
                   <option value="">Selecione Um Vendedor</option>
                   {vendedoresDisponiveis.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.nome} ({v.codigo_vendedor})
+                      {v.nome} {v.codigo_vendedor ? `(${v.codigo_vendedor})` : ''}
                     </option>
                   ))}
                 </select>
@@ -676,7 +755,7 @@ export default function OrganizacaoPage() {
               {/* ============================================ */}
               <div className="pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-gray-500" />
+                  <Settings className="w-4 h-4 text-gray-500" />
                   Configurações Operacionais
                 </h4>
 
@@ -719,12 +798,12 @@ export default function OrganizacaoPage() {
                 Cancelar
               </button>
               <button
-                onClick={handleCriarRota}
+                onClick={handleSalvarRota}
                 disabled={salvandoRota || !nomeRota.trim()}
                 className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors"
               >
                 {salvandoRota && <Loader2 className="w-4 h-4 animate-spin" />}
-                Criar Rota
+                {rotaEditando ? 'Salvar Alterações' : 'Criar Rota'}
               </button>
             </div>
           </div>
