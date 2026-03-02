@@ -15,6 +15,7 @@ import {
   Percent,
   Trash2,
   Edit,
+  Calendar,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { organizacaoService } from '@/services/organizacao';
@@ -43,6 +44,7 @@ export default function OrganizacaoPage() {
   const [nomeRota, setNomeRota] = useState('');
   const [descricaoRota, setDescricaoRota] = useState('');
   const [vendedorRotaId, setVendedorRotaId] = useState('');
+  const [trabalhaDomingo, setTrabalhaDomingo] = useState(false);
   const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState<VendedorDisponivel[]>([]);
   const [empresaParaRota, setEmpresaParaRota] = useState<EmpresaResumo | null>(null);
   const [salvandoRota, setSalvandoRota] = useState(false);
@@ -136,6 +138,7 @@ export default function OrganizacaoPage() {
     setNomeRota('');
     setDescricaoRota('');
     setVendedorRotaId('');
+    setTrabalhaDomingo(false);
     
     // Carregar vendedores disponíveis
     const vendedores = await organizacaoService.buscarVendedoresDisponiveis(empresa.id);
@@ -156,6 +159,7 @@ export default function OrganizacaoPage() {
         nome: nomeRota.trim(),
         descricao: descricaoRota.trim() || undefined,
         vendedor_id: vendedorRotaId || undefined,
+        trabalha_domingo: trabalhaDomingo,
       });
       setModalRota(false);
       
@@ -665,6 +669,44 @@ export default function OrganizacaoPage() {
                     Nenhum vendedor disponível (todos já têm rotas ou não há vendedores nesta empresa)
                   </p>
                 )}
+              </div>
+
+              {/* ============================================ */}
+              {/* CONFIGURAÇÕES OPERACIONAIS */}
+              {/* ============================================ */}
+              <div className="pt-4 border-t border-gray-200">
+                <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
+                  <Calendar className="w-4 h-4 text-gray-500" />
+                  Configurações Operacionais
+                </h4>
+
+                {/* Toggle Trabalha no Domingo */}
+                <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-xl">
+                  <div className="flex items-start gap-3">
+                    <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
+                      <Calendar className="w-4 h-4 text-green-600" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Trabalha no Domingo</p>
+                      <p className="text-sm text-gray-500">Permitir operações aos domingos</p>
+                    </div>
+                  </div>
+                  
+                  {/* Toggle Switch */}
+                  <button
+                    type="button"
+                    onClick={() => setTrabalhaDomingo(!trabalhaDomingo)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                      trabalhaDomingo ? 'bg-green-600' : 'bg-gray-300'
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        trabalhaDomingo ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                    />
+                  </button>
+                </div>
               </div>
             </div>
 

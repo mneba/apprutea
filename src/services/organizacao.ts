@@ -252,6 +252,7 @@ export const organizacaoService = {
         status,
         vendedor_id,
         quantidade_clientes,
+        trabalha_domingo,
         vendedores (
           id,
           nome
@@ -288,6 +289,7 @@ export const organizacaoService = {
           vendedor_nome: rota.vendedores?.nome || undefined,
           total_clientes: rota.quantidade_clientes || 0,
           total_emprestimos: totalEmprestimos || 0,
+          trabalha_domingo: rota.trabalha_domingo ?? false,
         };
       })
     );
@@ -332,11 +334,15 @@ export const organizacaoService = {
     nome: string;
     descricao?: string;
     vendedor_id?: string;
+    trabalha_domingo?: boolean;
   }): Promise<RotaResumo> {
     const { data, error } = await supabase
       .from('rotas')
       .insert({
-        ...dados,
+        nome: dados.nome,
+        descricao: dados.descricao,
+        vendedor_id: dados.vendedor_id,
+        trabalha_domingo: dados.trabalha_domingo ?? false,
         empresa_id: empresaId,
         status: 'ATIVA',
       })
@@ -357,6 +363,7 @@ export const organizacaoService = {
       vendedor_nome: undefined,
       total_clientes: 0,
       total_emprestimos: 0,
+      trabalha_domingo: data.trabalha_domingo ?? false,
     };
   },
 
@@ -365,6 +372,7 @@ export const organizacaoService = {
     descricao?: string;
     vendedor_id?: string | null;
     status?: string;
+    trabalha_domingo?: boolean;
   }): Promise<void> {
     const { error } = await supabase
       .from('rotas')

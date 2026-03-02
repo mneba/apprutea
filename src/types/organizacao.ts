@@ -23,6 +23,7 @@ export interface RotaResumo {
   total_clientes: number;
   total_emprestimos: number;
   status: 'ATIVA' | 'INATIVA';
+  trabalha_domingo?: boolean;
 }
 
 export interface ResumoGeral {
