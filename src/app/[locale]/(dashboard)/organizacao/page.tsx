@@ -69,6 +69,10 @@ export default function OrganizacaoPage() {
   const [novoSocioDocumento, setNovoSocioDocumento] = useState('');
   const [novoSocioPercentual, setNovoSocioPercentual] = useState('');
 
+  // Hierarquias (para seletor de cidade)
+  const [hierarquias, setHierarquias] = useState<{ id: string; pais: string; estado: string }[]>([]);
+  const [hierarquiaIdEmpresa, setHierarquiaIdEmpresa] = useState('');
+
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
   const hierarquiaId = localizacao?.hierarquia_id;
@@ -244,7 +248,7 @@ export default function OrganizacaoPage() {
   // MODAL DE EMPRESA
   // ============================================
 
-  const handleAbrirModalNovaEmpresa = () => {
+  const handleAbrirModalNovaEmpresa = async () => {
     setEmpresaEditando(null);
     setNomeEmpresa('');
     setCnpjEmpresa('');
@@ -252,6 +256,12 @@ export default function OrganizacaoPage() {
     setEmailEmpresa('');
     setEnderecoEmpresa('');
     setSociosEmpresa([]);
+    setHierarquiaIdEmpresa(hierarquiaId || '');
+    
+    // Carregar hierarquias disponíveis
+    const listaHierarquias = await organizacaoService.listarHierarquias();
+    setHierarquias(listaHierarquias);
+    
     setModalEmpresa(true);
   };
 
@@ -262,6 +272,14 @@ export default function OrganizacaoPage() {
     setTelefoneEmpresa(empresa.telefone || '');
     setEmailEmpresa(empresa.email || '');
     setEnderecoEmpresa(empresa.endereco || '');
+    
+    // Carregar hierarquias disponíveis
+    const listaHierarquias = await organizacaoService.listarHierarquias();
+    setHierarquias(listaHierarquias);
+    
+    // Buscar hierarquia_id da empresa
+    const hierarquiaAtual = await organizacaoService.buscarHierarquiaEmpresa(empresa.id);
+    setHierarquiaIdEmpresa(hierarquiaAtual || '');
     
     // Carregar sócios
     const socios = await organizacaoService.listarSocios(empresa.id);
@@ -315,21 +333,22 @@ export default function OrganizacaoPage() {
       return;
     }
 
-    if (!hierarquiaId) {
-      alert('Selecione uma localização no seletor acima');
+    if (!hierarquiaIdEmpresa) {
+      alert('Selecione uma cidade/estado');
       return;
     }
 
     setSalvandoEmpresa(true);
     try {
       if (empresaEditando) {
-        // Atualizar empresa
+        // Atualizar empresa (incluindo hierarquia_id)
         await organizacaoService.atualizarEmpresa(empresaEditando.id, {
           nome: nomeEmpresa.trim(),
           cnpj: cnpjEmpresa.trim() || undefined,
           telefone: telefoneEmpresa.trim() || undefined,
           email: emailEmpresa.trim() || undefined,
           endereco: enderecoEmpresa.trim() || undefined,
+          hierarquia_id: hierarquiaIdEmpresa,
         });
 
         // Salvar sócios
@@ -346,7 +365,7 @@ export default function OrganizacaoPage() {
         // Criar empresa
         const novaEmpresa = await organizacaoService.criarEmpresa({
           nome: nomeEmpresa.trim(),
-          hierarquia_id: hierarquiaId,
+          hierarquia_id: hierarquiaIdEmpresa,
           cnpj: cnpjEmpresa.trim() || undefined,
           telefone: telefoneEmpresa.trim() || undefined,
           email: emailEmpresa.trim() || undefined,
@@ -849,6 +868,25 @@ export default function OrganizacaoPage() {
 
             {/* Body */}
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
+              {/* Cidade/Estado (Hierarquia) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Cidade / Estado
+                </label>
+                <select
+                  value={hierarquiaIdEmpresa}
+                  onChange={(e) => setHierarquiaIdEmpresa(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value="">Selecione uma cidade</option>
+                  {hierarquias.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {h.estado} - {h.pais}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Nome */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">

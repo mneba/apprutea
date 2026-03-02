@@ -225,6 +225,7 @@ export const organizacaoService = {
     telefone?: string;
     email?: string;
     endereco?: string;
+    hierarquia_id?: string;
   }): Promise<void> {
     const { error } = await supabase
       .from('empresas')
@@ -235,6 +236,40 @@ export const organizacaoService = {
       console.error('Erro ao atualizar empresa:', error);
       throw error;
     }
+  },
+
+  // ============================================
+  // HIERARQUIAS
+  // ============================================
+
+  async listarHierarquias(): Promise<{ id: string; pais: string; estado: string }[]> {
+    const { data, error } = await supabase
+      .from('hierarquias')
+      .select('id, pais, estado')
+      .order('pais')
+      .order('estado');
+
+    if (error) {
+      console.error('Erro ao listar hierarquias:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  async buscarHierarquiaEmpresa(empresaId: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from('empresas')
+      .select('hierarquia_id')
+      .eq('id', empresaId)
+      .single();
+
+    if (error) {
+      console.error('Erro ao buscar hierarquia da empresa:', error);
+      return null;
+    }
+
+    return data?.hierarquia_id || null;
   },
 
   // ============================================
