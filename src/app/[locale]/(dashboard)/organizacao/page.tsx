@@ -19,6 +19,9 @@ import {
   Settings,
   CalendarOff,
   CalendarCheck,
+  GripVertical,
+  Search,
+  Save,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { organizacaoService } from '@/services/organizacao';
@@ -72,6 +75,22 @@ export default function OrganizacaoPage() {
   // Hierarquias (para seletor de cidade)
   const [hierarquias, setHierarquias] = useState<{ id: string; pais: string; estado: string }[]>([]);
   const [hierarquiaIdEmpresa, setHierarquiaIdEmpresa] = useState('');
+
+  // Modal de clientes da rota (ordenação)
+  const [modalClientes, setModalClientes] = useState(false);
+  const [rotaParaClientes, setRotaParaClientes] = useState<RotaResumo | null>(null);
+  const [clientesRota, setClientesRota] = useState<{
+    id: string;
+    cliente_id: string;
+    nome: string;
+    endereco: string;
+    ordem: number;
+  }[]>([]);
+  const [clientesRotaOriginal, setClientesRotaOriginal] = useState<typeof clientesRota>([]);
+  const [carregandoClientes, setCarregandoClientes] = useState(false);
+  const [salvandoOrdem, setSalvandoOrdem] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [filtroCliente, setFiltroCliente] = useState('');
 
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
@@ -214,7 +233,6 @@ export default function OrganizacaoPage() {
             console.log('Parcelas deslocadas:', resultado.mensagem);
           } else {
             console.error('Erro ao deslocar parcelas:', resultado.mensagem);
-            // Não bloquear a operação, apenas logar o erro
           }
         }
       } else {
@@ -243,6 +261,85 @@ export default function OrganizacaoPage() {
       setSalvandoRota(false);
     }
   };
+
+  // ============================================
+  // MODAL DE CLIENTES DA ROTA
+  // ============================================
+
+  const handleAbrirModalClientes = async (rota: RotaResumo) => {
+    setRotaParaClientes(rota);
+    setCarregandoClientes(true);
+    setFiltroCliente('');
+    setModalClientes(true);
+
+    try {
+      const clientes = await organizacaoService.listarClientesRota(rota.id);
+      setClientesRota(clientes);
+      setClientesRotaOriginal(JSON.parse(JSON.stringify(clientes)));
+    } catch (err) {
+      console.error('Erro ao carregar clientes da rota:', err);
+      alert('Erro ao carregar clientes');
+    } finally {
+      setCarregandoClientes(false);
+    }
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newClientes = [...clientesRota];
+    const draggedItem = newClientes[draggedIndex];
+    
+    newClientes.splice(draggedIndex, 1);
+    newClientes.splice(index, 0, draggedItem);
+    
+    newClientes.forEach((cliente, idx) => {
+      cliente.ordem = idx + 1;
+    });
+
+    setClientesRota(newClientes);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
+  const handleSalvarOrdemClientes = async () => {
+    if (!rotaParaClientes) return;
+
+    setSalvandoOrdem(true);
+    try {
+      await organizacaoService.salvarOrdemClientesRota(
+        rotaParaClientes.id,
+        clientesRota.map(c => ({ cliente_id: c.cliente_id, ordem: c.ordem }))
+      );
+      setClientesRotaOriginal(JSON.parse(JSON.stringify(clientesRota)));
+      alert('Ordem salva com sucesso!');
+    } catch (err: any) {
+      console.error('Erro ao salvar ordem:', err);
+      alert(`Erro ao salvar ordem: ${err.message}`);
+    } finally {
+      setSalvandoOrdem(false);
+    }
+  };
+
+  const temAlteracoesOrdem = () => {
+    if (clientesRota.length !== clientesRotaOriginal.length) return true;
+    return clientesRota.some((cliente, index) => 
+      cliente.cliente_id !== clientesRotaOriginal[index]?.cliente_id
+    );
+  };
+
+  const clientesFiltrados = clientesRota.filter(cliente =>
+    cliente.nome.toLowerCase().includes(filtroCliente.toLowerCase()) ||
+    cliente.endereco.toLowerCase().includes(filtroCliente.toLowerCase())
+  );
 
   // ============================================
   // MODAL DE EMPRESA
@@ -676,6 +773,7 @@ export default function OrganizacaoPage() {
                   {/* Botões de Ação */}
                   <div className="mt-4 flex items-center gap-2">
                     <button
+                      onClick={() => handleAbrirModalClientes(rota)}
                       className="flex-1 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors justify-center"
                     >
                       <Users className="w-4 h-4" />
@@ -693,13 +791,11 @@ export default function OrganizacaoPage() {
               ))
             )}
           </div>
-
-          {/* Botão adicionar rota já está no header */}
         </>
       )}
 
       {/* ============================================ */}
-      {/* MODAL NOVA/EDITAR ROTA */}
+      {/* MODAL DE ROTA */}
       {/* ============================================ */}
       {modalRota && empresaParaRota && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -713,7 +809,7 @@ export default function OrganizacaoPage() {
               </h3>
               <button
                 onClick={() => setModalRota(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -721,14 +817,14 @@ export default function OrganizacaoPage() {
 
             {/* Body */}
             <div className="p-6 space-y-4">
-              {/* Badge empresa */}
+              {/* Badge indicando contexto */}
               <div className={`px-4 py-2.5 rounded-xl font-medium ${
                 rotaEditando 
-                  ? 'bg-blue-100 border border-blue-300 text-blue-800'
+                  ? 'bg-blue-100 border border-blue-300 text-blue-800' 
                   : 'bg-green-100 border border-green-300 text-green-800'
               }`}>
                 {rotaEditando 
-                  ? `Editando: ${rotaEditando.nome}`
+                  ? `Editando: ${rotaEditando.nome}` 
                   : `Nova Rota para: ${empresaParaRota.nome}`
                 }
               </div>
@@ -743,7 +839,7 @@ export default function OrganizacaoPage() {
                   value={nomeRota}
                   onChange={(e) => setNomeRota(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder=""
+                  placeholder="Ex: Rota Centro Norte"
                 />
               </div>
 
@@ -757,7 +853,7 @@ export default function OrganizacaoPage() {
                   value={descricaoRota}
                   onChange={(e) => setDescricaoRota(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder=""
+                  placeholder="Ex: Região central e zona norte"
                 />
               </div>
 
@@ -778,23 +874,16 @@ export default function OrganizacaoPage() {
                     </option>
                   ))}
                 </select>
-                {vendedoresDisponiveis.length === 0 && (
-                  <p className="text-xs text-orange-600 mt-1">
-                    Nenhum vendedor disponível (todos já têm rotas ou não há vendedores nesta empresa)
-                  </p>
-                )}
               </div>
 
-              {/* ============================================ */}
-              {/* CONFIGURAÇÕES OPERACIONAIS */}
-              {/* ============================================ */}
+              {/* Configurações Operacionais */}
               <div className="pt-4 border-t border-gray-200">
                 <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
                   <Settings className="w-4 h-4 text-gray-500" />
                   Configurações Operacionais
                 </h4>
-
-                {/* Toggle Trabalha no Domingo */}
+                
+                {/* Toggle Trabalha Domingo */}
                 <div className="flex items-center justify-between p-4 bg-green-50 border border-green-200 rounded-xl">
                   <div className="flex items-start gap-3">
                     <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
@@ -805,12 +894,10 @@ export default function OrganizacaoPage() {
                       <p className="text-sm text-gray-500">Permitir operações aos domingos</p>
                     </div>
                   </div>
-                  
-                  {/* Toggle Switch */}
                   <button
                     type="button"
                     onClick={() => setTrabalhaDomingo(!trabalhaDomingo)}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
                       trabalhaDomingo ? 'bg-green-600' : 'bg-gray-300'
                     }`}
                   >
@@ -846,7 +933,147 @@ export default function OrganizacaoPage() {
       )}
 
       {/* ============================================ */}
-      {/* MODAL NOVA/EDITAR EMPRESA */}
+      {/* MODAL CLIENTES DA ROTA */}
+      {/* ============================================ */}
+      {modalClientes && rotaParaClientes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setModalClientes(false)} />
+          
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Clientes da Rota
+                </h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {rotaParaClientes.nome} • {clientesRota.length} clientes
+                </p>
+              </div>
+              <button
+                onClick={() => setModalClientes(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Barra de busca */}
+            <div className="px-6 py-3 border-b border-gray-100">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={filtroCliente}
+                  onChange={(e) => setFiltroCliente(e.target.value)}
+                  placeholder="Buscar cliente por nome ou endereço..."
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+            </div>
+
+            {/* Instrução de arrasto */}
+            {!carregandoClientes && clientesRota.length > 0 && (
+              <div className="px-6 py-2 bg-blue-50 border-b border-blue-100">
+                <p className="text-xs text-blue-600 flex items-center gap-2">
+                  <GripVertical className="w-3.5 h-3.5" />
+                  Arraste os clientes para reordenar a sequência de visitas
+                </p>
+              </div>
+            )}
+
+            {/* Lista de clientes */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {carregandoClientes ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
+                </div>
+              ) : clientesRota.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Users className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum cliente cadastrado nesta rota</p>
+                </div>
+              ) : clientesFiltrados.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <Search className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum cliente encontrado com "{filtroCliente}"</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {clientesFiltrados.map((cliente, index) => (
+                    <div
+                      key={cliente.cliente_id}
+                      draggable={!filtroCliente}
+                      onDragStart={() => handleDragStart(index)}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragEnd={handleDragEnd}
+                      className={`flex items-center gap-3 p-3 bg-white border rounded-xl transition-all ${
+                        draggedIndex === index 
+                          ? 'border-blue-400 shadow-lg scale-[1.02] bg-blue-50' 
+                          : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                      } ${!filtroCliente ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                    >
+                      {/* Ordem */}
+                      <div className="flex items-center gap-2">
+                        {!filtroCliente && (
+                          <GripVertical className="w-4 h-4 text-gray-400" />
+                        )}
+                        <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold">
+                          {cliente.ordem}
+                        </span>
+                      </div>
+
+                      {/* Dados do cliente */}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-gray-900 truncate">
+                          {cliente.nome}
+                        </p>
+                        <p className="text-sm text-gray-500 truncate">
+                          {cliente.endereco || 'Endereço não informado'}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-6 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+              <div className="text-sm text-gray-500">
+                {temAlteracoesOrdem() && (
+                  <span className="text-orange-600 font-medium">
+                    • Alterações não salvas
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setModalClientes(false)}
+                  className="px-4 py-2.5 text-gray-700 hover:bg-gray-200 rounded-xl transition-colors"
+                >
+                  Fechar
+                </button>
+                <button
+                  onClick={handleSalvarOrdemClientes}
+                  disabled={salvandoOrdem || !temAlteracoesOrdem()}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {salvandoOrdem ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4" />
+                  )}
+                  Salvar Ordem
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* MODAL DE EMPRESA */}
       {/* ============================================ */}
       {modalEmpresa && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto">
@@ -860,7 +1087,7 @@ export default function OrganizacaoPage() {
               </h3>
               <button
                 onClick={() => setModalEmpresa(false)}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
