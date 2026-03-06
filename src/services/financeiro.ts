@@ -70,7 +70,8 @@ export const financeiroService = {
     empresaId: string,
     periodo?: string,
     dataInicio?: string,
-    dataFim?: string
+    dataFim?: string,
+    rotaId?: string | null
   ): Promise<ResumoMovimentacoes> {
     const supabase = createClient();
     
@@ -101,6 +102,7 @@ export const financeiroService = {
     const { data, error } = await supabase.rpc('fn_buscar_resumo_movimentacoes', {
       p_empresa_id: empresaId,
       p_periodo: periodoParam,
+      p_rota_id: rotaId || null,
     });
     
     if (error) {
@@ -135,7 +137,8 @@ export const financeiroService = {
     empresaId: string,
     periodo?: string,
     dataInicio?: string,
-    dataFim?: string
+    dataFim?: string,
+    rotaId?: string | null
   ): Promise<DadosGrafico[]> {
     const supabase = createClient();
     
@@ -164,6 +167,7 @@ export const financeiroService = {
     const { data, error } = await supabase.rpc('fn_buscar_dados_grafico', {
       p_empresa_id: empresaId,
       p_periodo: periodoParam,
+      p_rota_id: rotaId || null,
     });
     
     if (error) {
@@ -179,7 +183,7 @@ export const financeiroService = {
   // ==================================================
   async buscarExtrato(
     empresaId: string,
-    filtros: FiltrosExtrato & { data_inicio?: string; data_fim?: string }
+    filtros: FiltrosExtrato & { data_inicio?: string; data_fim?: string; rota_id?: string | null }
   ): Promise<MovimentoFinanceiro[]> {
     const supabase = createClient();
     
@@ -212,6 +216,7 @@ export const financeiroService = {
       p_categoria: filtros.categoria || null,
       p_tipo: filtros.tipo || null,
       p_limite: 100,
+      p_rota_id: filtros.rota_id || null,
     });
     
     if (error) {
