@@ -809,24 +809,16 @@ export default function FinanceiroPage() {
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Saldos das Contas</h2>
             
             {modoRota ? (
-              // MODO ROTA: Cards simplificados
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <CardIndicador 
-                  titulo="Total da Rota" 
-                  valor={saldos.total_consolidado} 
-                  icone={Wallet} 
-                  corIcone="text-indigo-600" 
-                  corFundo="bg-indigo-100" 
-                  loading={loadingSaldos}
-                  subtitulo={rotaNome}
-                />
+              // MODO ROTA: Apenas 2 cards (Saldo Rota + Microseguros)
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <CardIndicador 
                   titulo="Saldo Rota" 
                   valor={saldos.saldo_rotas} 
                   icone={MapPin} 
                   corIcone="text-emerald-600" 
                   corFundo="bg-emerald-100" 
-                  loading={loadingSaldos} 
+                  loading={loadingSaldos}
+                  subtitulo={rotaNome}
                 />
                 <CardIndicador 
                   titulo="Microseguros" 
