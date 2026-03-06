@@ -25,31 +25,41 @@ import type {
 export const financeiroService = {
   // ==================================================
   // BUSCAR SALDOS DAS CONTAS (Dashboard)
+  // Agora aceita rota_id opcional para filtrar por rota
   // ==================================================
-  async buscarSaldosContas(empresaId: string): Promise<SaldosContas> {
+  async buscarSaldosContas(empresaId: string, rotaId?: string | null): Promise<SaldosContas> {
     const supabase = createClient();
     
     const { data, error } = await supabase.rpc('fn_buscar_saldos_contas', {
       p_empresa_id: empresaId,
+      p_rota_id: rotaId || null,
     });
     
     if (error) {
       console.error('Erro ao buscar saldos:', error);
       return {
+        modo: rotaId ? 'rota' : 'empresa',
         total_consolidado: 0,
         saldo_empresa: 0,
         saldo_rotas: 0,
         saldo_microseguros: 0,
         contas: [],
+        rotas_detalhe: [],
+        microseguros_detalhe: [],
       };
     }
     
     return {
+      modo: data?.modo || (rotaId ? 'rota' : 'empresa'),
+      empresa_id: data?.empresa_id,
+      rota_id: data?.rota_id,
       total_consolidado: data?.total_consolidado || 0,
       saldo_empresa: data?.saldo_empresa || 0,
       saldo_rotas: data?.saldo_rotas || 0,
       saldo_microseguros: data?.saldo_microseguros || 0,
       contas: data?.contas || [],
+      rotas_detalhe: data?.rotas_detalhe || [],
+      microseguros_detalhe: data?.microseguros_detalhe || [],
     };
   },
 
@@ -378,7 +388,7 @@ export const financeiroService = {
 
 export const financeiroKeys = {
   all: ['financeiro'] as const,
-  saldos: (empresaId: string) => [...financeiroKeys.all, 'saldos', empresaId] as const,
+  saldos: (empresaId: string, rotaId?: string | null) => [...financeiroKeys.all, 'saldos', empresaId, rotaId] as const,
   resumo: (empresaId: string, periodo: string) => [...financeiroKeys.all, 'resumo', empresaId, periodo] as const,
   grafico: (empresaId: string, periodo: string) => [...financeiroKeys.all, 'grafico', empresaId, periodo] as const,
   extrato: (empresaId: string, filtros: FiltrosExtrato) => [...financeiroKeys.all, 'extrato', empresaId, filtros] as const,
