@@ -14,8 +14,11 @@ import {
   Loader2,
   Calendar,
   ChevronDown,
+  ChevronRight,
   FileText,
-  AlertCircle
+  AlertCircle,
+  X,
+  Eye
 } from 'lucide-react';
 import {
   BarChart,
@@ -40,6 +43,8 @@ import type {
   MovimentoFinanceiro,
   CategoriaFinanceira,
   ContaComDetalhes,
+  RotaDetalhe,
+  MicroseguroDetalhe,
 } from '@/types/financeiro';
 
 // =====================================================
@@ -64,7 +69,8 @@ function CardIndicador({
   icone: Icone, 
   corIcone,
   corFundo,
-  loading = false
+  loading = false,
+  subtitulo,
 }: { 
   titulo: string; 
   valor: number; 
@@ -72,6 +78,7 @@ function CardIndicador({
   corIcone: string;
   corFundo: string;
   loading?: boolean;
+  subtitulo?: string;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
@@ -79,7 +86,12 @@ function CardIndicador({
         <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
           <Icone className={`w-5 h-5 ${corIcone}`} />
         </div>
-        <span className="text-sm font-medium text-gray-600">{titulo}</span>
+        <div>
+          <span className="text-sm font-medium text-gray-600">{titulo}</span>
+          {subtitulo && (
+            <p className="text-xs text-gray-400">{subtitulo}</p>
+          )}
+        </div>
       </div>
       {loading ? (
         <div className="h-8 bg-gray-200 animate-pulse rounded" />
@@ -87,6 +99,91 @@ function CardIndicador({
         <p className="text-2xl font-bold text-gray-900">
           {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </p>
+      )}
+    </div>
+  );
+}
+
+function CardRotasDetalhado({ 
+  titulo,
+  icone: Icone,
+  corIcone,
+  corFundo,
+  totalValor,
+  itens,
+  loading = false,
+  onVerTodas,
+  labelItem = 'rota',
+}: { 
+  titulo: string;
+  icone: React.ElementType;
+  corIcone: string;
+  corFundo: string;
+  totalValor: number;
+  itens: { nome: string; valor: number }[];
+  loading?: boolean;
+  onVerTodas?: () => void;
+  labelItem?: string;
+}) {
+  const MAX_ITENS_VISIVEIS = 2;
+  const temMaisItens = itens.length > MAX_ITENS_VISIVEIS;
+  const itensVisiveis = itens.slice(0, MAX_ITENS_VISIVEIS);
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
+            <Icone className={`w-5 h-5 ${corIcone}`} />
+          </div>
+          <div>
+            <span className="text-sm font-medium text-gray-600">{titulo}</span>
+            <p className="text-xs text-gray-400">{itens.length} {itens.length === 1 ? labelItem : `${labelItem}s`}</p>
+          </div>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="space-y-3">
+          <div className="h-6 bg-gray-200 animate-pulse rounded" />
+          <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
+        </div>
+      ) : (
+        <>
+          {/* Total */}
+          <p className="text-2xl font-bold text-gray-900 mb-4">
+            {totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          </p>
+
+          {/* Lista de itens */}
+          {itens.length > 0 && (
+            <div className="space-y-2 border-t border-gray-100 pt-3">
+              {itensVisiveis.map((item, index) => (
+                <div key={index} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600 truncate flex-1 mr-2">{item.nome}</span>
+                  <span className="font-medium text-gray-900 whitespace-nowrap">
+                    {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                </div>
+              ))}
+
+              {/* Botão Ver Todas */}
+              {temMaisItens && onVerTodas && (
+                <button
+                  onClick={onVerTodas}
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium mt-2 w-full justify-center py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                >
+                  <Eye className="w-4 h-4" />
+                  Ver todas ({itens.length})
+                </button>
+              )}
+            </div>
+          )}
+
+          {itens.length === 0 && (
+            <p className="text-sm text-gray-400 text-center py-2">Nenhuma {labelItem} encontrada</p>
+          )}
+        </>
       )}
     </div>
   );
@@ -362,6 +459,78 @@ function AvisoSelecioneEmpresa() {
   );
 }
 
+// Modal Ver Todas Rotas/Microseguros
+function ModalVerTodas({
+  isOpen,
+  onClose,
+  titulo,
+  itens,
+  icone: Icone,
+  corIcone,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  titulo: string;
+  itens: { nome: string; valor: number }[];
+  icone: React.ElementType;
+  corIcone: string;
+}) {
+  if (!isOpen) return null;
+
+  const total = itens.reduce((acc, item) => acc + item.valor, 0);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[80vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-200">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center`}>
+              <Icone className={`w-5 h-5 ${corIcone}`} />
+            </div>
+            <div>
+              <h3 className="text-lg font-semibold text-gray-900">{titulo}</h3>
+              <p className="text-sm text-gray-500">{itens.length} itens</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Lista */}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="space-y-2">
+            {itens.map((item, index) => (
+              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-sm text-gray-700 font-medium">{item.nome}</span>
+                <span className="text-sm font-semibold text-gray-900">
+                  {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer com total */}
+        <div className="p-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-gray-600">Total</span>
+            <span className="text-lg font-bold text-gray-900">
+              {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+            </span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // =====================================================
 // PÁGINA PRINCIPAL
 // =====================================================
@@ -369,6 +538,8 @@ function AvisoSelecioneEmpresa() {
 export default function FinanceiroPage() {
   const { localizacao, profile } = useUser();
   const empresaId = localizacao?.empresa_id;
+  const rotaId = localizacao?.rota_id;
+  const rotaNome = localizacao?.rota?.nome;
 
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('resumo');
   const [filtroResumo, setFiltroResumo] = useState<FiltroData>({
@@ -393,13 +564,18 @@ export default function FinanceiroPage() {
   const [modalMovimentacao, setModalMovimentacao] = useState(false);
   const [modalTransferencia, setModalTransferencia] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
+  const [modalVerRotas, setModalVerRotas] = useState(false);
+  const [modalVerMicroseguros, setModalVerMicroseguros] = useState(false);
 
   const [saldos, setSaldos] = useState<SaldosContas>({
+    modo: 'empresa',
     total_consolidado: 0,
     saldo_empresa: 0,
     saldo_rotas: 0,
     saldo_microseguros: 0,
     contas: [],
+    rotas_detalhe: [],
+    microseguros_detalhe: [],
   });
   const [resumo, setResumo] = useState<ResumoMovimentacoes>({
     total_entradas: 0,
@@ -418,14 +594,14 @@ export default function FinanceiroPage() {
     if (!empresaId) return;
     setLoadingSaldos(true);
     try {
-      const data = await financeiroService.buscarSaldosContas(empresaId);
+      const data = await financeiroService.buscarSaldosContas(empresaId, rotaId);
       setSaldos(data);
     } catch (error) {
       console.error('Erro ao carregar saldos:', error);
     } finally {
       setLoadingSaldos(false);
     }
-  }, [empresaId]);
+  }, [empresaId, rotaId]);
 
   const carregarResumo = useCallback(async () => {
     if (!empresaId) return;
@@ -435,7 +611,8 @@ export default function FinanceiroPage() {
         empresaId, 
         filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
         filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined,
+        rotaId
       );
       setResumo(data);
     } catch (error) {
@@ -443,7 +620,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingResumo(false);
     }
-  }, [empresaId, filtroResumo]);
+  }, [empresaId, filtroResumo, rotaId]);
 
   const carregarGrafico = useCallback(async () => {
     if (!empresaId) return;
@@ -453,7 +630,8 @@ export default function FinanceiroPage() {
         empresaId, 
         filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
         filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined,
+        rotaId
       );
       setDadosGrafico(data);
     } catch (error) {
@@ -461,7 +639,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingGrafico(false);
     }
-  }, [empresaId, filtroResumo]);
+  }, [empresaId, filtroResumo, rotaId]);
 
   const carregarContas = useCallback(async () => {
     if (!empresaId) return;
@@ -495,6 +673,7 @@ export default function FinanceiroPage() {
         categoria: categoriaFiltro || undefined,
         data_inicio: filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataInicio : undefined,
         data_fim: filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataFim : undefined,
+        rota_id: rotaId,
       });
       setMovimentos(data);
     } catch (error) {
@@ -502,7 +681,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingExtrato(false);
     }
-  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro]);
+  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId]);
 
   useEffect(() => {
     if (empresaId) {
@@ -510,20 +689,20 @@ export default function FinanceiroPage() {
       carregarContas();
       carregarCategorias();
     }
-  }, [empresaId, carregarSaldos, carregarContas, carregarCategorias]);
+  }, [empresaId, rotaId, carregarSaldos, carregarContas, carregarCategorias]);
 
   useEffect(() => {
     if (empresaId && abaAtiva === 'resumo') {
       carregarResumo();
       carregarGrafico();
     }
-  }, [empresaId, abaAtiva, filtroResumo, carregarResumo, carregarGrafico]);
+  }, [empresaId, abaAtiva, filtroResumo, rotaId, carregarResumo, carregarGrafico]);
 
   useEffect(() => {
     if (empresaId && abaAtiva === 'extrato') {
       carregarExtrato();
     }
-  }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, carregarExtrato]);
+  }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, carregarExtrato]);
 
   const handleSalvarMovimentacao = async (dados: any) => {
     const result = await financeiroService.criarMovimentacao(
@@ -577,174 +756,251 @@ export default function FinanceiroPage() {
   const totalEntradas = movimentos.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
 
+  // Preparar itens para os cards detalhados
+  const rotasItens = saldos.rotas_detalhe?.map(r => ({ nome: r.rota_nome, valor: r.saldo })) || [];
+  const microsegurosItens = saldos.microseguros_detalhe?.map(m => ({ 
+    nome: m.rota_nome ? `${m.microseguro_nome} (${m.rota_nome})` : m.microseguro_nome, 
+    valor: m.saldo 
+  })) || [];
+
+  // Determinar se está no modo rota
+  const modoRota = saldos.modo === 'rota' || !!rotaId;
+
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
+          {modoRota && rotaNome && (
+            <p className="text-sm text-blue-600 flex items-center gap-1 mt-1">
+              <MapPin className="w-4 h-4" />
+              Exibindo: Rota {rotaNome}
+            </p>
+          )}
         </div>
+      </div>
 
-        <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
-          <button
-            onClick={() => setAbaAtiva('resumo')}
-            className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
-              abaAtiva === 'resumo'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Resumo
-          </button>
-          <button
-            onClick={() => setAbaAtiva('extrato')}
-            className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
-              abaAtiva === 'extrato'
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            Extrato Detalhado
-          </button>
-        </div>
+      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setAbaAtiva('resumo')}
+          className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
+            abaAtiva === 'resumo'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Resumo
+        </button>
+        <button
+          onClick={() => setAbaAtiva('extrato')}
+          className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
+            abaAtiva === 'extrato'
+              ? 'bg-white text-gray-900 shadow-sm'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          Extrato Detalhado
+        </button>
+      </div>
 
-        {abaAtiva === 'resumo' && (
-          <div className="space-y-6">
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Saldos das Contas</h2>
+      {abaAtiva === 'resumo' && (
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Saldos das Contas</h2>
+            
+            {modoRota ? (
+              // MODO ROTA: Apenas 2 cards (Saldo Rota + Microseguros)
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <CardIndicador 
+                  titulo="Saldo Rota" 
+                  valor={saldos.saldo_rotas} 
+                  icone={MapPin} 
+                  corIcone="text-emerald-600" 
+                  corFundo="bg-emerald-100" 
+                  loading={loadingSaldos}
+                  subtitulo={rotaNome}
+                />
+                <CardIndicador 
+                  titulo="Microseguros" 
+                  valor={saldos.saldo_microseguros} 
+                  icone={Shield} 
+                  corIcone="text-amber-600" 
+                  corFundo="bg-amber-100" 
+                  loading={loadingSaldos} 
+                />
+              </div>
+            ) : (
+              // MODO EMPRESA: Cards detalhados por rota
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <CardIndicador titulo="Total Consolidado" valor={saldos.total_consolidado} icone={Wallet} corIcone="text-indigo-600" corFundo="bg-indigo-100" loading={loadingSaldos} />
-                <CardIndicador titulo="Empresa" valor={saldos.saldo_empresa} icone={Building2} corIcone="text-blue-600" corFundo="bg-blue-100" loading={loadingSaldos} />
-                <CardIndicador titulo="Rotas" valor={saldos.saldo_rotas} icone={MapPin} corIcone="text-emerald-600" corFundo="bg-emerald-100" loading={loadingSaldos} />
-                <CardIndicador titulo="Microseguros" valor={saldos.saldo_microseguros} icone={Shield} corIcone="text-amber-600" corFundo="bg-amber-100" loading={loadingSaldos} />
+                <CardIndicador 
+                  titulo="Total Consolidado" 
+                  valor={saldos.total_consolidado} 
+                  icone={Wallet} 
+                  corIcone="text-indigo-600" 
+                  corFundo="bg-indigo-100" 
+                  loading={loadingSaldos} 
+                />
+                <CardIndicador 
+                  titulo="Empresa" 
+                  valor={saldos.saldo_empresa} 
+                  icone={Building2} 
+                  corIcone="text-blue-600" 
+                  corFundo="bg-blue-100" 
+                  loading={loadingSaldos} 
+                />
+                <CardRotasDetalhado
+                  titulo="Rotas"
+                  icone={MapPin}
+                  corIcone="text-emerald-600"
+                  corFundo="bg-emerald-100"
+                  totalValor={saldos.saldo_rotas}
+                  itens={rotasItens}
+                  loading={loadingSaldos}
+                  onVerTodas={rotasItens.length > 2 ? () => setModalVerRotas(true) : undefined}
+                  labelItem="rota"
+                />
+                <CardRotasDetalhado
+                  titulo="Microseguros"
+                  icone={Shield}
+                  corIcone="text-amber-600"
+                  corFundo="bg-amber-100"
+                  totalValor={saldos.saldo_microseguros}
+                  itens={microsegurosItens}
+                  loading={loadingSaldos}
+                  onVerTodas={microsegurosItens.length > 2 ? () => setModalVerMicroseguros(true) : undefined}
+                  labelItem="microseguro"
+                />
               </div>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Movimentações do Período</h2>
-                <FiltroPeriodo filtro={filtroResumo} onChange={setFiltroResumo} />
-              </div>
-              
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                <div className="lg:col-span-1 grid grid-cols-1 gap-4">
-                  <CardMovimentacao tipo="entrada" titulo="Entradas" valor={resumo.total_entradas} quantidade={resumo.qtd_entradas} corValor="text-green-600" loading={loadingResumo} />
-                  <CardMovimentacao tipo="saida" titulo="Saídas" valor={resumo.total_saidas} quantidade={resumo.qtd_saidas} corValor="text-red-600" loading={loadingResumo} />
-                  <CardMovimentacao tipo="resultado" titulo="Resultado" valor={resumo.saldo_periodo} quantidade={resumo.qtd_total} corValor={resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-red-600'} loading={loadingResumo} />
-                </div>
-
-                <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
-                  <h3 className="text-sm font-medium text-gray-700 mb-4">Entradas vs Saídas</h3>
-                  <div className="h-64">
-                    {loadingGrafico ? (
-                      <div className="h-full flex items-center justify-center">
-                        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
-                      </div>
-                    ) : dadosGrafico.length === 0 ? (
-                      <div className="h-full flex items-center justify-center text-gray-400">
-                        Sem dados para o período
-                      </div>
-                    ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={dadosGrafico} barGap={4}>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                          <XAxis dataKey="data_formatada" tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-                          <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                          <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }} />
-                          <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                          <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Ações Rápidas</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <BotaoAcaoRapida icone={Plus} titulo="Nova movimentação" onClick={() => setModalMovimentacao(true)} />
-                <BotaoAcaoRapida icone={ArrowRightLeft} titulo="Transferências" onClick={() => setModalTransferencia(true)} />
-                <BotaoAcaoRapida icone={CheckSquare} titulo="Ajuste Saldo" onClick={() => setModalAjuste(true)} />
-              </div>
-            </div>
+            )}
           </div>
-        )}
 
-        {abaAtiva === 'extrato' && (
-          <div className="space-y-4">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <FiltroPeriodo filtro={filtroExtrato} onChange={setFiltroExtrato} />
-              
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="relative">
-                  <select value={contaFiltro} onChange={(e) => setContaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                    <option value="">Todas as Contas</option>
-                    <optgroup label="🏢 Empresa">
-                      {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                    </optgroup>
-                    <optgroup label="🛣️ Rotas">
-                      {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                    </optgroup>
-                    <optgroup label="🛡️ Microseguros">
-                      {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                    </optgroup>
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                </div>
-
-                <div className="relative">
-                  <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                    <option value="">Todas as Categorias</option>
-                    {categorias.map(c => (<option key={c.id} value={c.codigo}>{c.nome_pt}</option>))}
-                  </select>
-                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-                </div>
-              </div>
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">Movimentações do Período</h2>
+              <FiltroPeriodo filtro={filtroResumo} onChange={setFiltroResumo} />
             </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="bg-gray-50 border-b border-gray-200">
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
-                      <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor</th>
-                      <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {loadingExtrato ? (
-                      <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
-                    ) : movimentos.length > 0 ? (
-                      movimentos.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
-                    ) : (
-                      <tr><td colSpan={5} className="px-4 py-12 text-center">
-                        <div className="flex flex-col items-center">
-                          <FileText className="w-12 h-12 text-gray-300 mb-3" />
-                          <p className="text-gray-500">Nenhuma movimentação encontrada</p>
-                        </div>
-                      </td></tr>
-                    )}
-                  </tbody>
-                </table>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+              <div className="lg:col-span-1 grid grid-cols-1 gap-4">
+                <CardMovimentacao tipo="entrada" titulo="Entradas" valor={resumo.total_entradas} quantidade={resumo.qtd_entradas} corValor="text-green-600" loading={loadingResumo} />
+                <CardMovimentacao tipo="saida" titulo="Saídas" valor={resumo.total_saidas} quantidade={resumo.qtd_saidas} corValor="text-red-600" loading={loadingResumo} />
+                <CardMovimentacao tipo="resultado" titulo="Resultado" valor={resumo.saldo_periodo} quantidade={resumo.qtd_total} corValor={resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-red-600'} loading={loadingResumo} />
               </div>
-              
-              {movimentos.length > 0 && (
-                <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
-                  <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-                    <span className="text-gray-600">{movimentos.length} registros</span>
-                    <div className="flex items-center gap-6">
-                      <span className="text-green-600 font-medium">Entradas: {totalEntradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                      <span className="text-red-600 font-medium">Saídas: {totalSaidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+
+              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-5">
+                <h3 className="text-sm font-medium text-gray-700 mb-4">Entradas vs Saídas</h3>
+                <div className="h-64">
+                  {loadingGrafico ? (
+                    <div className="h-full flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
                     </div>
-                  </div>
+                  ) : dadosGrafico.length === 0 ? (
+                    <div className="h-full flex items-center justify-center text-gray-400">
+                      Sem dados para o período
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={dadosGrafico} barGap={4}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                        <XAxis dataKey="data_formatada" tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                        <YAxis tick={{ fontSize: 11 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                        <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }} />
+                        <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           </div>
-        )}
+
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider mb-4">Ações Rápidas</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <BotaoAcaoRapida icone={Plus} titulo="Nova movimentação" onClick={() => setModalMovimentacao(true)} />
+              <BotaoAcaoRapida icone={ArrowRightLeft} titulo="Transferências" onClick={() => setModalTransferencia(true)} />
+              <BotaoAcaoRapida icone={CheckSquare} titulo="Ajuste Saldo" onClick={() => setModalAjuste(true)} />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {abaAtiva === 'extrato' && (
+        <div className="space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <FiltroPeriodo filtro={filtroExtrato} onChange={setFiltroExtrato} />
+            
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <select value={contaFiltro} onChange={(e) => setContaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                  <option value="">Todas as Contas</option>
+                  <optgroup label="🏢 Empresa">
+                    {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                  </optgroup>
+                  <optgroup label="🛣️ Rotas">
+                    {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                  </optgroup>
+                  <optgroup label="🛡️ Microseguros">
+                    {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                  </optgroup>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
+
+              <div className="relative">
+                <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
+                  <option value="">Todas as Categorias</option>
+                  {categorias.map(c => (<option key={c.id} value={c.codigo}>{c.nome_pt}</option>))}
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-50 border-b border-gray-200">
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor</th>
+                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {loadingExtrato ? (
+                    <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
+                  ) : movimentos.length > 0 ? (
+                    movimentos.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
+                  ) : (
+                    <tr><td colSpan={5} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center">
+                        <FileText className="w-12 h-12 text-gray-300 mb-3" />
+                        <p className="text-gray-500">Nenhuma movimentação encontrada</p>
+                      </div>
+                    </td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            {movimentos.length > 0 && (
+              <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
+                <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
+                  <span className="text-gray-600">{movimentos.length} registros</span>
+                  <div className="flex items-center gap-6">
+                    <span className="text-green-600 font-medium">Entradas: {totalEntradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    <span className="text-red-600 font-medium">Saídas: {totalSaidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modais - Componentes externos padronizados */}
       <ModalNovaMovimentacao
@@ -765,6 +1021,26 @@ export default function FinanceiroPage() {
         onClose={() => setModalAjuste(false)}
         contas={contas}
         onSalvar={handleSalvarAjuste}
+      />
+
+      {/* Modal Ver Todas Rotas */}
+      <ModalVerTodas
+        isOpen={modalVerRotas}
+        onClose={() => setModalVerRotas(false)}
+        titulo="Saldos por Rota"
+        itens={rotasItens}
+        icone={MapPin}
+        corIcone="text-emerald-600"
+      />
+
+      {/* Modal Ver Todos Microseguros */}
+      <ModalVerTodas
+        isOpen={modalVerMicroseguros}
+        onClose={() => setModalVerMicroseguros(false)}
+        titulo="Saldos por Microseguro"
+        itens={microsegurosItens}
+        icone={Shield}
+        corIcone="text-amber-600"
       />
     </div>
   );

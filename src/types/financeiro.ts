@@ -108,15 +108,37 @@ export interface MovimentoComConta extends MovimentoFinanceiro {
 }
 
 // =====================================================
+// INTERFACES DE DETALHE POR ROTA/MICROSEGURO
+// =====================================================
+
+export interface RotaDetalhe {
+  rota_id: string;
+  rota_nome: string;
+  saldo: number;
+}
+
+export interface MicroseguroDetalhe {
+  microseguro_id: string;
+  microseguro_nome: string;
+  rota_nome?: string;
+  saldo: number;
+}
+
+// =====================================================
 // INTERFACES DE RESUMO E INDICADORES
 // =====================================================
 
 export interface SaldosContas {
+  modo: 'empresa' | 'rota';
+  empresa_id?: string;
+  rota_id?: string;
   total_consolidado: number;
   saldo_empresa: number;
   saldo_rotas: number;
   saldo_microseguros: number;
   contas: ContaComDetalhes[];
+  rotas_detalhe: RotaDetalhe[];
+  microseguros_detalhe: MicroseguroDetalhe[];
 }
 
 export interface ResumoMovimentacoes {
