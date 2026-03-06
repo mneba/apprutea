@@ -611,7 +611,8 @@ export default function FinanceiroPage() {
         empresaId, 
         filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
         filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined,
+        rotaId
       );
       setResumo(data);
     } catch (error) {
@@ -619,7 +620,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingResumo(false);
     }
-  }, [empresaId, filtroResumo]);
+  }, [empresaId, filtroResumo, rotaId]);
 
   const carregarGrafico = useCallback(async () => {
     if (!empresaId) return;
@@ -629,7 +630,8 @@ export default function FinanceiroPage() {
         empresaId, 
         filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
         filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined
+        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined,
+        rotaId
       );
       setDadosGrafico(data);
     } catch (error) {
@@ -637,7 +639,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingGrafico(false);
     }
-  }, [empresaId, filtroResumo]);
+  }, [empresaId, filtroResumo, rotaId]);
 
   const carregarContas = useCallback(async () => {
     if (!empresaId) return;
@@ -671,6 +673,7 @@ export default function FinanceiroPage() {
         categoria: categoriaFiltro || undefined,
         data_inicio: filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataInicio : undefined,
         data_fim: filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataFim : undefined,
+        rota_id: rotaId,
       });
       setMovimentos(data);
     } catch (error) {
@@ -678,7 +681,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingExtrato(false);
     }
-  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro]);
+  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId]);
 
   useEffect(() => {
     if (empresaId) {
@@ -693,13 +696,13 @@ export default function FinanceiroPage() {
       carregarResumo();
       carregarGrafico();
     }
-  }, [empresaId, abaAtiva, filtroResumo, carregarResumo, carregarGrafico]);
+  }, [empresaId, abaAtiva, filtroResumo, rotaId, carregarResumo, carregarGrafico]);
 
   useEffect(() => {
     if (empresaId && abaAtiva === 'extrato') {
       carregarExtrato();
     }
-  }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, carregarExtrato]);
+  }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, carregarExtrato]);
 
   const handleSalvarMovimentacao = async (dados: any) => {
     const result = await financeiroService.criarMovimentacao(
