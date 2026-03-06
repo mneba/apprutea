@@ -1,6 +1,7 @@
 // =====================================================
 // SERVICE DO MÓDULO DE LIQUIDAÇÃO DIÁRIA - SISTEMA APPRUTEA
 // Conectado ao Supabase Real
+// ATUALIZADO: Inclui fecharLiquidacaoReaberta
 // =====================================================
 
 import { createClient } from '@/lib/supabase/client';
@@ -363,6 +364,38 @@ export const liquidacaoService = {
   },
 
   // ==================================================
+  // FECHAR LIQUIDAÇÃO REABERTA (via RPC) - NOVO
+  // ==================================================
+  async fecharLiquidacaoReaberta(input: {
+    liquidacao_id: string;
+    user_id: string;
+    observacoes?: string;
+  }): Promise<{ sucesso: boolean; mensagem: string }> {
+    const supabase = createClient();
+    
+    const { data, error } = await supabase.rpc('fn_fechar_liquidacao_reaberta', {
+      p_liquidacao_id: input.liquidacao_id,
+      p_user_id: input.user_id,
+      p_observacoes: input.observacoes || null,
+    });
+    
+    if (error) {
+      console.error('Erro ao fechar liquidação reaberta:', error);
+      return {
+        sucesso: false,
+        mensagem: error.message || 'Erro ao fechar liquidação',
+      };
+    }
+    
+    const resultado = Array.isArray(data) ? data[0] : data;
+    
+    return {
+      sucesso: resultado?.sucesso ?? false,
+      mensagem: resultado?.mensagem || 'Liquidação processada',
+    };
+  },
+
+  // ==================================================
   // BUSCAR CLIENTES DO DIA (via view vw_clientes_rota_dia)
   // ==================================================
   async buscarClientesDoDia(
@@ -409,7 +442,7 @@ export const liquidacaoService = {
       novos: 0,
       renovados: 0,
       cancelados: 0,
-      pagos_dinheiro: 0, // Seria calculado se tivesse forma_pagamento
+      pagos_dinheiro: 0,
       pagos_transferencia: 0,
     };
   },
@@ -472,7 +505,6 @@ export const liquidacaoService = {
     
     const movimentacoes = data || [];
     
-    // Calcular totais por tipo
     const receitas = movimentacoes
       .filter(m => m.tipo === 'RECEBER' && m.categoria !== 'COBRANCA_CUOTAS' && m.categoria !== 'VENDA_MICROSEGURO')
       .reduce((acc, m) => acc + Number(m.valor), 0);
@@ -529,7 +561,6 @@ export const liquidacaoService = {
   async buscarMetaRota(rotaId: string): Promise<number> {
     const supabase = createClient();
     
-    // Calcular meta baseado nas parcelas pendentes do dia
     const hoje = new Date().toISOString().split('T')[0];
     
     const { data, error } = await supabase
@@ -604,7 +635,6 @@ export const liquidacaoService = {
   ): Promise<LiquidacaoDiaria[]> {
     const supabase = createClient();
     
-    // Primeiro e último dia do mês
     const primeiroDia = `${ano}-${String(mes).padStart(2, '0')}-01`;
     const ultimoDia = new Date(ano, mes, 0).getDate();
     const ultimoDiaStr = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
@@ -627,7 +657,6 @@ export const liquidacaoService = {
 
   // ==================================================
   // BUSCAR RESUMO DE PARCELAS POR DIA (para calendário)
-  // Retorna quantidade de parcelas e valor total por dia
   // ==================================================
   async buscarResumoParcelasMes(
     rotaId: string,
@@ -653,7 +682,6 @@ export const liquidacaoService = {
       return new Map();
     }
     
-    // Agrupar por data
     const resumo = new Map<string, { quantidade: number; valor: number }>();
     
     (data || []).forEach((parcela) => {

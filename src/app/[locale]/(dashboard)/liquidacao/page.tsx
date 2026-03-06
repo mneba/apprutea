@@ -23,11 +23,16 @@ import {
   MapPin,
   CalendarDays,
   ChevronLeft,
+  FileText,
+  RotateCcw,
+  AlertTriangle,
+  User,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
 import { CalendarioLiquidacao } from '@/components/liquidacao/CalendarioLiquidacao';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
+import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
 import type {
   LiquidacaoDiaria,
   VendedorLiquidacao,
@@ -72,24 +77,20 @@ function validarPermissaoRota(
 ): boolean {
   if (!tipoUsuario || !rotaId) return false;
   
-  // SUPER_ADMIN: acesso total
   if (tipoUsuario === 'SUPER_ADMIN') {
     return true;
   }
   
-  // ADMIN: verifica se tem empresas permitidas
   if (tipoUsuario === 'ADMIN') {
     const empresasPermitidas = userProfile?.empresas_ids || [];
     return empresasPermitidas.length > 0;
   }
   
-  // MONITOR e USUARIO_PADRAO: verifica se rota está no array rotas_ids
   if (tipoUsuario === 'MONITOR' || tipoUsuario === 'USUARIO_PADRAO') {
     const rotasPermitidas = userProfile?.rotas_ids || [];
     return rotasPermitidas.includes(rotaId);
   }
   
-  // VENDEDOR: não usa este fluxo (tem rota própria)
   if (tipoUsuario === 'VENDEDOR') {
     return true;
   }
@@ -174,6 +175,80 @@ function ProgressBar({ percentual, cor }: { percentual: number; cor?: string }) 
         className={`h-full ${corBarra} transition-all duration-500`}
         style={{ width: `${Math.min(100, percentual)}%` }}
       />
+    </div>
+  );
+}
+
+// =====================================================
+// FAIXA DE LIQUIDAÇÃO REABERTA
+// =====================================================
+
+function FaixaLiquidacaoReaberta({
+  dataLiquidacao,
+  dataReabertura,
+  reabertoPor,
+}: {
+  dataLiquidacao: string;
+  dataReabertura?: string;
+  reabertoPor?: string;
+}) {
+  const dataFormatada = new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', {
+    weekday: 'short',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+
+  const dataReaberturaFormatada = dataReabertura 
+    ? new Date(dataReabertura).toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+
+  return (
+    <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 rounded-xl shadow-lg mb-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-lg">LIQUIDAÇÃO REABERTA</span>
+              <span className="px-2 py-0.5 bg-white/20 rounded text-xs font-medium">
+                Modo Edição
+              </span>
+            </div>
+            <div className="flex items-center gap-4 text-sm text-white/90 mt-0.5">
+              <span className="flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" />
+                {dataFormatada}
+              </span>
+              {reabertoPor && (
+                <span className="flex items-center gap-1">
+                  <User className="w-3.5 h-3.5" />
+                  Reaberta por: {reabertoPor}
+                </span>
+              )}
+              {dataReaberturaFormatada && (
+                <span className="text-white/70">
+                  em {dataReaberturaFormatada}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div className="mt-2 pt-2 border-t border-white/20 text-sm text-white/80">
+        <p>
+          ⚠️ Você está editando uma liquidação de data anterior. 
+          Após realizar as correções necessárias, clique em "Fechar Dia" para finalizar.
+        </p>
+      </div>
     </div>
   );
 }
@@ -277,18 +352,24 @@ function ModalFecharLiquidacao({
 
   if (!isOpen || !liquidacao) return null;
 
+  const isReaberta = liquidacao.status === 'REABERTO';
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-            <Square className="w-5 h-5 text-blue-600" />
+          <div className={`w-10 h-10 ${isReaberta ? 'bg-amber-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center`}>
+            <Square className={`w-5 h-5 ${isReaberta ? 'text-amber-600' : 'text-blue-600'}`} />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Fechar Liquidação</h2>
-            <p className="text-sm text-gray-500">Encerrar sessão de trabalho</p>
+            <h2 className="text-lg font-bold text-gray-900">
+              {isReaberta ? 'Fechar Liquidação Reaberta' : 'Fechar Liquidação'}
+            </h2>
+            <p className="text-sm text-gray-500">
+              {isReaberta ? 'Finalizar correções e fechar' : 'Encerrar sessão de trabalho'}
+            </p>
           </div>
         </div>
 
@@ -302,7 +383,7 @@ function ModalFecharLiquidacao({
             <span className="font-medium">{formatarMoeda(liquidacao.caixa_final)}</span>
           </div>
           <div className="flex justify-between pt-2 border-t">
-            <span className="text-gray-600">Recebido Hoje</span>
+            <span className="text-gray-600">Recebido</span>
             <span className="font-medium text-green-600">{formatarMoeda(liquidacao.valor_recebido_dia)}</span>
           </div>
         </div>
@@ -316,7 +397,7 @@ function ModalFecharLiquidacao({
             onChange={(e) => setObservacoes(e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm"
             rows={3}
-            placeholder="Alguma observação sobre o dia..."
+            placeholder={isReaberta ? "Descreva as correções realizadas..." : "Alguma observação sobre o dia..."}
           />
         </div>
 
@@ -331,10 +412,159 @@ function ModalFecharLiquidacao({
           <button
             onClick={() => onConfirmar(observacoes)}
             disabled={loading}
-            className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+            className={`flex-1 px-4 py-2.5 ${isReaberta ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}
           >
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
             Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// MODAL DE REABERTURA
+// =====================================================
+
+function ModalReabrirLiquidacao({
+  isOpen,
+  onClose,
+  onConfirmar,
+  loading,
+  dataLiquidacao,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirmar: (motivo: string) => Promise<void>;
+  loading: boolean;
+  dataLiquidacao: string;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [erro, setErro] = useState('');
+
+  const handleConfirmar = async () => {
+    if (!motivo.trim()) {
+      setErro('O motivo da reabertura é obrigatório');
+      return;
+    }
+    
+    if (motivo.trim().length < 10) {
+      setErro('O motivo deve ter pelo menos 10 caracteres');
+      return;
+    }
+
+    setErro('');
+    await onConfirmar(motivo);
+    setMotivo('');
+  };
+
+  const handleClose = () => {
+    setMotivo('');
+    setErro('');
+    onClose();
+  };
+
+  if (!isOpen) return null;
+
+  const dataFormatada = dataLiquidacao 
+    ? new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', {
+        weekday: 'long',
+        day: '2-digit',
+        month: 'long',
+        year: 'numeric',
+      })
+    : '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+            <RotateCcw className="w-6 h-6 text-amber-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Reabrir Liquidação</h2>
+            <p className="text-sm text-gray-500">Permitir edições nesta liquidação</p>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-800 mb-1">Atenção!</p>
+              <p className="text-amber-700">
+                Você está prestes a reabrir a liquidação do dia:
+              </p>
+              <p className="font-semibold text-amber-900 mt-1 flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                {dataFormatada}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm text-gray-600">
+          <ul className="space-y-1">
+            <li>• A liquidação ficará disponível para edições</li>
+            <li>• Apenas você (admin) poderá fazer alterações no web</li>
+            <li>• O vendedor continuará trabalhando normalmente no app</li>
+            <li>• Após as correções, feche a liquidação novamente</li>
+          </ul>
+        </div>
+
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Motivo da Reabertura <span className="text-red-500">*</span>
+          </label>
+          <textarea
+            value={motivo}
+            onChange={(e) => {
+              setMotivo(e.target.value);
+              if (erro) setErro('');
+            }}
+            className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm ${
+              erro ? 'border-red-300 bg-red-50' : 'border-gray-300'
+            }`}
+            rows={3}
+            placeholder="Descreva o motivo da reabertura (mínimo 10 caracteres)..."
+            disabled={loading}
+          />
+          {erro && (
+            <p className="mt-1 text-sm text-red-600">{erro}</p>
+          )}
+          <p className="mt-1 text-xs text-gray-400">
+            {motivo.length}/10 caracteres mínimos
+          </p>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={handleClose}
+            disabled={loading}
+            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirmar}
+            disabled={loading || !motivo.trim()}
+            className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Reabrindo...
+              </>
+            ) : (
+              <>
+                <RotateCcw className="w-4 h-4" />
+                Reabrir
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -374,7 +604,6 @@ function TelaIniciarDia({
 }) {
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
@@ -402,9 +631,7 @@ function TelaIniciarDia({
         </button>
       </div>
 
-      {/* Layout com ou sem calendário */}
       <div className={`grid gap-6 ${mostrarCalendario ? 'lg:grid-cols-3' : ''}`}>
-        {/* Calendário */}
         {mostrarCalendario && (
           <div className="lg:col-span-1">
             <CalendarioLiquidacao
@@ -419,7 +646,6 @@ function TelaIniciarDia({
           </div>
         )}
 
-        {/* Card Iniciar Dia */}
         <div className={mostrarCalendario ? 'lg:col-span-2' : ''}>
           <div className="flex items-center justify-center min-h-[50vh]">
             <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
@@ -486,6 +712,7 @@ export default function LiquidacaoDiariaPage() {
   const [vendedor, setVendedor] = useState<VendedorLiquidacao | null>(null);
   const [rota, setRota] = useState<RotaLiquidacao | null>(null);
   const [liquidacao, setLiquidacao] = useState<LiquidacaoDiaria | null>(null);
+  const [liquidacaoAtiva, setLiquidacaoAtiva] = useState<LiquidacaoDiaria | null>(null);
   const [saldoConta, setSaldoConta] = useState(0);
   const [clientesDia, setClientesDia] = useState<ClienteDoDia[]>([]);
   const [estatisticas, setEstatisticas] = useState<EstatisticasClientesDia | null>(null);
@@ -515,10 +742,35 @@ export default function LiquidacaoDiariaPage() {
   const [loadingAcao, setLoadingAcao] = useState(false);
   const [modalAbrir, setModalAbrir] = useState(false);
   const [modalFechar, setModalFechar] = useState(false);
+  const [modalExtrato, setModalExtrato] = useState(false);
+  const [modalReabrir, setModalReabrir] = useState(false);
   
   // State do Modal de Detalhes do Cliente
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
   const [modalClienteAberto, setModalClienteAberto] = useState(false);
+
+  // Permissões
+  const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
+  const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
+
+  // Carregar dados da liquidação
+  const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
+    try {
+      const dataVencimento = liq.data_abertura.split('T')[0];
+      
+      const clientes = await liquidacaoService.buscarClientesDoDia(rotaId, dataVencimento);
+      setClientesDia(clientes);
+      
+      const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
+      setEstatisticas(stats);
+
+      const emps = await liquidacaoService.buscarEmprestimosDoDia(liq.id);
+      setEmprestimos(emps);
+
+    } catch (error) {
+      console.error('Erro ao carregar dados da liquidação:', error);
+    }
+  }, []);
 
   // Carregar dados iniciais
   const carregarDados = useCallback(async () => {
@@ -534,9 +786,6 @@ export default function LiquidacaoDiariaPage() {
       let vendedorData: VendedorLiquidacao | null = null;
       let rotaData: RotaLiquidacao | null = null;
 
-      // ==============================================
-      // VENDEDOR: Buscar sua rota diretamente
-      // ==============================================
       if (tipoUsuario === 'VENDEDOR') {
         vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
         if (vendedorData) {
@@ -545,11 +794,7 @@ export default function LiquidacaoDiariaPage() {
         }
       }
       
-      // ==============================================
-      // ADMIN/MONITOR/USUARIO_PADRAO: Usar contexto
-      // ==============================================
       if (!rotaId && rotaIdContexto) {
-        // Validar se o usuário tem permissão para esta rota
         const temPermissao = validarPermissaoRota(tipoUsuario, rotaIdContexto, profile);
         
         if (!temPermissao) {
@@ -567,9 +812,6 @@ export default function LiquidacaoDiariaPage() {
         }
       }
       
-      // ==============================================
-      // FALLBACK: Usar última rota selecionada
-      // ==============================================
       if (!rotaId && profile?.ultima_rota_id) {
         const ultimaRotaId = profile.ultima_rota_id;
         const temPermissao = validarPermissaoRota(tipoUsuario, ultimaRotaId, profile);
@@ -593,19 +835,20 @@ export default function LiquidacaoDiariaPage() {
       setVendedor(vendedorData);
       setRota(rotaData);
 
-      // Buscar saldo da conta
       const contaData = await liquidacaoService.buscarSaldoContaRota(rotaId);
       setSaldoConta(contaData?.saldo_atual || 0);
 
-      // Buscar liquidação aberta
       const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaId);
       setLiquidacao(liquidacaoData);
+      setLiquidacaoAtiva(liquidacaoData);
 
       if (liquidacaoData) {
         await carregarDadosLiquidacao(liquidacaoData, rotaId);
+        // Atualizar data selecionada para a data da liquidação ativa
+        const dataLiq = new Date(liquidacaoData.data_abertura);
+        setDataSelecionada(dataLiq);
       }
 
-      // Buscar meta da rota
       const meta = await liquidacaoService.buscarMetaRota(rotaId);
       setMetaDia(meta);
 
@@ -614,30 +857,9 @@ export default function LiquidacaoDiariaPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, rotaIdContexto, empresaId, profile]);
+  }, [userId, rotaIdContexto, empresaId, profile, carregarDadosLiquidacao]);
 
-  const carregarDadosLiquidacao = async (liq: LiquidacaoDiaria, rotaId: string) => {
-    try {
-      const dataVencimento = liq.data_abertura.split('T')[0];
-      
-      // Buscar clientes do dia
-      const clientes = await liquidacaoService.buscarClientesDoDia(rotaId, dataVencimento);
-      setClientesDia(clientes);
-      
-      // Calcular estatísticas
-      const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
-      setEstatisticas(stats);
-
-      // Buscar empréstimos do dia
-      const emps = await liquidacaoService.buscarEmprestimosDoDia(liq.id);
-      setEmprestimos(emps);
-
-    } catch (error) {
-      console.error('Erro ao carregar dados da liquidação:', error);
-    }
-  };
-
-  // Carregar dados do calendário (liquidações e parcelas do mês)
+  // Carregar dados do calendário
   const carregarDadosCalendario = useCallback(async (rotaId: string, ano: number, mes: number) => {
     setLoadingCalendario(true);
     try {
@@ -670,14 +892,19 @@ export default function LiquidacaoDiariaPage() {
     setLoadingCalendario(true);
     
     const dataStr = data.toISOString().split('T')[0];
-    const hoje = new Date().toISOString().split('T')[0];
+    const dataLiquidacaoAtiva = liquidacaoAtiva?.data_abertura?.split('T')[0];
     
     try {
-      // Verificar se é hoje
-      if (dataStr === hoje) {
+      // Verificar se é a mesma data da liquidação ativa
+      if (dataLiquidacaoAtiva && dataStr === dataLiquidacaoAtiva) {
+        setLiquidacao(liquidacaoAtiva);
         setVisualizandoOutroDia(false);
         setPrevisaoDia(null);
-        await carregarDados();
+        if (liquidacaoAtiva) {
+          await carregarDadosLiquidacao(liquidacaoAtiva, rota.id);
+        }
+        setMostrarCalendario(false);
+        setLoadingCalendario(false);
         return;
       }
       
@@ -685,20 +912,17 @@ export default function LiquidacaoDiariaPage() {
       const liqData = await liquidacaoService.buscarLiquidacaoPorData(rota.id, dataStr);
       
       if (liqData) {
-        // Tem liquidação - carregar dados dela
         setLiquidacao(liqData);
         setVisualizandoOutroDia(true);
         await carregarDadosLiquidacao(liqData, rota.id);
         setPrevisaoDia(null);
       } else {
-        // Não tem liquidação - carregar previsão
         setLiquidacao(null);
         setVisualizandoOutroDia(true);
         
         const previsao = await liquidacaoService.buscarPrevisaoDia(rota.id, dataStr);
         setPrevisaoDia(previsao);
         
-        // Buscar clientes do dia para a tabela
         const clientes = await liquidacaoService.buscarClientesDoDia(rota.id, dataStr);
         setClientesDia(clientes);
       }
@@ -709,21 +933,29 @@ export default function LiquidacaoDiariaPage() {
     } finally {
       setLoadingCalendario(false);
     }
-  }, [rota, carregarDados]);
+  }, [rota, liquidacaoAtiva, carregarDadosLiquidacao]);
 
-  // Voltar para hoje
-  const voltarParaHoje = useCallback(async () => {
-    setDataSelecionada(new Date());
-    setVisualizandoOutroDia(false);
-    setPrevisaoDia(null);
-    await carregarDados();
-  }, [carregarDados]);
+  // Voltar para liquidação ativa
+  const voltarParaLiquidacaoAtiva = useCallback(async () => {
+    if (liquidacaoAtiva && rota) {
+      const dataLiq = new Date(liquidacaoAtiva.data_abertura);
+      setDataSelecionada(dataLiq);
+      setLiquidacao(liquidacaoAtiva);
+      setVisualizandoOutroDia(false);
+      setPrevisaoDia(null);
+      await carregarDadosLiquidacao(liquidacaoAtiva, rota.id);
+    } else {
+      setDataSelecionada(new Date());
+      setVisualizandoOutroDia(false);
+      setPrevisaoDia(null);
+      await carregarDados();
+    }
+  }, [liquidacaoAtiva, rota, carregarDadosLiquidacao, carregarDados]);
 
   useEffect(() => {
     carregarDados();
   }, [carregarDados]);
 
-  // Carregar dados do calendário quando rota mudar
   useEffect(() => {
     if (rota) {
       const agora = new Date();
@@ -763,17 +995,34 @@ export default function LiquidacaoDiariaPage() {
     
     setLoadingAcao(true);
     try {
-      const resultado = await liquidacaoService.fecharLiquidacao({
-        liquidacao_id: liquidacao.id,
-        user_id: userId,
-        observacoes,
-      });
+      // Se for REABERTO, usar função específica
+      if (liquidacao.status === 'REABERTO') {
+        const resultado = await liquidacaoService.fecharLiquidacaoReaberta({
+          liquidacao_id: liquidacao.id,
+          user_id: userId,
+          observacoes,
+        });
 
-      if (resultado.sucesso) {
-        await carregarDados();
-        setModalFechar(false);
+        if (resultado.sucesso) {
+          await carregarDados();
+          setModalFechar(false);
+        } else {
+          alert(resultado.mensagem);
+        }
       } else {
-        alert(resultado.mensagem);
+        // Fluxo normal para ABERTO
+        const resultado = await liquidacaoService.fecharLiquidacao({
+          liquidacao_id: liquidacao.id,
+          user_id: userId,
+          observacoes,
+        });
+
+        if (resultado.sucesso) {
+          await carregarDados();
+          setModalFechar(false);
+        } else {
+          alert(resultado.mensagem);
+        }
       }
     } catch (error) {
       console.error('Erro ao fechar liquidação:', error);
@@ -783,12 +1032,35 @@ export default function LiquidacaoDiariaPage() {
     }
   };
 
-  // Handler para abrir modal de detalhes do cliente
+  const handleReabrirLiquidacao = async (motivo: string) => {
+    if (!liquidacao || !userId) return;
+    
+    setLoadingAcao(true);
+    try {
+      const resultado = await liquidacaoService.reabrirLiquidacao({
+        liquidacao_id: liquidacao.id,
+        user_id: userId,
+        motivo,
+      });
+
+      if (resultado.sucesso) {
+        await carregarDados();
+        setModalReabrir(false);
+      } else {
+        alert(resultado.mensagem);
+      }
+    } catch (error) {
+      console.error('Erro ao reabrir liquidação:', error);
+      alert('Erro ao reabrir liquidação');
+    } finally {
+      setLoadingAcao(false);
+    }
+  };
+
   const handleAbrirModalCliente = (cliente: ClienteDoDia) => {
-    // Converter ClienteDoDia para ClienteComTotais (parcial)
     const clienteParaModal: ClienteComTotais = {
       id: cliente.cliente_id,
-      codigo_cliente: parseInt(cliente.consecutivo) || 0, // Usar consecutivo como código
+      codigo_cliente: parseInt(cliente.consecutivo) || 0,
       nome: cliente.nome,
       documento: '',
       telefone_celular: cliente.telefone_celular || '',
@@ -889,6 +1161,15 @@ export default function LiquidacaoDiariaPage() {
 
   return (
     <div className="space-y-6">
+      {/* Faixa de Liquidação Reaberta */}
+      {isLiquidacaoReaberta && liquidacao && (
+        <FaixaLiquidacaoReaberta
+          dataLiquidacao={liquidacao.data_abertura.split('T')[0]}
+          dataReabertura={liquidacao.data_reabertura}
+          reabertoPor={liquidacao.reaberto_por_nome}
+        />
+      )}
+
       {/* Banner - Visualizando outro dia */}
       {visualizandoOutroDia && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center justify-between">
@@ -908,13 +1189,15 @@ export default function LiquidacaoDiariaPage() {
               </p>
             </div>
           </div>
-          <button
-            onClick={voltarParaHoje}
-            className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg text-sm font-medium transition-colors"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Voltar para Hoje
-          </button>
+          {liquidacaoAtiva && (
+            <button
+              onClick={voltarParaLiquidacaoAtiva}
+              className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg text-sm font-medium transition-colors"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Voltar para Liquidação Ativa
+            </button>
+          )}
         </div>
       )}
 
@@ -961,6 +1244,17 @@ export default function LiquidacaoDiariaPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
+            {/* Botão Extrato */}
+            {liquidacao && (
+              <button
+                onClick={() => setModalExtrato(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                Extrato
+              </button>
+            )}
+
             {/* Toggle Calendário */}
             <button
               onClick={() => setMostrarCalendario(!mostrarCalendario)}
@@ -975,11 +1269,27 @@ export default function LiquidacaoDiariaPage() {
             </button>
             
             {liquidacao && <BadgeStatus status={liquidacao.status} />}
+
+            {/* Botão Reabrir - só para FECHADO e admin */}
+            {liquidacao?.status === 'FECHADO' && podeReabrir && !visualizandoOutroDia && (
+              <button
+                onClick={() => setModalReabrir(true)}
+                className="flex items-center gap-2 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors"
+              >
+                <RotateCcw className="w-4 h-4" />
+                Reabrir
+              </button>
+            )}
             
-            {liquidacao?.status === 'ABERTO' && !visualizandoOutroDia && (
+            {/* Botão Fechar - para ABERTO ou REABERTO */}
+            {(liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO') && !visualizandoOutroDia && (
               <button
                 onClick={() => setModalFechar(true)}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                className={`flex items-center gap-2 px-4 py-2 ${
+                  liquidacao?.status === 'REABERTO' 
+                    ? 'bg-amber-600 hover:bg-amber-700' 
+                    : 'bg-blue-600 hover:bg-blue-700'
+                } text-white rounded-lg text-sm font-medium transition-colors`}
               >
                 <Square className="w-4 h-4" />
                 Fechar Dia
@@ -1306,6 +1616,21 @@ export default function LiquidacaoDiariaPage() {
         onConfirmar={handleFecharLiquidacao}
         loading={loadingAcao}
         liquidacao={liquidacao}
+      />
+
+      <ModalReabrirLiquidacao
+        isOpen={modalReabrir}
+        onClose={() => setModalReabrir(false)}
+        onConfirmar={handleReabrirLiquidacao}
+        loading={loadingAcao}
+        dataLiquidacao={liquidacao?.data_abertura?.split('T')[0] || ''}
+      />
+
+      <ModalExtratoLiquidacao
+        isOpen={modalExtrato}
+        onClose={() => setModalExtrato(false)}
+        liquidacao={liquidacao}
+        rotaNome={rota?.nome || ''}
       />
 
       {/* Modal de Detalhes do Cliente */}

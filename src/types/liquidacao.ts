@@ -1,71 +1,46 @@
 // =====================================================
-// TYPES DO MÓDULO DE LIQUIDAÇÃO DIÁRIA - SISTEMA APPRUTEA
-// Alinhado com tabelas reais do Supabase
+// TYPES DO MÓDULO DE LIQUIDAÇÃO DIÁRIA
+// ATUALIZADO: Inclui campos de reabertura
 // =====================================================
 
-// =====================================================
-// ENUMS E TIPOS BASE
-// =====================================================
-
-export type StatusLiquidacao = 'ABERTO' | 'FECHADO' | 'APROVADO' | 'REABERTO';
-export type StatusDia = 'PAGO' | 'PARCIAL' | 'EM_ATRASO' | 'PENDENTE';
-
-// =====================================================
-// INTERFACE PRINCIPAL - LIQUIDAÇÃO DIÁRIA
-// Campos exatamente como na tabela liquidacoes_diarias
-// =====================================================
-
+// Interface principal da liquidação diária
 export interface LiquidacaoDiaria {
   id: string;
-  vendedor_id: string;
   rota_id: string;
-  empresa_id: string;
-  
-  // Datas e horários
+  vendedor_id: string;
   data_abertura: string;
-  data_fechamento?: string | null;
+  data_fechamento?: string;
+  status: 'ABERTO' | 'FECHADO' | 'APROVADO' | 'REABERTO';
   
-  // Status
-  status: StatusLiquidacao;
-  
-  // Aprovação
-  aprovado_por?: string | null;
-  data_aprovacao?: string | null;
-  
-  // Caixa
+  // Valores de caixa
   caixa_inicial: number;
   caixa_final: number;
-  
-  // Carteira
   carteira_inicial: number;
   carteira_final: number;
   
-  // Recaudo
+  // Valores do dia
   valor_esperado_dia: number;
   valor_recebido_dia: number;
-  percentual_recebimento: number;
-  
-  // Recaudo por tipo de pagamento
   valor_dinheiro: number;
   valor_transferencia: number;
   
-  // Clientes
+  // Contadores de clientes
   clientes_iniciais: number;
   clientes_novos: number;
   clientes_renovados: number;
   clientes_renegociados: number;
   clientes_cancelados: number;
   
-  // Pagamentos
+  // Contadores de pagamentos
   pagamentos_pagos: number;
   pagamentos_nao_pagos: number;
   
-  // Empréstimos
+  // Empréstimos do dia
   total_emprestado_dia: number;
-  total_juros_dia: number;  // ✅ NOVO: Juros dos empréstimos do dia
   qtd_emprestimos_dia: number;
+  total_juros_dia?: number;
   
-  // Despesas
+  // Despesas do dia
   total_despesas_dia: number;
   qtd_despesas_dia: number;
   
@@ -74,88 +49,81 @@ export interface LiquidacaoDiaria {
   qtd_microseguros_dia: number;
   
   // Observações
-  observacoes?: string | null;
+  observacoes?: string;
   
-  // Auditoria
+  // Campos de reabertura - NOVOS
+  reaberto_por?: string;
+  reaberto_por_nome?: string;
+  data_reabertura?: string;
+  
+  // Timestamps
   created_at: string;
   updated_at: string;
 }
 
-// =====================================================
-// DADOS COMPLEMENTARES
-// =====================================================
-
+// Interface do vendedor para liquidação
 export interface VendedorLiquidacao {
   id: string;
   nome: string;
-  codigo_vendedor: string;
-  telefone?: string | null;
-  email?: string | null;
-  foto_url?: string | null;
+  codigo_vendedor?: string;
+  telefone?: string;
+  email?: string;
+  foto_url?: string;
   status: string;
 }
 
+// Interface da rota para liquidação
 export interface RotaLiquidacao {
   id: string;
   nome: string;
   empresa_id: string;
 }
 
+// Interface da conta da rota
 export interface ContaRota {
   id: string;
   rota_id: string;
   tipo_conta: string;
   saldo_atual: number;
-  saldo_inicial: number;
+  saldo_inicial?: number;
 }
 
-// =====================================================
-// CLIENTE DO DIA (via vw_clientes_rota_dia)
-// =====================================================
-
+// Interface do cliente do dia (da view vw_clientes_rota_dia)
 export interface ClienteDoDia {
-  // Dados do Cliente
+  parcela_id: string;
   cliente_id: string;
-  consecutivo: string;
-  nome: string;
-  telefone_celular?: string | null;
-  endereco?: string | null;
-  latitude?: number | null;
-  longitude?: number | null;
-  permite_emprestimo_adicional: boolean;
-  
-  // Dados do Empréstimo
   emprestimo_id: string;
-  saldo_emprestimo: number;
-  valor_principal: number;
-  numero_parcelas: number;
-  status_emprestimo: string;
   rota_id: string;
   
-  // Dados da Parcela
-  parcela_id: string;
+  // Dados do cliente
+  nome: string;
+  consecutivo: string;
+  telefone_celular?: string;
+  endereco?: string;
+  
+  // Dados da parcela
   numero_parcela: number;
+  numero_parcelas: number;
   valor_parcela: number;
   valor_pago_parcela: number;
-  saldo_parcela: number;
-  status_parcela: string;
   data_vencimento: string;
-  ordem_visita_dia?: number | null;
-  liquidacao_id?: string | null;
+  status_dia: 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'EM_ATRASO';
   
-  // Dados de Atraso
+  // Dados do empréstimo
+  valor_principal: number;
+  saldo_emprestimo: number;
+  
+  // Flags
   tem_parcelas_vencidas: boolean;
   total_parcelas_vencidas: number;
   valor_total_vencido: number;
+  permite_emprestimo_adicional?: boolean;
   
-  // Status Calculado
-  status_dia: StatusDia;
+  // Ordem de visita
+  ordem_visita_dia?: number;
 }
 
-// =====================================================
-// MICROSEGURO DO DIA
-// =====================================================
-
+// Interface do microseguro do dia
 export interface MicroseguroDoDia {
   id: string;
   valor: number;
@@ -164,36 +132,32 @@ export interface MicroseguroDoDia {
   data_venda: string;
 }
 
-// =====================================================
-// INPUTS PARA OPERAÇÕES
-// =====================================================
-
+// Input para abrir liquidação
 export interface AbrirLiquidacaoInput {
   vendedor_id: string;
   rota_id: string;
   caixa_inicial: number;
   user_id: string;
-  latitude?: number | null;
-  longitude?: number | null;
-  precisao_gps?: number | null;
+  latitude?: number;
+  longitude?: number;
+  precisao_gps?: number;
 }
 
+// Input para fechar liquidação
 export interface FecharLiquidacaoInput {
   liquidacao_id: string;
   user_id: string;
-  observacoes?: string | null;
+  observacoes?: string;
 }
 
+// Input para reabrir liquidação
 export interface ReabrirLiquidacaoInput {
   liquidacao_id: string;
   user_id: string;
   motivo: string;
 }
 
-// =====================================================
-// RESPOSTAS DAS OPERAÇÕES
-// =====================================================
-
+// Resposta da abertura de liquidação
 export interface RespostaAbrirLiquidacao {
   sucesso: boolean;
   mensagem: string;
@@ -201,6 +165,7 @@ export interface RespostaAbrirLiquidacao {
   data_abertura?: string;
 }
 
+// Resposta do fechamento de liquidação
 export interface RespostaFecharLiquidacao {
   sucesso: boolean;
   mensagem: string;
@@ -218,26 +183,20 @@ export interface RespostaFecharLiquidacao {
   total_emprestado_dia?: number;
 }
 
-// =====================================================
-// FILTROS
-// =====================================================
-
+// Filtros para clientes do dia
 export interface FiltrosClientesDia {
-  status?: StatusDia;
-  forma_pagamento?: 'DINHEIRO' | 'TRANSFERENCIA';
+  status?: 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'EM_ATRASO';
   busca?: string;
 }
 
+// Filtros para histórico de liquidações
 export interface FiltrosHistoricoLiquidacoes {
-  status?: StatusLiquidacao;
+  status?: string;
   data_inicio?: string;
   data_fim?: string;
 }
 
-// =====================================================
-// ESTATÍSTICAS
-// =====================================================
-
+// Estatísticas dos clientes do dia
 export interface EstatisticasClientesDia {
   total: number;
   sincronizados: number;
@@ -246,14 +205,4 @@ export interface EstatisticasClientesDia {
   cancelados: number;
   pagos_dinheiro: number;
   pagos_transferencia: number;
-}
-
-export interface ResumoFinanceiroDia {
-  caixa_inicial: number;
-  caixa_final: number;
-  total_recebido: number;
-  total_emprestado: number;
-  total_despesas: number;
-  total_microseguro: number;
-  diferenca: number;
 }
