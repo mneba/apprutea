@@ -1082,7 +1082,7 @@ export default function LiquidacaoDiariaPage() {
       parcelas_pendentes: 0,
       data_cadastro: '',
       rotas_ids: [cliente.rota_id],
-      permite_emprestimo_adicional: cliente.permite_emprestimo_adicional,
+      permite_emprestimo_adicional: cliente.permite_emprestimo_adicional ?? false,
     };
     
     setClienteSelecionado(clienteParaModal);
