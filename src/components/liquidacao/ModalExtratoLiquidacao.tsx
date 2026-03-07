@@ -117,6 +117,7 @@ interface ModalExtratoLiquidacaoProps {
   liquidacao: LiquidacaoDiaria | null;
   rotaNome: string;
   vendedorNome?: string;
+  empresaNome?: string;
 }
 
 export function ModalExtratoLiquidacao({
@@ -125,6 +126,7 @@ export function ModalExtratoLiquidacao({
   liquidacao,
   rotaNome,
   vendedorNome,
+  empresaNome,
 }: ModalExtratoLiquidacaoProps) {
   const [loading, setLoading] = useState(false);
   const [extrato, setExtrato] = useState<ExtratoData | null>(null);
@@ -195,7 +197,7 @@ export function ModalExtratoLiquidacao({
 
     setGerando(true);
     try {
-      const html = gerarHTMLExtrato(liquidacao, extrato, rotaNome, vendedorNome);
+      const html = gerarHTMLExtrato(liquidacao, extrato, rotaNome, vendedorNome, empresaNome);
       
       const printWindow = window.open('', '_blank');
       if (printWindow) {
@@ -269,7 +271,7 @@ export function ModalExtratoLiquidacao({
               {/* CABEÇALHO - Limpo e Elegante */}
               {/* ========================================= */}
               <div className="text-center mb-4">
-                <p className="font-bold text-gray-900 text-base tracking-wide">BELLA KIDS</p>
+                <p className="font-bold text-gray-900 text-base tracking-wide">{empresaNome || 'EXTRATO'}</p>
                 <p className="text-gray-400 text-xs uppercase tracking-widest">Extrato de Liquidação</p>
                 
                 <div className="border-t border-gray-300 my-3" />
@@ -459,7 +461,8 @@ function gerarHTMLExtrato(
   liquidacao: LiquidacaoDiaria,
   extrato: ExtratoData,
   rotaNome: string,
-  vendedorNome?: string
+  vendedorNome?: string,
+  empresaNome?: string
 ): string {
   const entradas = extrato.movimentacoes.filter(m => m.tipo === 'RECEBER');
   const saidas = extrato.movimentacoes.filter(m => m.tipo === 'PAGAR');
@@ -543,8 +546,8 @@ function gerarHTMLExtrato(
 </head>
 <body>
   <div class="header">
-    <h1>BELLA KIDS</h1>
-    <p>EXTRATO LIQUIDAÇÃO DIÁRIA</p>
+    <h1>${empresaNome || 'EXTRATO'}</h1>
+    <p>EXTRATO DE LIQUIDAÇÃO</p>
   </div>
   
   <div class="sep-double"></div>

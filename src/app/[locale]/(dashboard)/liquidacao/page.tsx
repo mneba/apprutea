@@ -711,6 +711,7 @@ export default function LiquidacaoDiariaPage() {
   // States principais
   const [vendedor, setVendedor] = useState<VendedorLiquidacao | null>(null);
   const [rota, setRota] = useState<RotaLiquidacao | null>(null);
+  const [empresaNome, setEmpresaNome] = useState<string>('');
   const [liquidacao, setLiquidacao] = useState<LiquidacaoDiaria | null>(null);
   const [liquidacaoAtiva, setLiquidacaoAtiva] = useState<LiquidacaoDiaria | null>(null);
   const [saldoConta, setSaldoConta] = useState(0);
@@ -834,6 +835,17 @@ export default function LiquidacaoDiariaPage() {
 
       setVendedor(vendedorData);
       setRota(rotaData);
+
+      // Buscar nome da empresa
+      if (rotaData?.empresa_id) {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data: empresaData } = await supabase
+          .from('empresas')
+          .select('nome')
+          .eq('id', rotaData.empresa_id)
+          .single();
+        setEmpresaNome(empresaData?.nome || '');
+      }
 
       const contaData = await liquidacaoService.buscarSaldoContaRota(rotaId);
       setSaldoConta(contaData?.saldo_atual || 0);
@@ -1632,6 +1644,7 @@ export default function LiquidacaoDiariaPage() {
         liquidacao={liquidacao}
         rotaNome={rota?.nome || ''}
         vendedorNome={vendedor?.nome}
+        empresaNome={empresaNome}
       />
 
       {/* Modal de Detalhes do Cliente */}
