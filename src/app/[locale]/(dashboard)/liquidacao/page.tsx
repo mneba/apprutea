@@ -27,12 +27,15 @@ import {
   RotateCcw,
   AlertTriangle,
   User,
+  Search,
+  MessageSquare,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
 import { CalendarioLiquidacao } from '@/components/liquidacao/CalendarioLiquidacao';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
+import { NotasLiquidacaoCard, ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
 import type {
   LiquidacaoDiaria,
   VendedorLiquidacao,
@@ -750,6 +753,18 @@ export default function LiquidacaoDiariaPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
   const [modalClienteAberto, setModalClienteAberto] = useState(false);
 
+  // States para busca de clientes
+  const [buscaCliente, setBuscaCliente] = useState('');
+  const [clientesVisiveis, setClientesVisiveis] = useState(20);
+
+  // States para notas
+  const [notasClientes, setNotasClientes] = useState<Map<string, { liquidacao: number; outras: boolean }>>(new Map());
+  const [modalNotasCliente, setModalNotasCliente] = useState<{ aberto: boolean; clienteId: string; clienteNome: string }>({
+    aberto: false,
+    clienteId: '',
+    clienteNome: '',
+  });
+
   // Permissões
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
@@ -767,6 +782,48 @@ export default function LiquidacaoDiariaPage() {
 
       const emps = await liquidacaoService.buscarEmprestimosDoDia(liq.id);
       setEmprestimos(emps);
+
+      // Buscar contagem de notas por cliente
+      if (clientes.length > 0) {
+        const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        
+        // Buscar notas da liquidação atual
+        const { data: notasLiq } = await supabase
+          .from('notas')
+          .select('cliente_id')
+          .eq('liquidacao_id', liq.id)
+          .eq('status', 'ATIVA')
+          .in('cliente_id', clienteIds);
+
+        // Buscar notas de outras liquidações
+        const { data: notasOutras } = await supabase
+          .from('notas')
+          .select('cliente_id')
+          .neq('liquidacao_id', liq.id)
+          .eq('status', 'ATIVA')
+          .in('cliente_id', clienteIds);
+
+        const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
+        
+        // Contar notas da liquidação atual por cliente
+        (notasLiq || []).forEach((n: { cliente_id: string }) => {
+          const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
+          mapaNotas.set(n.cliente_id, { ...atual, liquidacao: atual.liquidacao + 1 });
+        });
+
+        // Marcar clientes com notas em outras liquidações
+        (notasOutras || []).forEach((n: { cliente_id: string }) => {
+          const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
+          mapaNotas.set(n.cliente_id, { ...atual, outras: true });
+        });
+
+        setNotasClientes(mapaNotas);
+      }
+
+      // Resetar busca e paginação
+      setBuscaCliente('');
+      setClientesVisiveis(20);
 
     } catch (error) {
       console.error('Erro ao carregar dados da liquidação:', error);
@@ -1533,84 +1590,185 @@ export default function LiquidacaoDiariaPage() {
         </div>
       </div>
 
+      {/* Card de Notas da Liquidação */}
+      {liquidacao && rota && vendedor && (
+        <NotasLiquidacaoCard
+          liquidacaoId={liquidacao.id}
+          rotaId={rota.id}
+          empresaId={rota.empresa_id}
+          vendedorId={vendedor.id}
+          autorId={userId || ''}
+          autorNome={profile?.nome || 'Administrador'}
+          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+        />
+      )}
+
       {/* Lista de Clientes do Dia */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden transition-all duration-300 ease-out hover:shadow-lg hover:shadow-gray-200/50 hover:border-gray-300">
-        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
-          <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full transition-all duration-300 hover:bg-blue-200 hover:scale-105">
-            {clientesDia.length}
-          </span>
-        </div>
-        
-        {clientesDia.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 border-b">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Cliente</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Parcela</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Valor</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Pago</th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {clientesDia.slice(0, 10).map((cliente) => (
-                  <tr 
-                    key={cliente.parcela_id} 
-                    className="hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer"
-                    onClick={() => handleAbrirModalCliente(cliente)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-                          cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
-                          cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
-                        }`}>
-                          {cliente.nome?.charAt(0)}
-                        </div>
-                        <div>
-                          <span className="font-medium text-gray-900 hover:text-blue-600 transition-colors">{cliente.nome}</span>
-                          {cliente.tem_parcelas_vencidas && (
-                            <span className="ml-2 text-xs text-red-500">({cliente.total_parcelas_vencidas} vencida(s))</span>
-                          )}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-600">
-                      {cliente.numero_parcela}/{cliente.numero_parcelas}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium">{formatarMoeda(cliente.valor_parcela)}</td>
-                    <td className="px-4 py-3 text-right">
-                      <span className={cliente.valor_pago_parcela > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
-                        {cliente.valor_pago_parcela > 0 ? formatarMoeda(cliente.valor_pago_parcela) : '-'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                        cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
-                        cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 
-                        cliente.status_dia === 'PARCIAL' ? 'bg-amber-100 text-amber-700' :
-                        'bg-yellow-100 text-yellow-700'
-                      }`}>
-                        {cliente.status_dia === 'EM_ATRASO' ? 'ATRASADO' : cliente.status_dia}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {clientesDia.length > 10 && (
-              <div className="px-4 py-3 bg-gray-50 text-center text-xs text-gray-500 border-t">
-                Mostrando 10 de {clientesDia.length} clientes
-              </div>
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        {/* Header com busca */}
+        <div className="px-4 py-3 border-b border-gray-200">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
+            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded-full">
+              {clientesDia.length}
+            </span>
+          </div>
+          {/* Campo de busca */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Buscar cliente..."
+              value={buscaCliente}
+              onChange={(e) => {
+                setBuscaCliente(e.target.value);
+                setClientesVisiveis(20);
+              }}
+              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+            {buscaCliente && (
+              <button
+                onClick={() => setBuscaCliente('')}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
             )}
           </div>
-        ) : (
-          <div className="p-8 text-center text-gray-500 text-sm">
-            Nenhum cliente com parcela vencendo hoje
-          </div>
-        )}
+        </div>
+        
+        {(() => {
+          // Filtrar clientes pela busca
+          const clientesFiltrados = buscaCliente
+            ? clientesDia.filter(c => 
+                c.nome.toLowerCase().includes(buscaCliente.toLowerCase()) ||
+                c.consecutivo?.includes(buscaCliente)
+              )
+            : clientesDia;
+
+          // Clientes visíveis (com paginação)
+          const clientesParaMostrar = clientesFiltrados.slice(0, clientesVisiveis);
+          const temMais = clientesFiltrados.length > clientesVisiveis;
+
+          return clientesFiltrados.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500">Cliente</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Parcela</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Valor</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500">Pago</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500">Status</th>
+                      <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 w-12">Notas</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {clientesParaMostrar.map((cliente) => {
+                      const notasInfo = notasClientes.get(cliente.cliente_id);
+                      const temNotasLiquidacao = (notasInfo?.liquidacao || 0) > 0;
+                      const temNotasOutras = notasInfo?.outras || false;
+
+                      return (
+                        <tr 
+                          key={cliente.parcela_id} 
+                          className="hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer"
+                          onClick={() => handleAbrirModalCliente(cliente)}
+                        >
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
+                                cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
+                                cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                              }`}>
+                                {cliente.nome?.charAt(0)}
+                              </div>
+                              <div>
+                                <span className="font-medium text-gray-900 hover:text-blue-600 transition-colors">{cliente.nome}</span>
+                                {cliente.tem_parcelas_vencidas && (
+                                  <span className="ml-2 text-xs text-red-500">({cliente.total_parcelas_vencidas} vencida(s))</span>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-center text-gray-600">
+                            {cliente.numero_parcela}/{cliente.numero_parcelas}
+                          </td>
+                          <td className="px-4 py-3 text-right font-medium">{formatarMoeda(cliente.valor_parcela)}</td>
+                          <td className="px-4 py-3 text-right">
+                            <span className={cliente.valor_pago_parcela > 0 ? 'text-green-600 font-medium' : 'text-gray-400'}>
+                              {cliente.valor_pago_parcela > 0 ? formatarMoeda(cliente.valor_pago_parcela) : '-'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
+                              cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
+                              cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 
+                              cliente.status_dia === 'PARCIAL' ? 'bg-amber-100 text-amber-700' :
+                              'bg-yellow-100 text-yellow-700'
+                            }`}>
+                              {cliente.status_dia === 'EM_ATRASO' ? 'ATRASADO' : cliente.status_dia}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {(temNotasLiquidacao || temNotasOutras) && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setModalNotasCliente({
+                                    aberto: true,
+                                    clienteId: cliente.cliente_id,
+                                    clienteNome: cliente.nome,
+                                  });
+                                }}
+                                className="relative p-1 rounded hover:bg-amber-50 transition-colors"
+                                title={`${notasInfo?.liquidacao || 0} nota(s) nesta liquidação`}
+                              >
+                                <MessageSquare className={`w-4 h-4 ${temNotasLiquidacao ? 'text-amber-600' : 'text-gray-400'}`} />
+                                {temNotasLiquidacao && (
+                                  <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center">
+                                    {(notasInfo?.liquidacao || 0) > 9 ? '9+' : notasInfo?.liquidacao}
+                                  </span>
+                                )}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              
+              {/* Botão carregar mais */}
+              {temMais && (
+                <div className="px-4 py-3 bg-gray-50 border-t">
+                  <button
+                    onClick={() => setClientesVisiveis(prev => prev + 20)}
+                    className="w-full py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                  >
+                    Carregar mais ({clientesFiltrados.length - clientesVisiveis} restantes)
+                  </button>
+                </div>
+              )}
+
+              {/* Info de total */}
+              {buscaCliente && (
+                <div className="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500 text-center">
+                  {clientesFiltrados.length} de {clientesDia.length} clientes
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="p-8 text-center text-gray-500 text-sm">
+              {buscaCliente 
+                ? `Nenhum cliente encontrado para "${buscaCliente}"`
+                : 'Nenhum cliente com parcela vencendo hoje'
+              }
+            </div>
+          );
+        })()}
       </div>
 
       {/* Modais */}
@@ -1656,6 +1814,23 @@ export default function LiquidacaoDiariaPage() {
         }}
         cliente={clienteSelecionado}
       />
+
+      {/* Modal de Notas do Cliente */}
+      {liquidacao && rota && vendedor && (
+        <ModalNotasCliente
+          isOpen={modalNotasCliente.aberto}
+          onClose={() => setModalNotasCliente({ aberto: false, clienteId: '', clienteNome: '' })}
+          clienteId={modalNotasCliente.clienteId}
+          clienteNome={modalNotasCliente.clienteNome}
+          rotaId={rota.id}
+          empresaId={rota.empresa_id}
+          vendedorId={vendedor.id}
+          liquidacaoId={liquidacao.id}
+          autorId={userId || ''}
+          autorNome={profile?.nome || 'Administrador'}
+          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+        />
+      )}
     </div>
   );
 }
