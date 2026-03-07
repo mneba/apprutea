@@ -6,10 +6,6 @@ import {
   FileText,
   Share2,
   Loader2,
-  Calendar,
-  User,
-  MapPin,
-  Printer,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
@@ -270,38 +266,21 @@ export function ModalExtratoLiquidacao({
               className="bg-[#FFFEF7] rounded-lg p-4 font-mono text-sm shadow-inner"
             >
               {/* ========================================= */}
-              {/* CABEÇALHO - Data, Vendedor, Rota */}
+              {/* CABEÇALHO - Limpo e Elegante */}
               {/* ========================================= */}
               <div className="text-center mb-4">
-                <p className="font-bold text-gray-900 text-base">BELLA KIDS</p>
-                <p className="text-gray-500 text-xs">EXTRATO LIQUIDAÇÃO DIÁRIA</p>
+                <p className="font-bold text-gray-900 text-base tracking-wide">BELLA KIDS</p>
+                <p className="text-gray-400 text-xs uppercase tracking-widest">Extrato de Liquidação</p>
                 
-                <div className="border-t-2 border-double border-gray-400 my-2" />
+                <div className="border-t border-gray-300 my-3" />
                 
-                {/* DATA DA LIQUIDAÇÃO - DESTAQUE */}
-                <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 my-2">
-                  <p className="text-xs text-amber-600 uppercase tracking-wide">Data da Liquidação</p>
-                  <p className="font-bold text-gray-900 text-base flex items-center justify-center gap-2">
-                    <Calendar className="w-4 h-4 text-amber-600" />
-                    {formatarDataLiquidacao(dataLiquidacao)}
-                  </p>
+                {/* Data + Rota + Vendedor - Compacto */}
+                <div className="space-y-0.5">
+                  <p className="font-bold text-gray-900">{formatarDataLiquidacao(dataLiquidacao)}</p>
+                  <p className="text-gray-600 text-xs">{rotaNome}{vendedorNome ? ` · ${vendedorNome}` : ''}</p>
                 </div>
                 
-                {/* Rota e Vendedor */}
-                <div className="space-y-1 mt-3">
-                  <p className="text-gray-700 flex items-center justify-center gap-2">
-                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
-                    <span className="font-medium">{rotaNome}</span>
-                  </p>
-                  {vendedorNome && (
-                    <p className="text-gray-600 flex items-center justify-center gap-2">
-                      <User className="w-3.5 h-3.5 text-green-600" />
-                      <span>{vendedorNome}</span>
-                    </p>
-                  )}
-                </div>
-                
-                <div className="border-t-2 border-double border-gray-400 my-3" />
+                <div className="border-t border-gray-300 my-3" />
               </div>
 
               {/* Resumo Principal */}
@@ -436,11 +415,8 @@ export function ModalExtratoLiquidacao({
               
               {/* Data de Impressão */}
               <div className="text-center text-gray-400 text-xs mt-4 space-y-1">
-                <p className="flex items-center justify-center gap-1">
-                  <Printer className="w-3 h-3" />
-                  Impresso em: {dataImpressao}
-                </p>
-                <p>*** FIM DO EXTRATO ***</p>
+                <p>Impresso em {dataImpressao}</p>
+                <p className="text-gray-300">· · ·</p>
               </div>
             </div>
           ) : (
@@ -573,13 +549,10 @@ function gerarHTMLExtrato(
   
   <div class="sep-double"></div>
   
-  <div class="data-box">
-    <div class="label">Data da Liquidação</div>
-    <div class="value">📅 ${formatarDataLiquidacao(dataLiquidacao)}</div>
+  <div style="text-align: center; margin: 12px 0;">
+    <div style="font-weight: bold; font-size: 13px; color: #1F2937;">${formatarDataLiquidacao(dataLiquidacao)}</div>
+    <div style="font-size: 10px; color: #6B7280; margin-top: 4px;">${rotaNome}${vendedorNome ? ` · ${vendedorNome}` : ''}</div>
   </div>
-  
-  <div class="info-line rota">📍 ${rotaNome}</div>
-  ${vendedorNome ? `<div class="info-line vendedor">👤 ${vendedorNome}</div>` : ''}
   
   <div class="sep-double"></div>
 
@@ -611,8 +584,7 @@ function gerarHTMLExtrato(
   <div class="sep-double"></div>
   
   <div class="footer">
-    <p class="print-info">🖨️ Impresso em: ${dataImpressao}</p>
-    <p>*** FIM DO EXTRATO ***</p>
+    <p class="print-info">Impresso em ${dataImpressao}</p>
   </div>
 </body>
 </html>
