@@ -29,6 +29,7 @@ import {
   User,
   Search,
   MessageSquare,
+  X,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
