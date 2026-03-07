@@ -1631,6 +1631,7 @@ export default function LiquidacaoDiariaPage() {
         onClose={() => setModalExtrato(false)}
         liquidacao={liquidacao}
         rotaNome={rota?.nome || ''}
+        vendedorNome={vendedor?.nome}
       />
 
       {/* Modal de Detalhes do Cliente */}

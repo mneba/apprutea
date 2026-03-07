@@ -6,11 +6,10 @@ import {
   FileText,
   Share2,
   Loader2,
-  TrendingUp,
-  TrendingDown,
-  Wallet,
-  Banknote,
-  CreditCard,
+  Calendar,
+  User,
+  MapPin,
+  Printer,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
@@ -57,15 +56,24 @@ function formatarHora(data: string | null | undefined): string {
   });
 }
 
-function formatarDataCompleta(data: string | null | undefined): string {
+function formatarDataLiquidacao(data: string | null | undefined): string {
   if (!data) return '';
-  return new Date(data).toLocaleDateString('pt-BR', {
+  const dataStr = data.split('T')[0];
+  return new Date(dataStr + 'T12:00:00').toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+  });
+}
+
+function formatarDataCurta(data: string | null | undefined): string {
+  if (!data) return '';
+  const dataStr = data.split('T')[0];
+  return new Date(dataStr + 'T12:00:00').toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
-  }) + '  ' + new Date(data).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
@@ -112,6 +120,7 @@ interface ModalExtratoLiquidacaoProps {
   onClose: () => void;
   liquidacao: LiquidacaoDiaria | null;
   rotaNome: string;
+  vendedorNome?: string;
 }
 
 export function ModalExtratoLiquidacao({
@@ -119,6 +128,7 @@ export function ModalExtratoLiquidacao({
   onClose,
   liquidacao,
   rotaNome,
+  vendedorNome,
 }: ModalExtratoLiquidacaoProps) {
   const [loading, setLoading] = useState(false);
   const [extrato, setExtrato] = useState<ExtratoData | null>(null);
@@ -189,10 +199,8 @@ export function ModalExtratoLiquidacao({
 
     setGerando(true);
     try {
-      // Gerar HTML do extrato
-      const html = gerarHTMLExtrato(liquidacao, extrato, rotaNome);
+      const html = gerarHTMLExtrato(liquidacao, extrato, rotaNome, vendedorNome);
       
-      // Abrir nova janela para impressão/PDF
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(html);
@@ -215,20 +223,31 @@ export function ModalExtratoLiquidacao({
   const entradas = extrato?.movimentacoes.filter(m => m.tipo === 'RECEBER') || [];
   const saidas = extrato?.movimentacoes.filter(m => m.tipo === 'PAGAR') || [];
 
+  const dataLiquidacao = liquidacao?.data_abertura?.split('T')[0] || '';
+  const dataImpressao = new Date().toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
       <div className="relative bg-[#E8E4DF] rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
-        {/* Header */}
+        {/* Header do Modal */}
         <div className="flex items-center justify-between p-4 border-b border-gray-300">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
               <FileText className="w-5 h-5 text-amber-600" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-gray-900">Extrato do Dia</h2>
-              <p className="text-sm text-gray-500">{rotaNome}</p>
+              <h2 className="text-lg font-bold text-gray-900">Extrato da Liquidação</h2>
+              <p className="text-sm text-gray-500">
+                {formatarDataCurta(dataLiquidacao)}
+              </p>
             </div>
           </div>
           <button
@@ -250,15 +269,39 @@ export function ModalExtratoLiquidacao({
               ref={extratoRef}
               className="bg-[#FFFEF7] rounded-lg p-4 font-mono text-sm shadow-inner"
             >
-              {/* Cabeçalho */}
+              {/* ========================================= */}
+              {/* CABEÇALHO - Data, Vendedor, Rota */}
+              {/* ========================================= */}
               <div className="text-center mb-4">
-                <p className="font-bold text-gray-900">{rotaNome}</p>
+                <p className="font-bold text-gray-900 text-base">BELLA KIDS</p>
                 <p className="text-gray-500 text-xs">EXTRATO LIQUIDAÇÃO DIÁRIA</p>
+                
                 <div className="border-t-2 border-double border-gray-400 my-2" />
-                <p className="text-gray-600 text-xs">
-                  {formatarDataCompleta(liquidacao.data_fechamento || liquidacao.data_abertura)}
-                </p>
-                <div className="border-t-2 border-double border-gray-400 my-2" />
+                
+                {/* DATA DA LIQUIDAÇÃO - DESTAQUE */}
+                <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 my-2">
+                  <p className="text-xs text-amber-600 uppercase tracking-wide">Data da Liquidação</p>
+                  <p className="font-bold text-gray-900 text-base flex items-center justify-center gap-2">
+                    <Calendar className="w-4 h-4 text-amber-600" />
+                    {formatarDataLiquidacao(dataLiquidacao)}
+                  </p>
+                </div>
+                
+                {/* Rota e Vendedor */}
+                <div className="space-y-1 mt-3">
+                  <p className="text-gray-700 flex items-center justify-center gap-2">
+                    <MapPin className="w-3.5 h-3.5 text-blue-600" />
+                    <span className="font-medium">{rotaNome}</span>
+                  </p>
+                  {vendedorNome && (
+                    <p className="text-gray-600 flex items-center justify-center gap-2">
+                      <User className="w-3.5 h-3.5 text-green-600" />
+                      <span>{vendedorNome}</span>
+                    </p>
+                  )}
+                </div>
+                
+                <div className="border-t-2 border-double border-gray-400 my-3" />
               </div>
 
               {/* Resumo Principal */}
@@ -281,6 +324,18 @@ export function ModalExtratoLiquidacao({
                   <span>{formatarMoeda(liquidacao.caixa_final)}</span>
                 </div>
                 <div className="border-t-2 border-double border-gray-400 my-2" />
+              </div>
+
+              {/* Resumo de Clientes e Pagamentos */}
+              <div className="grid grid-cols-2 gap-4 mb-4 text-xs">
+                <div className="bg-gray-50 p-2 rounded">
+                  <p className="text-gray-500">Pagos</p>
+                  <p className="font-bold text-green-600 text-lg">{liquidacao.pagamentos_pagos}</p>
+                </div>
+                <div className="bg-gray-50 p-2 rounded">
+                  <p className="text-gray-500">Não Pagos</p>
+                  <p className="font-bold text-red-600 text-lg">{liquidacao.pagamentos_nao_pagos}</p>
+                </div>
               </div>
 
               {/* Detalhes Entradas */}
@@ -319,9 +374,9 @@ export function ModalExtratoLiquidacao({
                     ))}
                   </div>
                   
-                  <div className="border-t border-dashed border-gray-300 mt-2 pt-2" />
-                  <div className="flex justify-between font-bold text-green-600">
-                    <span>TOTAL COBRANÇAS</span>
+                  <div className="border-t border-dashed border-gray-300 mt-3 mb-1" />
+                  <div className="flex justify-between font-medium text-green-700">
+                    <span>TOTAL ENTRADAS</span>
                     <span>{formatarMoeda(extrato.totalEntradas)}</span>
                   </div>
                 </div>
@@ -363,18 +418,11 @@ export function ModalExtratoLiquidacao({
                     ))}
                   </div>
                   
-                  <div className="border-t border-dashed border-gray-300 mt-2 pt-2" />
-                  <div className="flex justify-between font-bold text-red-600">
+                  <div className="border-t border-dashed border-gray-300 mt-3 mb-1" />
+                  <div className="flex justify-between font-medium text-red-700">
                     <span>TOTAL SAÍDAS</span>
                     <span>{formatarMoeda(extrato.totalSaidas)}</span>
                   </div>
-                </div>
-              )}
-
-              {/* Sem movimentações */}
-              {entradas.length === 0 && saidas.length === 0 && (
-                <div className="text-center text-gray-500 py-4">
-                  Nenhuma movimentação registrada
                 </div>
               )}
 
@@ -385,9 +433,15 @@ export function ModalExtratoLiquidacao({
                 <span>{formatarMoeda(liquidacao.caixa_final)}</span>
               </div>
               <div className="border-t-2 border-double border-gray-400 my-2" />
-              <p className="text-center text-gray-400 text-xs mt-4">
-                *** FIM DO EXTRATO ***
-              </p>
+              
+              {/* Data de Impressão */}
+              <div className="text-center text-gray-400 text-xs mt-4 space-y-1">
+                <p className="flex items-center justify-center gap-1">
+                  <Printer className="w-3 h-3" />
+                  Impresso em: {dataImpressao}
+                </p>
+                <p>*** FIM DO EXTRATO ***</p>
+              </div>
             </div>
           ) : (
             <div className="text-center text-gray-500 py-12">
@@ -428,10 +482,20 @@ export function ModalExtratoLiquidacao({
 function gerarHTMLExtrato(
   liquidacao: LiquidacaoDiaria,
   extrato: ExtratoData,
-  rotaNome: string
+  rotaNome: string,
+  vendedorNome?: string
 ): string {
   const entradas = extrato.movimentacoes.filter(m => m.tipo === 'RECEBER');
   const saidas = extrato.movimentacoes.filter(m => m.tipo === 'PAGAR');
+
+  const dataLiquidacao = liquidacao.data_abertura?.split('T')[0] || '';
+  const dataImpressao = new Date().toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   const linhasEntradas = entradas.map((mov, index) => `
     <tr>
@@ -458,7 +522,7 @@ function gerarHTMLExtrato(
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Extrato - ${rotaNome}</title>
+  <title>Extrato - ${rotaNome} - ${formatarDataCurta(dataLiquidacao)}</title>
   <style>
     @page { size: 80mm auto; margin: 5mm; }
     body {
@@ -472,8 +536,21 @@ function gerarHTMLExtrato(
       margin: 0 auto;
     }
     .header { text-align: center; margin-bottom: 12px; }
-    .header h1 { font-size: 14px; margin: 0 0 4px 0; }
+    .header h1 { font-size: 16px; margin: 0 0 4px 0; font-weight: bold; }
     .header p { font-size: 10px; color: #9CA3AF; margin: 0; }
+    .data-box { 
+      background: #FEF3C7; 
+      border: 1px solid #FCD34D; 
+      border-radius: 4px; 
+      padding: 8px; 
+      margin: 8px 0; 
+      text-align: center;
+    }
+    .data-box .label { font-size: 9px; color: #D97706; text-transform: uppercase; letter-spacing: 1px; }
+    .data-box .value { font-size: 13px; font-weight: bold; color: #1F2937; margin-top: 4px; }
+    .info-line { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 4px 0; font-size: 11px; }
+    .info-line.rota { color: #1F2937; font-weight: 600; }
+    .info-line.vendedor { color: #6B7280; }
     .sep-double { border-top: 2px double #9CA3AF; margin: 8px 0; }
     .sep-dashed { border-top: 1px dashed #D1D5DB; margin: 8px 0; }
     .row { display: flex; justify-content: space-between; margin: 4px 0; }
@@ -485,36 +562,32 @@ function gerarHTMLExtrato(
     td { padding: 2px 0; vertical-align: top; }
     .total { font-weight: bold; }
     .footer { text-align: center; color: #9CA3AF; font-size: 10px; margin-top: 16px; }
+    .print-info { font-size: 9px; color: #9CA3AF; margin-top: 8px; }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1>${rotaNome}</h1>
+    <h1>BELLA KIDS</h1>
     <p>EXTRATO LIQUIDAÇÃO DIÁRIA</p>
   </div>
+  
   <div class="sep-double"></div>
-  <p style="text-align: center; color: #6B7280; font-size: 10px;">
-    ${formatarDataCompleta(liquidacao.data_fechamento || liquidacao.data_abertura)}
-  </p>
+  
+  <div class="data-box">
+    <div class="label">Data da Liquidação</div>
+    <div class="value">📅 ${formatarDataLiquidacao(dataLiquidacao)}</div>
+  </div>
+  
+  <div class="info-line rota">📍 ${rotaNome}</div>
+  ${vendedorNome ? `<div class="info-line vendedor">👤 ${vendedorNome}</div>` : ''}
+  
   <div class="sep-double"></div>
 
-  <div class="row">
-    <span>CAIXA INICIAL</span>
-    <span>${formatarMoeda(liquidacao.caixa_inicial)}</span>
-  </div>
-  <div class="row green">
-    <span>(+) COBRANÇAS</span>
-    <span>${formatarMoeda(extrato.totalEntradas)}</span>
-  </div>
-  <div class="row red">
-    <span>(-) SAÍDAS</span>
-    <span>${formatarMoeda(extrato.totalSaidas)}</span>
-  </div>
+  <div class="row"><span>CAIXA INICIAL</span><span>${formatarMoeda(liquidacao.caixa_inicial)}</span></div>
+  <div class="row green"><span>(+) COBRANÇAS</span><span>${formatarMoeda(extrato.totalEntradas)}</span></div>
+  <div class="row red"><span>(-) SAÍDAS</span><span>${formatarMoeda(extrato.totalSaidas)}</span></div>
   <div class="sep-double"></div>
-  <div class="row bold">
-    <span>CAIXA FINAL</span>
-    <span>${formatarMoeda(liquidacao.caixa_final)}</span>
-  </div>
+  <div class="row bold"><span>CAIXA FINAL</span><span>${formatarMoeda(liquidacao.caixa_final)}</span></div>
   <div class="sep-double"></div>
 
   ${entradas.length > 0 ? `
@@ -522,10 +595,7 @@ function gerarHTMLExtrato(
     <div class="sep-dashed"></div>
     <table>${linhasEntradas}</table>
     <div class="sep-dashed"></div>
-    <div class="row green total">
-      <span>TOTAL COBRANÇAS</span>
-      <span>${formatarMoeda(extrato.totalEntradas)}</span>
-    </div>
+    <div class="row green total"><span>TOTAL ENTRADAS</span><span>${formatarMoeda(extrato.totalEntradas)}</span></div>
   ` : ''}
 
   ${saidas.length > 0 ? `
@@ -533,23 +603,18 @@ function gerarHTMLExtrato(
     <div class="sep-dashed"></div>
     <table>${linhasSaidas}</table>
     <div class="sep-dashed"></div>
-    <div class="row red total">
-      <span>TOTAL SAÍDAS</span>
-      <span>${formatarMoeda(extrato.totalSaidas)}</span>
-    </div>
+    <div class="row red total"><span>TOTAL SAÍDAS</span><span>${formatarMoeda(extrato.totalSaidas)}</span></div>
   ` : ''}
 
   <div class="sep-double"></div>
-  <div class="row bold" style="font-size: 16px;">
-    <span>SALDO FINAL</span>
-    <span>${formatarMoeda(liquidacao.caixa_final)}</span>
-  </div>
+  <div class="row bold"><span>SALDO FINAL</span><span>${formatarMoeda(liquidacao.caixa_final)}</span></div>
   <div class="sep-double"></div>
-
-  <p class="footer">*** FIM DO EXTRATO ***</p>
+  
+  <div class="footer">
+    <p class="print-info">🖨️ Impresso em: ${dataImpressao}</p>
+    <p>*** FIM DO EXTRATO ***</p>
+  </div>
 </body>
 </html>
   `;
 }
-
-export default ModalExtratoLiquidacao;
