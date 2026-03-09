@@ -37,6 +37,13 @@ import { CalendarioLiquidacao } from '@/components/liquidacao/CalendarioLiquidac
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
 import { NotasLiquidacaoCard, ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
+import { 
+  ModalEmprestimos, 
+  ModalDespesas, 
+  ModalMicroseguros, 
+  ModalPagamentos,
+  ModalReceitas 
+} from '@/components/liquidacao/CardsFinanceiros';
 import type {
   LiquidacaoDiaria,
   VendedorLiquidacao,
@@ -765,6 +772,13 @@ export default function LiquidacaoDiariaPage() {
     clienteId: '',
     clienteNome: '',
   });
+
+  // States para modais financeiros
+  const [modalEmprestimos, setModalEmprestimos] = useState(false);
+  const [modalDespesas, setModalDespesas] = useState(false);
+  const [modalMicroseguros, setModalMicroseguros] = useState(false);
+  const [modalPagamentos, setModalPagamentos] = useState(false);
+  const [modalReceitas, setModalReceitas] = useState(false);
 
   // Permissões
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
@@ -1508,8 +1522,11 @@ export default function LiquidacaoDiariaPage() {
 
                 {/* Coluna 2 */}
                 <div className="space-y-4">
-                  {/* Card Pagamentos do Dia - Compacto */}
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+                  {/* Card Pagamentos do Dia - Compacto e Clicável */}
+                  <button
+                    onClick={() => setModalPagamentos(true)}
+                    className="w-full bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group text-left"
+                  >
                     <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
                       <CheckCircle className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
                       Pagamentos do Dia
@@ -1537,12 +1554,15 @@ export default function LiquidacaoDiariaPage() {
                         </p>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Grid de 3 cards financeiros */}
                   <div className="grid grid-cols-3 gap-3">
                     {/* Card Empréstimos */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group">
+                    <button
+                      onClick={() => setModalEmprestimos(true)}
+                      className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group text-left"
+                    >
                       <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-green-700">
                         <DollarSign className="w-3.5 h-3.5 text-green-600" />
                         Empréstimos
@@ -1558,10 +1578,13 @@ export default function LiquidacaoDiariaPage() {
                           )}
                         </p>
                       </div>
-                    </div>
+                    </button>
 
                     {/* Card Despesas */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group">
+                    <button
+                      onClick={() => setModalDespesas(true)}
+                      className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group text-left"
+                    >
                       <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-red-700">
                         <Receipt className="w-3.5 h-3.5 text-red-600" />
                         Despesas
@@ -1570,10 +1593,13 @@ export default function LiquidacaoDiariaPage() {
                         <p className="text-lg font-bold text-red-600">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
                         <p className="text-xs text-gray-500">{liquidacao.qtd_despesas_dia} lanç.</p>
                       </div>
-                    </div>
+                    </button>
 
                     {/* Card Microseguro */}
-                    <div className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group">
+                    <button
+                      onClick={() => setModalMicroseguros(true)}
+                      className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group text-left"
+                    >
                       <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-teal-700">
                         <Shield className="w-3.5 h-3.5 text-teal-600" />
                         Microseguro
@@ -1582,7 +1608,7 @@ export default function LiquidacaoDiariaPage() {
                         <p className="text-lg font-bold text-teal-600">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
                         <p className="text-xs text-gray-500">{liquidacao.qtd_microseguros_dia} cont.</p>
                       </div>
-                    </div>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1831,6 +1857,50 @@ export default function LiquidacaoDiariaPage() {
           autorNome={profile?.nome || 'Administrador'}
           dataReferencia={liquidacao.data_abertura.split('T')[0]}
         />
+      )}
+
+      {/* Modais Financeiros */}
+      {liquidacao && (
+        <>
+          <ModalEmprestimos
+            isOpen={modalEmprestimos}
+            onClose={() => setModalEmprestimos(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={liquidacao.total_emprestado_dia}
+            qtdFallback={liquidacao.qtd_emprestimos_dia}
+          />
+
+          <ModalDespesas
+            isOpen={modalDespesas}
+            onClose={() => setModalDespesas(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={liquidacao.total_despesas_dia}
+            qtdFallback={liquidacao.qtd_despesas_dia}
+          />
+
+          <ModalMicroseguros
+            isOpen={modalMicroseguros}
+            onClose={() => setModalMicroseguros(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={liquidacao.total_microseguro_dia}
+            qtdFallback={liquidacao.qtd_microseguros_dia}
+          />
+
+          <ModalPagamentos
+            isOpen={modalPagamentos}
+            onClose={() => setModalPagamentos(false)}
+            liquidacaoId={liquidacao.id}
+            clientesPagos={liquidacao.pagamentos_pagos}
+            clientesNaoPagos={liquidacao.pagamentos_nao_pagos}
+            valorRecebido={liquidacao.valor_recebido_dia}
+          />
+
+          <ModalReceitas
+            isOpen={modalReceitas}
+            onClose={() => setModalReceitas(false)}
+            liquidacaoId={liquidacao.id}
+          />
+        </>
       )}
     </div>
   );
