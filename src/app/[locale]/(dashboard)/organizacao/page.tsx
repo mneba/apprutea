@@ -310,22 +310,51 @@ export default function OrganizacaoPage() {
     setDraggedIndex(null);
   };
 
-  const handleMudarOrdem = (clienteId: string, novaOrdemStr: string) => {
-    const novaOrdem = parseInt(novaOrdemStr, 10);
+  // Modal para alterar ordem
+  const [modalOrdem, setModalOrdem] = useState<{
+    aberto: boolean;
+    clienteId: string;
+    clienteNome: string;
+    ordemAtual: number;
+    novaOrdem: string;
+  }>({
+    aberto: false,
+    clienteId: '',
+    clienteNome: '',
+    ordemAtual: 0,
+    novaOrdem: '',
+  });
+
+  const handleAbrirModalOrdem = (cliente: { cliente_id: string; nome: string; ordem: number }) => {
+    setModalOrdem({
+      aberto: true,
+      clienteId: cliente.cliente_id,
+      clienteNome: cliente.nome,
+      ordemAtual: cliente.ordem,
+      novaOrdem: String(cliente.ordem),
+    });
+  };
+
+  const handleConfirmarOrdem = () => {
+    const novaOrdem = parseInt(modalOrdem.novaOrdem, 10);
     
     // Validar entrada
     if (isNaN(novaOrdem) || novaOrdem < 1 || novaOrdem > clientesRota.length) {
+      alert(`Digite um número entre 1 e ${clientesRota.length}`);
       return;
     }
 
     // Encontrar o cliente e sua posição atual
-    const indexAtual = clientesRota.findIndex(c => c.cliente_id === clienteId);
+    const indexAtual = clientesRota.findIndex(c => c.cliente_id === modalOrdem.clienteId);
     if (indexAtual === -1) return;
 
     const ordemAtual = clientesRota[indexAtual].ordem;
     
-    // Se a ordem não mudou, não fazer nada
-    if (ordemAtual === novaOrdem) return;
+    // Se a ordem não mudou, só fechar
+    if (ordemAtual === novaOrdem) {
+      setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' });
+      return;
+    }
 
     // Criar cópia da lista
     const newClientes = [...clientesRota];
@@ -342,6 +371,7 @@ export default function OrganizacaoPage() {
     });
 
     setClientesRota(newClientes);
+    setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' });
   };
 
   const handleSalvarOrdemClientes = async () => {
@@ -1011,7 +1041,7 @@ export default function OrganizacaoPage() {
               <div className="px-6 py-2 bg-blue-50 border-b border-blue-100">
                 <p className="text-xs text-blue-600 flex items-center gap-2">
                   <GripVertical className="w-3.5 h-3.5" />
-                  Arraste ou digite o número para reordenar
+                  Arraste para reordenar ou clique no número para definir a posição
                 </p>
               </div>
             )}
@@ -1047,20 +1077,21 @@ export default function OrganizacaoPage() {
                           : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                       } ${!filtroCliente ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
-                      {/* Ordem - Input editável */}
+                      {/* Ordem - Botão clicável */}
                       <div className="flex items-center gap-2">
                         {!filtroCliente && (
                           <GripVertical className="w-4 h-4 text-gray-400" />
                         )}
-                        <input
-                          type="number"
-                          min={1}
-                          max={clientesRota.length}
-                          value={cliente.ordem}
-                          onChange={(e) => handleMudarOrdem(cliente.cliente_id, e.target.value)}
-                          onClick={(e) => e.stopPropagation()}
-                          className="w-12 h-8 rounded-lg bg-blue-100 text-blue-700 text-center text-sm font-semibold border-0 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                        />
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleAbrirModalOrdem(cliente);
+                          }}
+                          className="w-10 h-10 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold hover:bg-blue-200 hover:scale-105 transition-all"
+                          title="Clique para alterar posição"
+                        >
+                          {cliente.ordem}
+                        </button>
                       </div>
 
                       {/* Dados do cliente */}
@@ -1323,6 +1354,67 @@ export default function OrganizacaoPage() {
               >
                 {salvandoEmpresa && <Loader2 className="w-4 h-4 animate-spin" />}
                 {empresaEditando ? 'Salvar Alterações' : 'Criar Empresa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* MODAL ALTERAR ORDEM DO CLIENTE */}
+      {/* ============================================ */}
+      {modalOrdem.aberto && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div 
+            className="absolute inset-0 bg-black/50" 
+            onClick={() => setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' })} 
+          />
+          
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+              Alterar Posição
+            </h3>
+            <p className="text-sm text-gray-500 mb-4 truncate">
+              {modalOrdem.clienteNome}
+            </p>
+
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Nova posição (1 a {clientesRota.length})
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={clientesRota.length}
+                value={modalOrdem.novaOrdem}
+                onChange={(e) => setModalOrdem({ ...modalOrdem, novaOrdem: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleConfirmarOrdem();
+                  }
+                }}
+                autoFocus
+                className="w-full px-4 py-3 text-center text-2xl font-bold rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              {modalOrdem.ordemAtual !== parseInt(modalOrdem.novaOrdem) && modalOrdem.novaOrdem && (
+                <p className="text-xs text-blue-600 mt-2 text-center">
+                  Mover da posição {modalOrdem.ordemAtual} para {modalOrdem.novaOrdem}
+                </p>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' })}
+                className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarOrdem}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                Aplicar
               </button>
             </div>
           </div>
