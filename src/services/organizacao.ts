@@ -14,6 +14,7 @@ export const organizacaoService = {
     let totalClientes = 0;
     let totalEmprestimos = 0;
 
+    // Total de empresas
     let queryEmpresas = supabase
       .from('empresas')
       .select('id', { count: 'exact', head: true })
@@ -26,12 +27,14 @@ export const organizacaoService = {
     const { count: countEmpresas } = await queryEmpresas;
     totalEmpresas = countEmpresas || 0;
 
+    // Total de rotas ativas
     let queryRotas = supabase
       .from('rotas')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'ATIVA');
 
     if (hierarquiaId) {
+      // Buscar empresas da hierarquia primeiro
       const { data: empresasIds } = await supabase
         .from('empresas')
         .select('id')
@@ -45,6 +48,7 @@ export const organizacaoService = {
     const { count: countRotas } = await queryRotas;
     totalRotas = countRotas || 0;
 
+    // Total de clientes (tabela clientes não tem empresa_id, contar todos ativos)
     const { count: countClientes } = await supabase
       .from('clientes')
       .select('id', { count: 'exact', head: true })
@@ -52,6 +56,7 @@ export const organizacaoService = {
 
     totalClientes = countClientes || 0;
 
+    // Total de empréstimos ativos
     let queryEmprestimos = supabase
       .from('emprestimos')
       .select('id', { count: 'exact', head: true })
@@ -84,6 +89,7 @@ export const organizacaoService = {
   // ============================================
 
   async listarEmpresasPorHierarquia(hierarquiaId: string): Promise<EmpresaResumo[]> {
+    // Buscar empresas
     const { data: empresas, error } = await supabase
       .from('empresas')
       .select('id, nome, cnpj, telefone, email, endereco')
@@ -100,8 +106,10 @@ export const organizacaoService = {
       return [];
     }
 
+    // Para cada empresa, buscar contagens
     const empresasComResumo: EmpresaResumo[] = await Promise.all(
       empresas.map(async (empresa) => {
+        // Buscar rotas da empresa com quantidade_clientes
         const { data: rotasEmpresa } = await supabase
           .from('rotas')
           .select('id, quantidade_clientes')
@@ -109,8 +117,11 @@ export const organizacaoService = {
           .eq('status', 'ATIVA');
 
         const totalRotas = rotasEmpresa?.length || 0;
+        
+        // Somar quantidade_clientes de todas as rotas
         const totalClientes = rotasEmpresa?.reduce((acc, rota) => acc + (rota.quantidade_clientes || 0), 0) || 0;
 
+        // Contar empréstimos da empresa
         const { count: totalEmprestimos } = await supabase
           .from('emprestimos')
           .select('id', { count: 'exact', head: true })
@@ -146,6 +157,7 @@ export const organizacaoService = {
       return null;
     }
 
+    // Buscar rotas da empresa com quantidade_clientes
     const { data: rotasEmpresa } = await supabase
       .from('rotas')
       .select('id, quantidade_clientes')
@@ -153,8 +165,11 @@ export const organizacaoService = {
       .eq('status', 'ATIVA');
 
     const totalRotas = rotasEmpresa?.length || 0;
+    
+    // Somar quantidade_clientes de todas as rotas
     const totalClientes = rotasEmpresa?.reduce((acc, rota) => acc + (rota.quantidade_clientes || 0), 0) || 0;
 
+    // Contar empréstimos
     const { count: totalEmprestimos } = await supabase
       .from('emprestimos')
       .select('id', { count: 'exact', head: true })
@@ -262,6 +277,7 @@ export const organizacaoService = {
   // ============================================
 
   async listarRotasPorEmpresa(empresaId: string): Promise<RotaResumo[]> {
+    // Buscar rotas com vendedor e quantidade_clientes
     const { data: rotas, error } = await supabase
       .from('rotas')
       .select(`
@@ -289,8 +305,10 @@ export const organizacaoService = {
       return [];
     }
 
+    // Para cada rota, buscar contagem de empréstimos
     const rotasComResumo: RotaResumo[] = await Promise.all(
       rotas.map(async (rota: any) => {
+        // Contar empréstimos na rota
         const { count: totalEmprestimos } = await supabase
           .from('emprestimos')
           .select('id', { count: 'exact', head: true })
@@ -314,7 +332,9 @@ export const organizacaoService = {
     return rotasComResumo;
   },
 
+  // Buscar vendedores disponíveis (mesma empresa, sem rota atribuída)
   async buscarVendedoresDisponiveis(empresaId: string): Promise<VendedorDisponivel[]> {
+    // Buscar IDs de vendedores que já têm rotas
     const { data: rotasComVendedor } = await supabase
       .from('rotas')
       .select('vendedor_id')
@@ -323,6 +343,7 @@ export const organizacaoService = {
 
     const vendedoresComRota = rotasComVendedor?.map(r => r.vendedor_id).filter(Boolean) || [];
 
+    // Buscar vendedores da empresa que não têm rota
     let query = supabase
       .from('vendedores')
       .select('id, nome, codigo_vendedor')
@@ -421,6 +442,7 @@ export const organizacaoService = {
 
   async salvarSocio(socio: Socio): Promise<Socio> {
     if (socio.id) {
+      // Atualizar
       const { data, error } = await supabase
         .from('socios')
         .update({
@@ -439,6 +461,7 @@ export const organizacaoService = {
       if (error) throw error;
       return data;
     } else {
+      // Criar
       const { data, error } = await supabase
         .from('socios')
         .insert({
@@ -469,6 +492,7 @@ export const organizacaoService = {
     if (error) throw error;
   },
 
+  // Buscar usuários da empresa para selecionar como sócio
   async buscarUsuariosEmpresa(empresaId: string): Promise<{ id: string; nome: string; email: string }[]> {
     const { data, error } = await supabase
       .from('user_profiles')
@@ -493,6 +517,10 @@ export const organizacaoService = {
   // DESLOCAMENTO DE PARCELAS
   // ============================================
 
+  /**
+   * Move parcelas de uma rota específica com vencimento no domingo para segunda-feira (+1 dia).
+   * Afeta apenas parcelas com status PENDENTE, VENCIDO ou PARCIAL com vencimento >= hoje.
+   */
   async deslocarParcelasDomingoPorRota(rotaId: string): Promise<{ sucesso: boolean; mensagem: string }> {
     const { data, error } = await supabase
       .rpc('fn_deslocar_parcelas_domingo_por_rota', {
@@ -513,6 +541,9 @@ export const organizacaoService = {
     };
   },
 
+  /**
+   * Busca o valor atual de trabalha_domingo de uma rota
+   */
   async buscarTrabalhaDomingoRota(rotaId: string): Promise<boolean> {
     const { data, error } = await supabase
       .from('rotas')
@@ -532,6 +563,10 @@ export const organizacaoService = {
   // CLIENTES DA ROTA (ORDENAÇÃO)
   // ============================================
 
+  /**
+   * Lista clientes de uma rota com ordem de visita
+   * Se não houver ordens salvas na tabela ordem_rota_cliente, cria automaticamente
+   */
   async listarClientesRota(rotaId: string): Promise<{
     id: string;
     cliente_id: string;
@@ -539,7 +574,7 @@ export const organizacaoService = {
     endereco: string;
     ordem: number;
   }[]> {
-    // Buscar clientes que têm empréstimos ativos na rota
+    // 1. Buscar clientes que têm empréstimos ativos na rota
     const { data: emprestimos, error: errEmprestimos } = await supabase
       .from('emprestimos')
       .select(`
@@ -558,7 +593,7 @@ export const organizacaoService = {
       throw errEmprestimos;
     }
 
-    // Extrair clientes únicos
+    // 2. Extrair clientes únicos
     const clientesUnicos = new Map<string, { id: string; nome: string; endereco: string }>();
     emprestimos?.forEach((emp: any) => {
       if (emp.clientes && !clientesUnicos.has(emp.cliente_id)) {
@@ -570,7 +605,7 @@ export const organizacaoService = {
       }
     });
 
-    // Buscar ordens existentes
+    // 3. Buscar ordens existentes na tabela ordem_rota_cliente
     const { data: ordens, error: errOrdens } = await supabase
       .from('ordem_rota_cliente')
       .select('id, cliente_id, ordem')
@@ -585,7 +620,47 @@ export const organizacaoService = {
       ordensMap.set(o.cliente_id, { id: o.id, ordem: o.ordem });
     });
 
-    // Montar lista final
+    // 4. Identificar clientes sem ordem salva
+    const clientesSemOrdem: string[] = [];
+    clientesUnicos.forEach((_, clienteId) => {
+      if (!ordensMap.has(clienteId)) {
+        clientesSemOrdem.push(clienteId);
+      }
+    });
+
+    // 5. Se há clientes sem ordem, criar registros AUTOMATICAMENTE
+    if (clientesSemOrdem.length > 0) {
+      // Descobrir a maior ordem existente
+      let maiorOrdem = 0;
+      ordensMap.forEach((o) => {
+        if (o.ordem > maiorOrdem) maiorOrdem = o.ordem;
+      });
+
+      // Criar registros para os novos clientes (no final da lista)
+      const novosRegistros = clientesSemOrdem.map((clienteId, index) => ({
+        rota_id: rotaId,
+        cliente_id: clienteId,
+        ordem: maiorOrdem + index + 1,
+      }));
+
+      const { data: novosInseridos, error: errInsert } = await supabase
+        .from('ordem_rota_cliente')
+        .insert(novosRegistros)
+        .select('id, cliente_id, ordem');
+
+      if (errInsert) {
+        console.error('Erro ao criar ordens iniciais:', errInsert);
+        // Não falha, continua com ordens visuais
+      } else {
+        // Atualizar o mapa com os novos registros criados
+        novosInseridos?.forEach((o) => {
+          ordensMap.set(o.cliente_id, { id: o.id, ordem: o.ordem });
+        });
+        console.log(`Criados ${novosInseridos?.length || 0} registros de ordem para novos clientes`);
+      }
+    }
+
+    // 6. Montar lista final
     const resultado: {
       id: string;
       cliente_id: string;
@@ -605,10 +680,10 @@ export const organizacaoService = {
       });
     });
 
-    // Ordenar por ordem
+    // 7. Ordenar por ordem
     resultado.sort((a, b) => a.ordem - b.ordem);
 
-    // Reatribuir ordens sequenciais
+    // 8. Reatribuir ordens sequenciais (para garantir 1, 2, 3... sem gaps)
     resultado.forEach((cliente, index) => {
       cliente.ordem = index + 1;
     });
@@ -616,11 +691,14 @@ export const organizacaoService = {
     return resultado;
   },
 
+  /**
+   * Salva a ordem dos clientes de uma rota
+   * Usa UPSERT para inserir ou atualizar TODOS os clientes
+   */
   async salvarOrdemClientesRota(
     rotaId: string,
     clientes: { cliente_id: string; ordem: number }[]
   ): Promise<void> {
-    // Usar upsert para inserir ou atualizar
     const registros = clientes.map((c) => ({
       rota_id: rotaId,
       cliente_id: c.cliente_id,
