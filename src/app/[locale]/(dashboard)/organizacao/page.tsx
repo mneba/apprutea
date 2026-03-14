@@ -315,21 +315,24 @@ export default function OrganizacaoPage() {
     aberto: boolean;
     clienteId: string;
     clienteNome: string;
+    clienteEndereco: string;
     ordemAtual: number;
     novaOrdem: string;
   }>({
     aberto: false,
     clienteId: '',
     clienteNome: '',
+    clienteEndereco: '',
     ordemAtual: 0,
     novaOrdem: '',
   });
 
-  const handleAbrirModalOrdem = (cliente: { cliente_id: string; nome: string; ordem: number }) => {
+  const handleAbrirModalOrdem = (cliente: { cliente_id: string; nome: string; endereco: string; ordem: number }) => {
     setModalOrdem({
       aberto: true,
       clienteId: cliente.cliente_id,
       clienteNome: cliente.nome,
+      clienteEndereco: cliente.endereco || 'Endereço não informado',
       ordemAtual: cliente.ordem,
       novaOrdem: String(cliente.ordem),
     });
@@ -352,7 +355,7 @@ export default function OrganizacaoPage() {
     
     // Se a ordem não mudou, só fechar
     if (ordemAtual === novaOrdem) {
-      setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' });
+      setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', clienteEndereco: '', ordemAtual: 0, novaOrdem: '' });
       return;
     }
 
@@ -371,7 +374,7 @@ export default function OrganizacaoPage() {
     });
 
     setClientesRota(newClientes);
-    setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' });
+    setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', clienteEndereco: '', ordemAtual: 0, novaOrdem: '' });
   };
 
   const handleSalvarOrdemClientes = async () => {
@@ -1367,16 +1370,23 @@ export default function OrganizacaoPage() {
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div 
             className="absolute inset-0 bg-black/50" 
-            onClick={() => setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' })} 
+            onClick={() => setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', clienteEndereco: '', ordemAtual: 0, novaOrdem: '' })} 
           />
           
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-1">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3">
               Alterar Posição
             </h3>
-            <p className="text-sm text-gray-500 mb-4 truncate">
-              {modalOrdem.clienteNome}
-            </p>
+            
+            {/* Info do cliente */}
+            <div className="bg-gray-50 rounded-xl p-3 mb-4">
+              <p className="font-medium text-gray-900">
+                {modalOrdem.clienteNome}
+              </p>
+              <p className="text-sm text-gray-500 mt-0.5">
+                {modalOrdem.clienteEndereco}
+              </p>
+            </div>
 
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1405,7 +1415,7 @@ export default function OrganizacaoPage() {
 
             <div className="flex gap-3">
               <button
-                onClick={() => setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', ordemAtual: 0, novaOrdem: '' })}
+                onClick={() => setModalOrdem({ aberto: false, clienteId: '', clienteNome: '', clienteEndereco: '', ordemAtual: 0, novaOrdem: '' })}
                 className="flex-1 px-4 py-2.5 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-xl transition-colors"
               >
                 Cancelar
