@@ -310,6 +310,40 @@ export default function OrganizacaoPage() {
     setDraggedIndex(null);
   };
 
+  const handleMudarOrdem = (clienteId: string, novaOrdemStr: string) => {
+    const novaOrdem = parseInt(novaOrdemStr, 10);
+    
+    // Validar entrada
+    if (isNaN(novaOrdem) || novaOrdem < 1 || novaOrdem > clientesRota.length) {
+      return;
+    }
+
+    // Encontrar o cliente e sua posição atual
+    const indexAtual = clientesRota.findIndex(c => c.cliente_id === clienteId);
+    if (indexAtual === -1) return;
+
+    const ordemAtual = clientesRota[indexAtual].ordem;
+    
+    // Se a ordem não mudou, não fazer nada
+    if (ordemAtual === novaOrdem) return;
+
+    // Criar cópia da lista
+    const newClientes = [...clientesRota];
+    
+    // Remover cliente da posição atual
+    const [clienteMovido] = newClientes.splice(indexAtual, 1);
+    
+    // Inserir na nova posição (novaOrdem - 1 porque array é 0-indexed)
+    newClientes.splice(novaOrdem - 1, 0, clienteMovido);
+    
+    // Reatribuir ordens sequenciais
+    newClientes.forEach((cliente, idx) => {
+      cliente.ordem = idx + 1;
+    });
+
+    setClientesRota(newClientes);
+  };
+
   const handleSalvarOrdemClientes = async () => {
     if (!rotaParaClientes) return;
 
@@ -972,12 +1006,12 @@ export default function OrganizacaoPage() {
               </div>
             </div>
 
-            {/* Instrução de arrasto */}
+            {/* Instrução */}
             {!carregandoClientes && clientesRota.length > 0 && (
               <div className="px-6 py-2 bg-blue-50 border-b border-blue-100">
                 <p className="text-xs text-blue-600 flex items-center gap-2">
                   <GripVertical className="w-3.5 h-3.5" />
-                  Arraste os clientes para reordenar a sequência de visitas
+                  Arraste ou digite o número para reordenar
                 </p>
               </div>
             )}
@@ -1000,27 +1034,33 @@ export default function OrganizacaoPage() {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {clientesFiltrados.map((cliente, index) => (
+                  {clientesFiltrados.map((cliente) => (
                     <div
                       key={cliente.cliente_id}
                       draggable={!filtroCliente}
-                      onDragStart={() => handleDragStart(index)}
-                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragStart={() => handleDragStart(clientesRota.findIndex(c => c.cliente_id === cliente.cliente_id))}
+                      onDragOver={(e) => handleDragOver(e, clientesRota.findIndex(c => c.cliente_id === cliente.cliente_id))}
                       onDragEnd={handleDragEnd}
                       className={`flex items-center gap-3 p-3 bg-white border rounded-xl transition-all ${
-                        draggedIndex === index 
+                        draggedIndex === clientesRota.findIndex(c => c.cliente_id === cliente.cliente_id)
                           ? 'border-blue-400 shadow-lg scale-[1.02] bg-blue-50' 
                           : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
                       } ${!filtroCliente ? 'cursor-grab active:cursor-grabbing' : ''}`}
                     >
-                      {/* Ordem */}
+                      {/* Ordem - Input editável */}
                       <div className="flex items-center gap-2">
                         {!filtroCliente && (
                           <GripVertical className="w-4 h-4 text-gray-400" />
                         )}
-                        <span className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center text-sm font-semibold">
-                          {cliente.ordem}
-                        </span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={clientesRota.length}
+                          value={cliente.ordem}
+                          onChange={(e) => handleMudarOrdem(cliente.cliente_id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-12 h-8 rounded-lg bg-blue-100 text-blue-700 text-center text-sm font-semibold border-0 focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
                       </div>
 
                       {/* Dados do cliente */}
