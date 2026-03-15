@@ -112,6 +112,8 @@ export default function OrganizacaoPage() {
     parcelas: number;
     mensagem: string;
   } | null>(null);
+  const [trabalhaDomingoFeriados, setTrabalhaDomingoFeriados] = useState(false);
+  const [salvandoDomingo, setSalvandoDomingo] = useState(false);
 
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
@@ -439,17 +441,42 @@ export default function OrganizacaoPage() {
     setNovoFeriadoData('');
     setNovoFeriadoDescricao('');
     setPreviewFeriado(null);
+    setTrabalhaDomingoFeriados(rota.trabalha_domingo || false);
     setModalFeriados(true);
 
     try {
-      const { data, error } = await (await import('@/lib/supabase/client')).createClient()
-        .rpc('fn_listar_feriados_rota', { p_rota_id: rota.id });
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      
+      // Tentar buscar feriados da tabela diretamente (mais simples)
+      const { data, error } = await supabase
+        .from('feriados_rota')
+        .select('id, data, descricao, created_at')
+        .eq('rota_id', rota.id)
+        .order('data', { ascending: true });
 
-      if (error) throw error;
-      setFeriadosRota(data || []);
+      if (error) {
+        // Se a tabela não existe, apenas mostrar lista vazia
+        if (error.code === '42P01') {
+          console.log('Tabela feriados_rota ainda não existe');
+          setFeriadosRota([]);
+        } else {
+          throw error;
+        }
+      } else {
+        // Adicionar dia da semana manualmente
+        const feriadosComDiaSemana = (data || []).map(f => {
+          const dataObj = new Date(f.data + 'T00:00:00');
+          const dias = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+          return {
+            ...f,
+            dia_semana: dias[dataObj.getDay()]
+          };
+        });
+        setFeriadosRota(feriadosComDiaSemana);
+      }
     } catch (err) {
       console.error('Erro ao carregar feriados:', err);
-      alert('Erro ao carregar feriados');
+      setFeriadosRota([]);
     } finally {
       setCarregandoFeriados(false);
     }
@@ -561,6 +588,38 @@ export default function OrganizacaoPage() {
       month: '2-digit',
       year: 'numeric',
     });
+  };
+
+  const handleAlternarTrabalhaDomingo = async () => {
+    if (!rotaParaFeriados) return;
+    
+    const novoValor = !trabalhaDomingoFeriados;
+    setSalvandoDomingo(true);
+    
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      
+      const { error } = await supabase
+        .from('rotas')
+        .update({ trabalha_domingo: novoValor })
+        .eq('id', rotaParaFeriados.id);
+
+      if (error) throw error;
+
+      setTrabalhaDomingoFeriados(novoValor);
+      
+      // Atualizar a lista de rotas
+      setRotas(rotas.map(r => 
+        r.id === rotaParaFeriados.id 
+          ? { ...r, trabalha_domingo: novoValor } 
+          : r
+      ));
+    } catch (err: any) {
+      console.error('Erro ao atualizar domingo:', err);
+      alert(`Erro ao atualizar: ${err.message}`);
+    } finally {
+      setSalvandoDomingo(false);
+    }
   };
 
   // ============================================
@@ -961,21 +1020,6 @@ export default function OrganizacaoPage() {
                         Vendedor: {rota.vendedor_nome || <span className="italic">Não atribuído</span>}
                       </p>
                     </div>
-                  </div>
-
-                  {/* Badge Trabalha Domingo */}
-                  <div className="mt-3">
-                    {rota.trabalha_domingo ? (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-lg text-xs font-medium">
-                        <CalendarCheck className="w-3.5 h-3.5" />
-                        Trabalha Domingo
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium">
-                        <CalendarOff className="w-3.5 h-3.5" />
-                        Não trabalha Domingo
-                      </span>
-                    )}
                   </div>
 
                   {/* Estatísticas */}
@@ -1604,7 +1648,7 @@ export default function OrganizacaoPage() {
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  Feriados da Rota
+                  Calendário da Rota
                 </h3>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {rotaParaFeriados.nome}
@@ -1616,6 +1660,46 @@ export default function OrganizacaoPage() {
               >
                 <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Configuração de Domingo */}
+            <div className="p-4 border-b border-gray-100">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                    trabalhaDomingoFeriados ? 'bg-green-100' : 'bg-gray-100'
+                  }`}>
+                    {trabalhaDomingoFeriados ? (
+                      <CalendarCheck className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <CalendarOff className="w-5 h-5 text-gray-400" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-gray-900">Trabalha aos Domingos</p>
+                    <p className="text-sm text-gray-500">
+                      {trabalhaDomingoFeriados 
+                        ? 'Parcelas podem vencer aos domingos' 
+                        : 'Domingos são pulados automaticamente'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleAlternarTrabalhaDomingo}
+                  disabled={salvandoDomingo}
+                  className={`relative w-12 h-6 rounded-full transition-colors ${
+                    trabalhaDomingoFeriados ? 'bg-green-500' : 'bg-gray-300'
+                  } ${salvandoDomingo ? 'opacity-50' : ''}`}
+                >
+                  <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                    trabalhaDomingoFeriados ? 'translate-x-6' : 'translate-x-0.5'
+                  }`}>
+                    {salvandoDomingo && (
+                      <Loader2 className="w-4 h-4 text-gray-400 animate-spin m-0.5" />
+                    )}
+                  </div>
+                </button>
+              </div>
             </div>
 
             {/* Adicionar novo feriado */}
