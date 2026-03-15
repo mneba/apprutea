@@ -716,4 +716,93 @@ export const organizacaoService = {
       throw error;
     }
   },
+
+  // ============================================
+  // FERIADOS DA ROTA
+  // ============================================
+
+  /**
+   * Lista feriados de uma rota
+   */
+  async listarFeriadosRota(rotaId: string, ano?: number): Promise<{
+    id: string;
+    data: string;
+    descricao: string;
+    dia_semana: string;
+    created_at: string;
+  }[]> {
+    const { data, error } = await supabase
+      .rpc('fn_listar_feriados_rota', {
+        p_rota_id: rotaId,
+        p_ano: ano || null,
+      });
+
+    if (error) {
+      console.error('Erro ao listar feriados:', error);
+      throw error;
+    }
+
+    return data || [];
+  },
+
+  /**
+   * Preview antes de criar feriado
+   */
+  async verificarFeriadoPreview(rotaId: string, data: string): Promise<{
+    emprestimos_afetados: number;
+    parcelas_afetadas: number;
+    mensagem: string;
+  }> {
+    const { data: result, error } = await supabase
+      .rpc('fn_verificar_feriado_preview', {
+        p_rota_id: rotaId,
+        p_data: data,
+      });
+
+    if (error) {
+      console.error('Erro no preview:', error);
+      throw error;
+    }
+
+    return result?.[0] || {
+      emprestimos_afetados: 0,
+      parcelas_afetadas: 0,
+      mensagem: 'Erro ao verificar',
+    };
+  },
+
+  /**
+   * Adiciona um feriado à rota
+   * O trigger no banco desloca as parcelas automaticamente
+   */
+  async adicionarFeriado(rotaId: string, data: string, descricao: string): Promise<void> {
+    const { error } = await supabase
+      .from('feriados_rota')
+      .insert({
+        rota_id: rotaId,
+        data: data,
+        descricao: descricao,
+      });
+
+    if (error) {
+      console.error('Erro ao adicionar feriado:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Remove um feriado da rota
+   * NOTA: As parcelas NÃO são revertidas automaticamente
+   */
+  async removerFeriado(feriadoId: string): Promise<void> {
+    const { error } = await supabase
+      .from('feriados_rota')
+      .delete()
+      .eq('id', feriadoId);
+
+    if (error) {
+      console.error('Erro ao remover feriado:', error);
+      throw error;
+    }
+  },
 };

@@ -19,6 +19,7 @@ import {
   Settings,
   CalendarOff,
   CalendarCheck,
+  CalendarX,
   GripVertical,
   Search,
   Save,
@@ -91,6 +92,26 @@ export default function OrganizacaoPage() {
   const [salvandoOrdem, setSalvandoOrdem] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [filtroCliente, setFiltroCliente] = useState('');
+
+  // Modal de feriados da rota
+  const [modalFeriados, setModalFeriados] = useState(false);
+  const [rotaParaFeriados, setRotaParaFeriados] = useState<RotaResumo | null>(null);
+  const [feriadosRota, setFeriadosRota] = useState<{
+    id: string;
+    data: string;
+    descricao: string;
+    dia_semana: string;
+  }[]>([]);
+  const [carregandoFeriados, setCarregandoFeriados] = useState(false);
+  const [novoFeriadoData, setNovoFeriadoData] = useState('');
+  const [novoFeriadoDescricao, setNovoFeriadoDescricao] = useState('');
+  const [salvandoFeriado, setSalvandoFeriado] = useState(false);
+  const [excluindoFeriado, setExcluindoFeriado] = useState<string | null>(null);
+  const [previewFeriado, setPreviewFeriado] = useState<{
+    emprestimos: number;
+    parcelas: number;
+    mensagem: string;
+  } | null>(null);
 
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
@@ -407,6 +428,140 @@ export default function OrganizacaoPage() {
     cliente.nome.toLowerCase().includes(filtroCliente.toLowerCase()) ||
     cliente.endereco.toLowerCase().includes(filtroCliente.toLowerCase())
   );
+
+  // ============================================
+  // MODAL DE FERIADOS DA ROTA
+  // ============================================
+
+  const handleAbrirModalFeriados = async (rota: RotaResumo) => {
+    setRotaParaFeriados(rota);
+    setCarregandoFeriados(true);
+    setNovoFeriadoData('');
+    setNovoFeriadoDescricao('');
+    setPreviewFeriado(null);
+    setModalFeriados(true);
+
+    try {
+      const { data, error } = await (await import('@/lib/supabase/client')).createClient()
+        .rpc('fn_listar_feriados_rota', { p_rota_id: rota.id });
+
+      if (error) throw error;
+      setFeriadosRota(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar feriados:', err);
+      alert('Erro ao carregar feriados');
+    } finally {
+      setCarregandoFeriados(false);
+    }
+  };
+
+  const handlePreviewFeriado = async () => {
+    if (!rotaParaFeriados || !novoFeriadoData) {
+      setPreviewFeriado(null);
+      return;
+    }
+
+    try {
+      const { data, error } = await (await import('@/lib/supabase/client')).createClient()
+        .rpc('fn_verificar_feriado_preview', { 
+          p_rota_id: rotaParaFeriados.id,
+          p_data: novoFeriadoData
+        });
+
+      if (error) throw error;
+      if (data && data.length > 0) {
+        setPreviewFeriado({
+          emprestimos: data[0].emprestimos_afetados,
+          parcelas: data[0].parcelas_afetadas,
+          mensagem: data[0].mensagem,
+        });
+      }
+    } catch (err) {
+      console.error('Erro no preview:', err);
+    }
+  };
+
+  const handleAdicionarFeriado = async () => {
+    if (!rotaParaFeriados || !novoFeriadoData || !novoFeriadoDescricao.trim()) {
+      alert('Preencha a data e descrição do feriado');
+      return;
+    }
+
+    // Validar data futura
+    const dataFeriado = new Date(novoFeriadoData + 'T00:00:00');
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    
+    if (dataFeriado < hoje) {
+      alert('Só é permitido cadastrar feriados para datas futuras');
+      return;
+    }
+
+    setSalvandoFeriado(true);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      
+      const { error } = await supabase
+        .from('feriados_rota')
+        .insert({
+          rota_id: rotaParaFeriados.id,
+          data: novoFeriadoData,
+          descricao: novoFeriadoDescricao.trim(),
+        });
+
+      if (error) throw error;
+
+      // Recarregar lista
+      const { data: feriados } = await supabase
+        .rpc('fn_listar_feriados_rota', { p_rota_id: rotaParaFeriados.id });
+
+      setFeriadosRota(feriados || []);
+      setNovoFeriadoData('');
+      setNovoFeriadoDescricao('');
+      setPreviewFeriado(null);
+      
+      alert('Feriado cadastrado! As parcelas foram reorganizadas automaticamente.');
+    } catch (err: any) {
+      console.error('Erro ao adicionar feriado:', err);
+      alert(`Erro ao adicionar feriado: ${err.message}`);
+    } finally {
+      setSalvandoFeriado(false);
+    }
+  };
+
+  const handleExcluirFeriado = async (feriadoId: string) => {
+    if (!confirm('Deseja excluir este feriado? As parcelas NÃO serão revertidas automaticamente.')) {
+      return;
+    }
+
+    setExcluindoFeriado(feriadoId);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      
+      const { error } = await supabase
+        .from('feriados_rota')
+        .delete()
+        .eq('id', feriadoId);
+
+      if (error) throw error;
+
+      setFeriadosRota(feriadosRota.filter(f => f.id !== feriadoId));
+    } catch (err: any) {
+      console.error('Erro ao excluir feriado:', err);
+      alert(`Erro ao excluir feriado: ${err.message}`);
+    } finally {
+      setExcluindoFeriado(null);
+    }
+  };
+
+  const formatarDataFeriado = (dataStr: string) => {
+    const data = new Date(dataStr + 'T00:00:00');
+    return data.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    });
+  };
 
   // ============================================
   // MODAL DE EMPRESA
@@ -847,11 +1002,17 @@ export default function OrganizacaoPage() {
                       Clientes
                     </button>
                     <button
+                      onClick={() => handleAbrirModalFeriados(rota)}
+                      className="flex items-center gap-2 px-3 py-2 text-sm text-orange-600 border border-orange-200 rounded-lg hover:bg-orange-50 transition-colors"
+                      title="Gerenciar Feriados"
+                    >
+                      <CalendarX className="w-4 h-4" />
+                    </button>
+                    <button
                       onClick={() => handleAbrirModalEditarRota(rota)}
                       className="flex items-center gap-2 px-3 py-2 text-sm text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
                     >
                       <Settings className="w-4 h-4" />
-                      Configurações
                     </button>
                   </div>
                 </div>
@@ -1426,6 +1587,159 @@ export default function OrganizacaoPage() {
               >
                 Aplicar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* MODAL FERIADOS DA ROTA */}
+      {/* ============================================ */}
+      {modalFeriados && rotaParaFeriados && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setModalFeriados(false)} />
+          
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Feriados da Rota
+                </h3>
+                <p className="text-sm text-gray-500 mt-0.5">
+                  {rotaParaFeriados.nome}
+                </p>
+              </div>
+              <button
+                onClick={() => setModalFeriados(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Adicionar novo feriado */}
+            <div className="p-4 border-b border-gray-100 bg-gray-50">
+              <h4 className="text-sm font-medium text-gray-700 mb-3">Adicionar Feriado</h4>
+              
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <input
+                    type="date"
+                    value={novoFeriadoData}
+                    onChange={(e) => {
+                      setNovoFeriadoData(e.target.value);
+                      // Trigger preview após mudança
+                      setTimeout(() => handlePreviewFeriado(), 100);
+                    }}
+                    onBlur={handlePreviewFeriado}
+                    min={new Date().toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <div className="flex-[2]">
+                  <input
+                    type="text"
+                    value={novoFeriadoDescricao}
+                    onChange={(e) => setNovoFeriadoDescricao(e.target.value)}
+                    placeholder="Descrição (ex: Natal)"
+                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
+                  />
+                </div>
+                <button
+                  onClick={handleAdicionarFeriado}
+                  disabled={salvandoFeriado || !novoFeriadoData || !novoFeriadoDescricao.trim()}
+                  className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {salvandoFeriado ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Plus className="w-4 h-4" />
+                  )}
+                </button>
+              </div>
+
+              {/* Preview do impacto */}
+              {previewFeriado && (
+                <div className={`mt-3 p-3 rounded-lg text-sm ${
+                  previewFeriado.emprestimos > 0 
+                    ? 'bg-amber-50 border border-amber-200 text-amber-800' 
+                    : 'bg-green-50 border border-green-200 text-green-800'
+                }`}>
+                  {previewFeriado.mensagem}
+                </div>
+              )}
+            </div>
+
+            {/* Lista de feriados */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {carregandoFeriados ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 text-orange-600 animate-spin" />
+                </div>
+              ) : feriadosRota.length === 0 ? (
+                <div className="text-center py-12 text-gray-500">
+                  <CalendarX className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                  <p>Nenhum feriado cadastrado</p>
+                  <p className="text-sm mt-1">Adicione feriados para que as parcelas sejam ajustadas automaticamente</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {feriadosRota.map((feriado) => {
+                    const dataFeriado = new Date(feriado.data + 'T00:00:00');
+                    const hoje = new Date();
+                    hoje.setHours(0, 0, 0, 0);
+                    const isPast = dataFeriado < hoje;
+
+                    return (
+                      <div
+                        key={feriado.id}
+                        className={`flex items-center justify-between p-3 rounded-xl border ${
+                          isPast 
+                            ? 'bg-gray-50 border-gray-200 opacity-60' 
+                            : 'bg-white border-gray-200'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                            isPast ? 'bg-gray-100' : 'bg-orange-100'
+                          }`}>
+                            <CalendarX className={`w-5 h-5 ${isPast ? 'text-gray-400' : 'text-orange-600'}`} />
+                          </div>
+                          <div>
+                            <p className="font-medium text-gray-900">{feriado.descricao}</p>
+                            <p className="text-sm text-gray-500">
+                              {formatarDataFeriado(feriado.data)} • {feriado.dia_semana}
+                            </p>
+                          </div>
+                        </div>
+
+                        {!isPast && (
+                          <button
+                            onClick={() => handleExcluirFeriado(feriado.id)}
+                            disabled={excluindoFeriado === feriado.id}
+                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Excluir feriado"
+                          >
+                            {excluindoFeriado === feriado.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50 rounded-b-2xl">
+              <p className="text-xs text-gray-500 text-center">
+                Ao adicionar um feriado, as parcelas pendentes são automaticamente reagendadas
+              </p>
             </div>
           </div>
         </div>
