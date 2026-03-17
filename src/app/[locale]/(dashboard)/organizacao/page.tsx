@@ -114,6 +114,18 @@ export default function OrganizacaoPage() {
   } | null>(null);
   const [trabalhaDomingoFeriados, setTrabalhaDomingoFeriados] = useState(false);
   const [salvandoDomingo, setSalvandoDomingo] = useState(false);
+  
+  // Modal de confirmação de ação
+  const [modalConfirmacao, setModalConfirmacao] = useState(false);
+  const [confirmacaoTipo, setConfirmacaoTipo] = useState<'domingo' | 'feriado' | null>(null);
+  const [confirmacaoPreview, setConfirmacaoPreview] = useState<{
+    titulo: string;
+    mensagem: string;
+    impacto: string;
+    parcelas: number;
+    emprestimos: number;
+  } | null>(null);
+  const [executandoConfirmacao, setExecutandoConfirmacao] = useState(false);
 
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
@@ -524,7 +536,36 @@ export default function OrganizacaoPage() {
       return;
     }
 
+    // Mostrar confirmação com preview
+    const parcelas = previewFeriado?.parcelas || 0;
+    const emprestimos = previewFeriado?.emprestimos || 0;
+    
+    const dataFormatada = dataFeriado.toLocaleDateString('pt-BR', {
+      weekday: 'long',
+      day: '2-digit',
+      month: 'long',
+      year: 'numeric'
+    });
+
+    setConfirmacaoTipo('feriado');
+    setConfirmacaoPreview({
+      titulo: `Adicionar Feriado: ${novoFeriadoDescricao.trim()}`,
+      mensagem: `Data: ${dataFormatada}\n\nAo adicionar este feriado, as parcelas que vencem nesta data serão automaticamente movidas para o próximo dia útil.`,
+      impacto: parcelas > 0 
+        ? `${parcelas} parcela(s) de ${emprestimos} empréstimo(s) serão reagendadas.`
+        : 'Nenhuma parcela pendente será afetada.',
+      parcelas,
+      emprestimos
+    });
+    setModalConfirmacao(true);
+  };
+
+  const executarAdicionarFeriado = async () => {
+    if (!rotaParaFeriados || !novoFeriadoData || !novoFeriadoDescricao.trim()) return;
+
     setSalvandoFeriado(true);
+    setExecutandoConfirmacao(true);
+    
     try {
       const supabase = (await import('@/lib/supabase/client')).createClient();
       
@@ -538,21 +579,36 @@ export default function OrganizacaoPage() {
 
       if (error) throw error;
 
-      // Recarregar lista
+      // Recarregar lista (query direta, igual ao abrir modal)
       const { data: feriados } = await supabase
-        .rpc('fn_listar_feriados_rota', { p_rota_id: rotaParaFeriados.id });
+        .from('feriados_rota')
+        .select('id, data, descricao, created_at')
+        .eq('rota_id', rotaParaFeriados.id)
+        .order('data', { ascending: true });
 
-      setFeriadosRota(feriados || []);
+      // Adicionar dia da semana
+      const feriadosComDiaSemana = (feriados || []).map(f => {
+        const dataObj = new Date(f.data + 'T00:00:00');
+        const dias = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
+        return {
+          ...f,
+          dia_semana: dias[dataObj.getDay()]
+        };
+      });
+      setFeriadosRota(feriadosComDiaSemana);
       setNovoFeriadoData('');
       setNovoFeriadoDescricao('');
       setPreviewFeriado(null);
+      setModalConfirmacao(false);
+      setConfirmacaoPreview(null);
+      setConfirmacaoTipo(null);
       
-      alert('Feriado cadastrado! As parcelas foram reorganizadas automaticamente.');
     } catch (err: any) {
       console.error('Erro ao adicionar feriado:', err);
       alert(`Erro ao adicionar feriado: ${err.message}`);
     } finally {
       setSalvandoFeriado(false);
+      setExecutandoConfirmacao(false);
     }
   };
 
@@ -594,7 +650,63 @@ export default function OrganizacaoPage() {
     if (!rotaParaFeriados) return;
     
     const novoValor = !trabalhaDomingoFeriados;
+    
+    // Se está DESATIVANDO (vai parar de trabalhar aos domingos), mostrar confirmação
+    if (!novoValor) {
+      setSalvandoDomingo(true);
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        
+        // Buscar preview de parcelas que serão afetadas
+        const { data, error } = await supabase.rpc('fn_preview_deslocar_domingos', {
+          p_rota_id: rotaParaFeriados.id
+        });
+        
+        let parcelas = 0;
+        let emprestimos = 0;
+        
+        if (!error && data && data.length > 0) {
+          parcelas = data[0].parcelas_afetadas || 0;
+          emprestimos = data[0].emprestimos_afetados || 0;
+        }
+        
+        setConfirmacaoTipo('domingo');
+        setConfirmacaoPreview({
+          titulo: 'Desativar trabalho aos Domingos',
+          mensagem: 'Ao desativar, todas as parcelas que vencem em domingos serão automaticamente movidas para a próxima segunda-feira.',
+          impacto: parcelas > 0 
+            ? `${parcelas} parcela(s) de ${emprestimos} empréstimo(s) serão reagendadas.`
+            : 'Nenhuma parcela pendente será afetada.',
+          parcelas,
+          emprestimos
+        });
+        setModalConfirmacao(true);
+      } catch (err) {
+        console.error('Erro ao buscar preview:', err);
+        // Se não conseguiu buscar preview, perguntar mesmo assim
+        setConfirmacaoTipo('domingo');
+        setConfirmacaoPreview({
+          titulo: 'Desativar trabalho aos Domingos',
+          mensagem: 'Ao desativar, todas as parcelas que vencem em domingos serão automaticamente movidas para a próxima segunda-feira.',
+          impacto: 'Parcelas pendentes em domingos serão reagendadas.',
+          parcelas: 0,
+          emprestimos: 0
+        });
+        setModalConfirmacao(true);
+      } finally {
+        setSalvandoDomingo(false);
+      }
+    } else {
+      // Se está ATIVANDO, apenas executa (não move parcelas)
+      await executarAlteracaoDomingo(novoValor);
+    }
+  };
+
+  const executarAlteracaoDomingo = async (novoValor: boolean) => {
+    if (!rotaParaFeriados) return;
+    
     setSalvandoDomingo(true);
+    setExecutandoConfirmacao(true);
     
     try {
       const supabase = (await import('@/lib/supabase/client')).createClient();
@@ -614,11 +726,16 @@ export default function OrganizacaoPage() {
           ? { ...r, trabalha_domingo: novoValor } 
           : r
       ));
+      
+      setModalConfirmacao(false);
+      setConfirmacaoPreview(null);
+      setConfirmacaoTipo(null);
     } catch (err: any) {
       console.error('Erro ao atualizar domingo:', err);
       alert(`Erro ao atualizar: ${err.message}`);
     } finally {
       setSalvandoDomingo(false);
+      setExecutandoConfirmacao(false);
     }
   };
 
@@ -1790,6 +1907,85 @@ export default function OrganizacaoPage() {
               <p className="text-xs text-gray-500 text-center">
                 Ao adicionar um feriado, as parcelas pendentes são automaticamente reagendadas
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Confirmação */}
+      {modalConfirmacao && confirmacaoPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md shadow-xl">
+            {/* Header */}
+            <div className="p-4 border-b border-gray-200 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900">Confirmar Ação</h3>
+                <p className="text-sm text-gray-500">{confirmacaoPreview.titulo}</p>
+              </div>
+            </div>
+            
+            {/* Conteúdo */}
+            <div className="p-4 space-y-4">
+              <p className="text-gray-700 whitespace-pre-line">
+                {confirmacaoPreview.mensagem}
+              </p>
+              
+              <div className={`p-3 rounded-lg ${
+                confirmacaoPreview.parcelas > 0 
+                  ? 'bg-amber-50 border border-amber-200' 
+                  : 'bg-green-50 border border-green-200'
+              }`}>
+                <div className="flex items-center gap-2">
+                  {confirmacaoPreview.parcelas > 0 ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  ) : (
+                    <CalendarCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  )}
+                  <p className={`text-sm font-medium ${
+                    confirmacaoPreview.parcelas > 0 ? 'text-amber-800' : 'text-green-800'
+                  }`}>
+                    {confirmacaoPreview.impacto}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {/* Botões */}
+            <div className="p-4 border-t border-gray-200 flex gap-3">
+              <button
+                onClick={() => {
+                  setModalConfirmacao(false);
+                  setConfirmacaoPreview(null);
+                  setConfirmacaoTipo(null);
+                }}
+                disabled={executandoConfirmacao}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  if (confirmacaoTipo === 'domingo') {
+                    executarAlteracaoDomingo(false);
+                  } else if (confirmacaoTipo === 'feriado') {
+                    executarAdicionarFeriado();
+                  }
+                }}
+                disabled={executandoConfirmacao}
+                className="flex-1 px-4 py-2.5 bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {executandoConfirmacao ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Processando...
+                  </>
+                ) : (
+                  'Confirmar'
+                )}
+              </button>
             </div>
           </div>
         </div>
