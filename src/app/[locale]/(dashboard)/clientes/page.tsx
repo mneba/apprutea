@@ -436,7 +436,7 @@ export default function ClientesPage() {
     setLoading(true);
     try {
       // Carregar rotas
-      const rotasData = await clientesService.buscarRotasUsuario(empresaId, rotaIdContexto);
+      const rotasData = await clientesService.buscarRotasEmpresa(empresaId);
       setRotas(rotasData);
 
       // Carregar segmentos
