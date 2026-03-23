@@ -735,6 +735,14 @@ export function ModalDetalhesCliente({
   // Verificar permissão para quitar
   const podeQuitar = ['SUPER_ADMIN', 'ADMIN', 'MONITOR'].includes(tipoUsuario || '');
 
+  // Calcular se tem parcela em atraso baseado nos empréstimos ativos
+  // Se algum empréstimo está VENCIDO, significa que tem parcelas em atraso
+  const temParcelaEmAtraso = emprestimosAtivos.some(emp => emp.emprestimo_status === 'VENCIDO') || 
+    (cliente?.parcelas_atrasadas || 0) > 0;
+  
+  // Tem empréstimo em dia = tem empréstimo ativo E não tem parcela em atraso
+  const temEmprestimoEmDia = emprestimosAtivos.length > 0 && !temParcelaEmAtraso;
+
   // Carregar dados completos do cliente
   useEffect(() => {
     if (isOpen && cliente?.id) {
@@ -1039,8 +1047,8 @@ export function ModalDetalhesCliente({
                     onCancelar={() => setModoEdicao(false)}
                     salvando={salvando}
                     temEmprestimoAtivo={emprestimosAtivos.length > 0}
-                    temParcelaEmAtraso={(cliente?.parcelas_atrasadas || 0) > 0}
-                    temEmprestimoEmDia={emprestimosAtivos.length > 0 && (cliente?.parcelas_atrasadas || 0) === 0}
+                    temParcelaEmAtraso={temParcelaEmAtraso}
+                    temEmprestimoEmDia={temEmprestimoEmDia}
                   />
                 ) : (
                   <div className="space-y-6">
