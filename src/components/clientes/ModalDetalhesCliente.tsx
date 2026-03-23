@@ -13,6 +13,8 @@ import {
   CreditCard,
   ChevronDown,
   ChevronUp,
+  ChevronLeft,
+  ChevronRight,
   DollarSign,
   Clock,
   AlertCircle,
@@ -33,10 +35,12 @@ import {
   Upload,
   ShieldCheck,
   Banknote,
+  Wallet,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
 import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
+import { ModalQuitarEmprestimo } from '@/components/liquidacao/ModalQuitarEmprestimo';
 import type { 
   Cliente, 
   EmprestimoHistorico, 
@@ -172,7 +176,7 @@ function Toggle({
   );
 }
 
-// Card de Empréstimo com parcelas expansíveis
+// Card de Empréstimo com parcelas já expandidas e botão quitar
 function CardEmprestimo({
   emprestimo,
   expandido,
@@ -181,6 +185,10 @@ function CardEmprestimo({
   carregandoParcelas,
   onRecarregar,
   onRenegociar,
+  onQuitar,
+  podeQuitar = false,
+  liquidacaoId,
+  clienteNome,
 }: {
   emprestimo: EmprestimoHistorico;
   expandido: boolean;
@@ -189,8 +197,17 @@ function CardEmprestimo({
   carregandoParcelas: boolean;
   onRecarregar?: () => void;
   onRenegociar?: (emprestimoId: string) => void;
+  onQuitar?: (emprestimoId: string, clienteNome: string) => void;
+  podeQuitar?: boolean;
+  liquidacaoId?: string;
+  clienteNome?: string;
 }) {
   const percentualPago = emprestimo.percentual_valor_pago || 0;
+  const temParcelasPendentes = parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
+  const podeQuitarEmprestimo = podeQuitar && 
+    liquidacaoId && 
+    ['ATIVO', 'VENCIDO'].includes(emprestimo.emprestimo_status) && 
+    temParcelasPendentes;
   
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
@@ -263,42 +280,60 @@ function CardEmprestimo({
             <ProgressBar percentual={percentualPago} cor="green" />
           </div>
 
-          {/* Tabela de Parcelas */}
-          {carregandoParcelas ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+          {/* Tabela de Parcelas - já aberta com scroll */}
+          <div className="mb-4">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Parcelas</h4>
+            {carregandoParcelas ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+              </div>
+            ) : parcelas.length > 0 ? (
+              <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
+                <div className="max-h-64 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-gray-50 z-10">
+                      <tr className="border-b">
+                        <th className="px-3 py-2 text-left font-medium text-gray-700">#</th>
+                        <th className="px-3 py-2 text-left font-medium text-gray-700">Vencimento</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-700">Pago</th>
+                        <th className="px-3 py-2 text-right font-medium text-gray-700">Saldo</th>
+                        <th className="px-3 py-2 text-center font-medium text-gray-700">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {parcelas.map((parcela) => (
+                        <tr key={parcela.id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
+                          <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
+                          <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
+                          <td className="px-3 py-2 text-right text-green-600">{formatarMoeda(parcela.valor_pago)}</td>
+                          <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
+                          <td className="px-3 py-2 text-center">
+                            <BadgeStatus status={parcela.status} tipo="parcela" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-4">Nenhuma parcela encontrada</p>
+            )}
+          </div>
+
+          {/* Botão Quitar Empréstimo */}
+          {podeQuitarEmprestimo && onQuitar && clienteNome && (
+            <div className="mb-4">
+              <button
+                onClick={() => onQuitar(emprestimo.emprestimo_id, clienteNome)}
+                className="w-full py-3 px-4 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
+              >
+                <Wallet className="w-5 h-5" />
+                Quitar Empréstimo
+              </button>
             </div>
-          ) : parcelas.length > 0 ? (
-            <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-gray-50 border-b">
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">#</th>
-                    <th className="px-3 py-2 text-left font-medium text-gray-700">Vencimento</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-700">Pago</th>
-                    <th className="px-3 py-2 text-right font-medium text-gray-700">Saldo</th>
-                    <th className="px-3 py-2 text-center font-medium text-gray-700">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {parcelas.map((parcela) => (
-                    <tr key={parcela.id} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
-                      <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
-                      <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
-                      <td className="px-3 py-2 text-right text-green-600">{formatarMoeda(parcela.valor_pago)}</td>
-                      <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
-                      <td className="px-3 py-2 text-center">
-                        <BadgeStatus status={parcela.status} tipo="parcela" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="text-center text-gray-500 py-4">Nenhuma parcela encontrada</p>
           )}
 
           {/* Seção de Alteração de Frequência - apenas para empréstimos ATIVOS */}
@@ -344,6 +379,7 @@ interface FormEdicaoCliente {
   status: string;
   segmento_id: string;
   permite_emprestimo_adicional: boolean;
+  permite_renegociacao: boolean;
   foto_url: string;
 }
 
@@ -361,6 +397,9 @@ function FormularioEdicao({
   onSalvar,
   onCancelar,
   salvando,
+  temEmprestimoAtivo,
+  temParcelaEmAtraso,
+  temEmprestimoEmDia,
 }: {
   cliente: Cliente;
   segmentos: Segmento[];
@@ -368,6 +407,9 @@ function FormularioEdicao({
   onSalvar: (dados: FormEdicaoCliente) => void;
   onCancelar: () => void;
   salvando: boolean;
+  temEmprestimoAtivo: boolean;
+  temParcelaEmAtraso: boolean;
+  temEmprestimoEmDia: boolean;
 }) {
   const [form, setForm] = useState<FormEdicaoCliente>({
     nome: cliente.nome || '',
@@ -381,6 +423,7 @@ function FormularioEdicao({
     status: cliente.status || 'ATIVO',
     segmento_id: cliente.segmento_id || '',
     permite_emprestimo_adicional: cliente.permite_emprestimo_adicional || false,
+    permite_renegociacao: (cliente as any).permite_renegociacao || false,
     foto_url: cliente.foto_url || '',
   });
 
@@ -528,18 +571,59 @@ function FormularioEdicao({
         />
       </div>
 
-      {/* Toggle Empréstimo Adicional */}
-      <div className="flex items-center justify-between p-4 bg-blue-50 rounded-xl border border-blue-100">
+      {/* Toggle Permite Renegociação */}
+      <div className={`flex items-center justify-between p-4 rounded-xl border ${
+        temEmprestimoAtivo && temParcelaEmAtraso 
+          ? 'bg-amber-50 border-amber-200' 
+          : 'bg-gray-50 border-gray-200'
+      }`}>
         <div className="flex items-center gap-3">
-          <ShieldCheck className="w-5 h-5 text-blue-600" />
+          <TrendingUp className={`w-5 h-5 ${
+            temEmprestimoAtivo && temParcelaEmAtraso ? 'text-amber-600' : 'text-gray-400'
+          }`} />
+          <div>
+            <p className="font-medium text-gray-900">Permite Renegociação</p>
+            <p className="text-sm text-gray-500">
+              {!temEmprestimoAtivo 
+                ? 'Cliente não possui empréstimo ativo'
+                : !temParcelaEmAtraso 
+                  ? 'Cliente não possui parcelas em atraso'
+                  : 'Autoriza renegociação do empréstimo em atraso'}
+            </p>
+          </div>
+        </div>
+        <Toggle
+          checked={form.permite_renegociacao}
+          onChange={(value) => handleChange('permite_renegociacao', value)}
+          disabled={!temEmprestimoAtivo || !temParcelaEmAtraso}
+        />
+      </div>
+
+      {/* Toggle Empréstimo Adicional */}
+      <div className={`flex items-center justify-between p-4 rounded-xl border ${
+        temEmprestimoEmDia 
+          ? 'bg-blue-50 border-blue-100' 
+          : 'bg-gray-50 border-gray-200'
+      }`}>
+        <div className="flex items-center gap-3">
+          <ShieldCheck className={`w-5 h-5 ${
+            temEmprestimoEmDia ? 'text-blue-600' : 'text-gray-400'
+          }`} />
           <div>
             <p className="font-medium text-gray-900">Permite Empréstimo Adicional</p>
-            <p className="text-sm text-gray-500">Autoriza novo empréstimo mesmo com outro ativo</p>
+            <p className="text-sm text-gray-500">
+              {!temEmprestimoAtivo
+                ? 'Cliente não possui empréstimo ativo'
+                : !temEmprestimoEmDia
+                  ? 'Cliente possui parcelas em atraso'
+                  : 'Autoriza novo empréstimo mesmo com outro ativo'}
+            </p>
           </div>
         </div>
         <Toggle
           checked={form.permite_emprestimo_adicional}
           onChange={(value) => handleChange('permite_emprestimo_adicional', value)}
+          disabled={!temEmprestimoEmDia}
         />
       </div>
 
@@ -612,9 +696,21 @@ interface Props {
   onClose: () => void;
   cliente: ClienteComTotais | null;
   onClienteAtualizado?: () => void;
+  // Novos props para quitação
+  liquidacaoId?: string;
+  rotaId?: string;
+  tipoUsuario?: string;
 }
 
-export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtualizado }: Props) {
+export function ModalDetalhesCliente({ 
+  isOpen, 
+  onClose, 
+  cliente, 
+  onClienteAtualizado,
+  liquidacaoId,
+  rotaId,
+  tipoUsuario,
+}: Props) {
   const [abaAtiva, setAbaAtiva] = useState<'dados' | 'ativos' | 'historico'>('dados');
   const [clienteCompleto, setClienteCompleto] = useState<Cliente | null>(null);
   const [emprestimosAtivos, setEmprestimosAtivos] = useState<EmprestimoHistorico[]>([]);
@@ -633,6 +729,13 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+
+  // Estado para modal de quitação
+  const [modalQuitarAberto, setModalQuitarAberto] = useState(false);
+  const [emprestimoParaQuitar, setEmprestimoParaQuitar] = useState<string | null>(null);
+
+  // Verificar permissão para quitar
+  const podeQuitar = ['SUPER_ADMIN', 'ADMIN', 'MONITOR'].includes(tipoUsuario || '');
 
   // Carregar dados completos do cliente
   useEffect(() => {
@@ -653,10 +756,14 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
     }
   }, [emprestimoExpandido]);
 
-  // Definir aba inicial baseado nos empréstimos
+  // Definir aba inicial baseado nos empréstimos e expandir primeiro
   useEffect(() => {
     if (emprestimosAtivos.length > 0) {
       setAbaAtiva('ativos');
+      // Expandir o primeiro empréstimo automaticamente
+      if (!emprestimoExpandido) {
+        setEmprestimoExpandido(emprestimosAtivos[0].emprestimo_id);
+      }
     } else {
       setAbaAtiva('dados');
     }
@@ -727,6 +834,24 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
     }
   };
 
+  // Função para abrir modal de quitação
+  const handleAbrirModalQuitar = (emprestimoId: string, clienteNome: string) => {
+    setEmprestimoParaQuitar(emprestimoId);
+    setModalQuitarAberto(true);
+  };
+
+  // Função para fechar modal de quitação
+  const handleFecharModalQuitar = () => {
+    setModalQuitarAberto(false);
+    setEmprestimoParaQuitar(null);
+  };
+
+  // Callback após quitação bem-sucedida
+  const handleQuitacaoSucesso = () => {
+    recarregarTudo();
+    onClienteAtualizado?.();
+  };
+
   const handleSalvar = async (dados: FormEdicaoCliente) => {
     if (!cliente?.id) return;
     
@@ -755,6 +880,14 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
         await clientesService.atualizarPermiteEmprestimoAdicional(
           cliente.id, 
           dados.permite_emprestimo_adicional
+        );
+      }
+
+      // Atualizar permite_renegociacao separadamente via service
+      if (dados.permite_renegociacao !== undefined) {
+        await clientesService.atualizarPermiteRenegociacao(
+          cliente.id, 
+          dados.permite_renegociacao
         );
       }
       
@@ -907,6 +1040,9 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                     onSalvar={handleSalvar}
                     onCancelar={() => setModoEdicao(false)}
                     salvando={salvando}
+                    temEmprestimoAtivo={emprestimosAtivos.length > 0}
+                    temParcelaEmAtraso={(cliente?.parcelas_atrasadas || 0) > 0}
+                    temEmprestimoEmDia={emprestimosAtivos.length > 0 && (cliente?.parcelas_atrasadas || 0) === 0}
                   />
                 ) : (
                   <div className="space-y-6">
@@ -955,8 +1091,8 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                       />
                     </div>
 
-                    {/* GPS e Empréstimo Adicional */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* GPS e Permissões */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       {dadosExibicao.latitude && dadosExibicao.longitude && (
                         <ItemInfo 
                           icone={MapPinned} 
@@ -964,6 +1100,15 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                           valor={`${dadosExibicao.latitude}, ${dadosExibicao.longitude}`} 
                         />
                       )}
+                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
+                        <TrendingUp className={`w-5 h-5 ${(dadosExibicao as any).permite_renegociacao ? 'text-amber-500' : 'text-gray-400'}`} />
+                        <div>
+                          <p className="text-xs text-gray-500">Renegociação</p>
+                          <p className={`font-medium ${(dadosExibicao as any).permite_renegociacao ? 'text-amber-600' : 'text-gray-600'}`}>
+                            {(dadosExibicao as any).permite_renegociacao ? 'Permitida' : 'Não permitida'}
+                          </p>
+                        </div>
+                      </div>
                       <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
                         <ShieldCheck className={`w-5 h-5 ${dadosExibicao.permite_emprestimo_adicional ? 'text-green-500' : 'text-gray-400'}`} />
                         <div>
@@ -1058,6 +1203,10 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
                           console.log('Renegociar empréstimo:', emprestimoId);
                           // TODO: Implementar modal de renegociação
                         }}
+                        onQuitar={handleAbrirModalQuitar}
+                        podeQuitar={podeQuitar}
+                        liquidacaoId={liquidacaoId}
+                        clienteNome={cliente?.nome || dadosExibicao?.nome}
                       />
                     ))
                   ) : (
@@ -1103,6 +1252,19 @@ export function ModalDetalhesCliente({ isOpen, onClose, cliente, onClienteAtuali
           )}
         </div>
       </div>
+
+      {/* Modal de Quitação */}
+      {modalQuitarAberto && emprestimoParaQuitar && liquidacaoId && rotaId && (
+        <ModalQuitarEmprestimo
+          isOpen={modalQuitarAberto}
+          onClose={handleFecharModalQuitar}
+          emprestimoId={emprestimoParaQuitar}
+          clienteNome={cliente?.nome || dadosExibicao?.nome || ''}
+          rotaId={rotaId}
+          liquidacaoId={liquidacaoId}
+          onQuitacaoSucesso={handleQuitacaoSucesso}
+        />
+      )}
     </div>
   );
 }
