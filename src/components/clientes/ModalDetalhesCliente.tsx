@@ -203,11 +203,9 @@ function CardEmprestimo({
   clienteNome?: string;
 }) {
   const percentualPago = emprestimo.percentual_valor_pago || 0;
-  const temParcelasPendentes = parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
-  const podeQuitarEmprestimo = podeQuitar && 
-    liquidacaoId && 
-    ['ATIVO', 'VENCIDO'].includes(emprestimo.emprestimo_status) && 
-    temParcelasPendentes;
+  const temParcelasPendentes = parcelas.length === 0 || parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
+  const emprestimoAtivo = ['ATIVO', 'VENCIDO'].includes(emprestimo.emprestimo_status);
+  const podeQuitarEmprestimo = podeQuitar && liquidacaoId && emprestimoAtivo;
   
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
