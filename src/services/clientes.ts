@@ -549,6 +549,28 @@ export const clientesService = {
   },
 
   // ==================================================
+  // ATUALIZAR PERMITE RENEGOCIAÇÃO
+  // ==================================================
+  async atualizarPermiteRenegociacao(
+    clienteId: string, 
+    permite: boolean
+  ): Promise<{ success: boolean; error?: string }> {
+    const supabase = createClient();
+    
+    const { error } = await supabase
+      .from('clientes')
+      .update({ permite_renegociacao: permite })
+      .eq('id', clienteId);
+    
+    if (error) {
+      console.error('Erro ao atualizar permissão de renegociação:', error);
+      return { success: false, error: error.message };
+    }
+    
+    return { success: true };
+  },
+
+  // ==================================================
   // BUSCAR HISTÓRICO DE EMPRÉSTIMOS DO CLIENTE (via view)
   // ==================================================
   async buscarHistoricoEmprestimosCliente(clienteId: string): Promise<{
