@@ -447,7 +447,7 @@ export default function ClientesPage() {
       const clientesData = await clientesService.buscarClientes({
         empresa_id: empresaId,
         rota_id: rotaIdContexto || rotaFiltro || undefined,
-        status: statusFiltro || undefined,
+        status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
         busca: busca || undefined,
       });
       setClientes(clientesData);
