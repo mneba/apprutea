@@ -499,7 +499,7 @@ export default function ClientesPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* ===== HEADER FIXO ===== */}
-      <div className="flex-shrink-0 p-4 lg:p-6 pb-0 space-y-4">
+      <div className="flex-shrink-0 space-y-4 pb-4 border-b border-gray-200">
         {/* Título + Botão */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -698,7 +698,7 @@ export default function ClientesPage() {
       </div>
 
       {/* ===== ÁREA DE CONTEÚDO COM SCROLL ===== */}
-      <div className="flex-1 overflow-auto p-4 lg:p-6 pt-4">
+      <div className="flex-1 overflow-auto pt-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
