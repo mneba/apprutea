@@ -579,24 +579,24 @@ export const clientesService = {
   }> {
     const supabase = createClient();
     
-    // Buscar empréstimos ativos
+    // Buscar empréstimos ativos (ATIVO ou VENCIDO - ainda em cobrança)
     const { data: ativos, error: errorAtivos } = await supabase
       .from('vw_historico_emprestimos_cliente')
       .select('*')
       .eq('cliente_id', clienteId)
-      .eq('emprestimo_status', 'ATIVO')
+      .in('emprestimo_status', ['ATIVO', 'VENCIDO'])
       .order('data_emprestimo', { ascending: false });
     
     if (errorAtivos) {
       console.error('Erro ao buscar empréstimos ativos:', errorAtivos);
     }
     
-    // Buscar empréstimos finalizados
+    // Buscar empréstimos finalizados (QUITADO, CANCELADO, RENEGOCIADO)
     const { data: finalizados, error: errorFinalizados } = await supabase
       .from('vw_historico_emprestimos_cliente')
       .select('*')
       .eq('cliente_id', clienteId)
-      .neq('emprestimo_status', 'ATIVO')
+      .in('emprestimo_status', ['QUITADO', 'CANCELADO', 'RENEGOCIADO'])
       .order('data_emprestimo', { ascending: false });
     
     if (errorFinalizados) {
