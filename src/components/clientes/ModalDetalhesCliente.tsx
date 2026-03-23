@@ -1089,16 +1089,13 @@ export function ModalDetalhesCliente({
                       />
                     </div>
 
-                    {/* GPS e Permissões */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      {dadosExibicao.latitude && dadosExibicao.longitude && (
-                        <ItemInfo 
-                          icone={MapPinned} 
-                          label="Localização GPS" 
-                          valor={`${dadosExibicao.latitude}, ${dadosExibicao.longitude}`} 
-                        />
-                      )}
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
+                    {/* Permissões do Cliente */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className={`flex items-center gap-3 p-4 rounded-xl border ${
+                        (dadosExibicao as any).permite_renegociacao 
+                          ? 'bg-amber-50 border-amber-200' 
+                          : 'bg-gray-50 border-gray-200'
+                      }`}>
                         <TrendingUp className={`w-5 h-5 ${(dadosExibicao as any).permite_renegociacao ? 'text-amber-500' : 'text-gray-400'}`} />
                         <div>
                           <p className="text-xs text-gray-500">Renegociação</p>
@@ -1107,7 +1104,11 @@ export function ModalDetalhesCliente({
                           </p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-xl">
+                      <div className={`flex items-center gap-3 p-4 rounded-xl border ${
+                        dadosExibicao.permite_emprestimo_adicional 
+                          ? 'bg-green-50 border-green-200' 
+                          : 'bg-gray-50 border-gray-200'
+                      }`}>
                         <ShieldCheck className={`w-5 h-5 ${dadosExibicao.permite_emprestimo_adicional ? 'text-green-500' : 'text-gray-400'}`} />
                         <div>
                           <p className="text-xs text-gray-500">Empréstimo Adicional</p>
@@ -1117,6 +1118,15 @@ export function ModalDetalhesCliente({
                         </div>
                       </div>
                     </div>
+
+                    {/* GPS */}
+                    {dadosExibicao.latitude && dadosExibicao.longitude && (
+                      <ItemInfo 
+                        icone={MapPinned} 
+                        label="Localização GPS" 
+                        valor={`${dadosExibicao.latitude}, ${dadosExibicao.longitude}`} 
+                      />
+                    )}
 
                     {/* Microseguros */}
                     {microseguros.length > 0 && (
