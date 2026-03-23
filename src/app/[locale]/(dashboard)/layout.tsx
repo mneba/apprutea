@@ -47,7 +47,6 @@ const menuGroups: MenuGroup[] = [
   {
     title: 'Estrutura',
     items: [
-      // ✅ CORREÇÃO: Vendedores ANTES de Organização
       { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores' },
       { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao' },
     ],
@@ -88,7 +87,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
       {/* Sidebar Mobile Overlay */}
       {sidebarOpen && (
         <div 
@@ -153,10 +152,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         </nav>
       </aside>
 
-      {/* Main Content */}
-      <div className="lg:pl-64">
-        {/* Header */}
-        <header className="sticky top-0 z-30 bg-white border-b border-gray-200">
+      {/* Main Content Area */}
+      <div className="lg:pl-64 flex flex-col h-full">
+        {/* Header - Fixed */}
+        <header className="flex-shrink-0 bg-white border-b border-gray-200 z-30">
           <div className="flex items-center justify-between h-16 px-4 lg:px-6">
             {/* Left side */}
             <div className="flex items-center gap-4">
@@ -215,8 +214,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        {/* Page Content */}
-        <main className="p-4 lg:p-6">
+        {/* Page Content - Scrollable */}
+        <main className="flex-1 overflow-hidden">
           {children}
         </main>
       </div>

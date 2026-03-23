@@ -59,17 +59,17 @@ function CardEstatistica({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left bg-white rounded-xl border p-4 hover:shadow-md transition-all ${
+      className={`w-full text-left bg-white rounded-xl border p-3 hover:shadow-md transition-all ${
         ativo ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
       }`}
     >
       <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
+        <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center flex-shrink-0`}>
           <Icone className={`w-5 h-5 ${corIcone}`} />
         </div>
-        <div>
-          <p className="text-2xl font-bold text-gray-900">{valor}</p>
-          <p className="text-sm text-gray-500">{titulo}</p>
+        <div className="min-w-0">
+          <p className="text-xl font-bold text-gray-900">{valor}</p>
+          <p className="text-xs text-gray-500 truncate">{titulo}</p>
         </div>
       </div>
     </button>
@@ -84,7 +84,7 @@ function BadgeStatus({ status }: { status: string }) {
   }[status] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status };
 
   return (
-    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
       {config.label}
     </span>
   );
@@ -175,21 +175,21 @@ function TabelaClientes({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden h-full flex flex-col">
+      <div className="overflow-auto flex-1">
         <table className="w-full text-sm">
-          <thead>
+          <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Código</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Nome</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Documento</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Telefone</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Endereço</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700">Rota</th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-700">Saldo Devedor</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700">Emp. Ativos</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700">Status</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700">Ações</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Código</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Nome</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Documento</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Telefone</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Endereço</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
+              <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-gray-50">Saldo Devedor</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Emp. Ativos</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -241,7 +241,7 @@ function TabelaClientes({
 
 function AvisoSelecioneEmpresa() {
   return (
-    <div className="flex flex-col items-center justify-center py-20">
+    <div className="flex flex-col items-center justify-center h-full">
       <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mb-4">
         <AlertCircle className="w-8 h-8 text-amber-600" />
       </div>
@@ -255,7 +255,7 @@ function AvisoSelecioneEmpresa() {
 
 function AvisoSemRotas() {
   return (
-    <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200 mb-6">
+    <div className="flex items-center gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
       <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
       <div>
         <p className="text-sm font-medium text-amber-800">Nenhuma rota cadastrada</p>
@@ -281,20 +281,20 @@ function exportarCSV(clientes: ClienteComTotais[]) {
     'Endereço',
     'Rota',
     'Saldo Devedor',
-    'Emp. Ativos',
+    'Empréstimos Ativos',
     'Total Empréstimos',
     'Status',
     'Data Cadastro'
   ];
-
-  const linhas = clientes.map(c => [
-    c.codigo_cliente,
-    `"${c.nome}"`,
+  
+  const rows = clientes.map(c => [
+    c.codigo_cliente || '',
+    c.nome,
     c.documento || '',
     c.telefone_celular || '',
     c.email || '',
-    `"${c.endereco || ''}"`,
-    `"${c.rotas_nomes || ''}"`,
+    c.endereco || '',
+    c.rotas_nomes || '',
     c.valor_saldo_devedor || 0,
     c.qtd_emprestimos_ativos || 0,
     c.qtd_emprestimos_total || 0,
@@ -302,9 +302,13 @@ function exportarCSV(clientes: ClienteComTotais[]) {
     c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''
   ]);
 
-  const csv = [headers.join(';'), ...linhas.map(l => l.join(';'))].join('\n');
-  
-  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const csvContent = [
+    headers.join(';'),
+    ...rows.map(row => row.map(cell => `"${cell}"`).join(';'))
+  ].join('\n');
+
+  const BOM = '\uFEFF';
+  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
   link.href = url;
@@ -314,29 +318,30 @@ function exportarCSV(clientes: ClienteComTotais[]) {
 }
 
 function exportarExcel(clientes: ClienteComTotais[]) {
-  // Usando formato XLSX simples (XML-based)
-  const headers = [
-    'Código', 'Nome', 'Documento', 'Telefone', 'Email', 'Endereço', 
-    'Rota', 'Saldo Devedor', 'Emp. Ativos', 'Total Empréstimos', 'Status', 'Data Cadastro'
-  ];
-
   let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
   xml += '<?mso-application progid="Excel.Sheet"?>\n';
   xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n';
   xml += '  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
   xml += '<Worksheet ss:Name="Clientes">\n<Table>\n';
 
-  // Headers
   xml += '<Row>\n';
-  headers.forEach(h => {
-    xml += `<Cell><Data ss:Type="String">${h}</Data></Cell>\n`;
-  });
+  xml += '<Cell><Data ss:Type="String">Código</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Nome</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Documento</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Telefone</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Email</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Endereço</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Rota</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Saldo Devedor</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Emp. Ativos</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Total Emp.</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Status</Data></Cell>\n';
+  xml += '<Cell><Data ss:Type="String">Data Cadastro</Data></Cell>\n';
   xml += '</Row>\n';
 
-  // Dados
   clientes.forEach(c => {
     xml += '<Row>\n';
-    xml += `<Cell><Data ss:Type="Number">${c.codigo_cliente}</Data></Cell>\n`;
+    xml += `<Cell><Data ss:Type="String">${c.codigo_cliente || ''}</Data></Cell>\n`;
     xml += `<Cell><Data ss:Type="String">${c.nome}</Data></Cell>\n`;
     xml += `<Cell><Data ss:Type="String">${c.documento || ''}</Data></Cell>\n`;
     xml += `<Cell><Data ss:Type="String">${c.telefone_celular || ''}</Data></Cell>\n`;
@@ -422,61 +427,40 @@ export default function ClientesPage() {
     return { total, ativos, inativos, suspensos };
   }, [clientes]);
 
-  // Se tem rota no contexto OU rotas carregadas, então tem rotas
-  const temRotas = rotas.length > 0 || !!rotaIdContexto;
+  const temRotas = rotas.length > 0;
 
-  const carregarClientes = useCallback(async () => {
+  // Carregar dados
+  const carregarDados = useCallback(async () => {
     if (!empresaId) return;
+
     setLoading(true);
     try {
-      const data = await clientesService.buscarClientes({
+      // Carregar rotas
+      const rotasData = await clientesService.buscarRotasUsuario(empresaId, rotaIdContexto);
+      setRotas(rotasData);
+
+      // Carregar segmentos
+      const segmentosData = await clientesService.buscarSegmentos();
+      setSegmentos(segmentosData);
+
+      // Carregar clientes
+      const clientesData = await clientesService.buscarClientes({
         empresa_id: empresaId,
+        rota_id: rotaIdContexto || rotaFiltro || undefined,
+        status: statusFiltro || undefined,
         busca: busca || undefined,
-        status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
-        rota_id: rotaFiltro || rotaIdContexto || undefined,
       });
-      setClientes(data);
+      setClientes(clientesData);
     } catch (error) {
-      console.error('Erro ao carregar clientes:', error);
+      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
-  }, [empresaId, busca, statusFiltro, rotaFiltro, rotaIdContexto]);
-
-  const carregarSegmentos = useCallback(async () => {
-    if (!empresaId) return;
-    try {
-      const data = await clientesService.buscarSegmentos();
-      setSegmentos(data);
-    } catch (error) {
-      console.error('Erro ao carregar segmentos:', error);
-    }
-  }, [empresaId]);
-
-  const carregarRotas = useCallback(async () => {
-    if (!empresaId) return;
-    try {
-      const data = await clientesService.buscarRotasEmpresa(empresaId);
-      setRotas(data);
-    } catch (error) {
-      console.error('Erro ao carregar rotas:', error);
-    }
-  }, [empresaId]);
+  }, [empresaId, rotaIdContexto, rotaFiltro, statusFiltro, busca]);
 
   useEffect(() => {
-    if (empresaId) {
-      carregarClientes();
-      carregarSegmentos();
-      carregarRotas();
-    }
-  }, [empresaId, carregarClientes, carregarSegmentos, carregarRotas]);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (empresaId) carregarClientes();
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [busca, empresaId, carregarClientes]);
+    carregarDados();
+  }, [carregarDados]);
 
   const handleNovaVenda = (cliente?: ClienteComTotais) => {
     setClienteSelecionado(cliente || null);
@@ -486,11 +470,15 @@ export default function ClientesPage() {
   const handleSucessoVenda = () => {
     setModalNovaVenda(false);
     setClienteSelecionado(null);
-    carregarClientes();
+    carregarDados();
   };
 
   const handleFiltroStatus = (status: string) => {
-    setStatusFiltro(prev => prev === status ? '' : status);
+    if (statusFiltro === status) {
+      setStatusFiltro('');
+    } else {
+      setStatusFiltro(status);
+    }
   };
 
   const limparFiltros = () => {
@@ -499,24 +487,27 @@ export default function ClientesPage() {
     setRotaFiltro('');
   };
 
+  // Se não tem empresa selecionada
   if (!empresaId) {
     return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-          </div>
-          <AvisoSelecioneEmpresa />
-        </div>
+      <div className="h-full flex items-center justify-center p-4">
+        <AvisoSelecioneEmpresa />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* ===== HEADER FIXO ===== */}
+      <div className="flex-shrink-0 p-4 lg:p-6 pb-0 space-y-4">
+        {/* Título + Botão */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
+            <p className="text-gray-500 text-sm">
+              Gerencie seus clientes e empréstimos
+            </p>
+          </div>
           
           <button
             onClick={() => handleNovaVenda()}
@@ -537,7 +528,7 @@ export default function ClientesPage() {
         {!temRotas && <AvisoSemRotas />}
 
         {/* Cards de Estatísticas */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <CardEstatistica
             titulo="Total"
             valor={estatisticas.total}
@@ -577,7 +568,7 @@ export default function ClientesPage() {
         </div>
 
         {/* Filtros e Controles */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 pb-4 border-b border-gray-200">
           {/* Busca */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
@@ -704,10 +695,12 @@ export default function ClientesPage() {
             </button>
           )}
         </div>
+      </div>
 
-        {/* Lista de Clientes */}
+      {/* ===== ÁREA DE CONTEÚDO COM SCROLL ===== */}
+      <div className="flex-1 overflow-auto p-4 lg:p-6 pt-4">
         {loading ? (
-          <div className="flex items-center justify-center py-20">
+          <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
           </div>
         ) : clientesOrdenados.length > 0 ? (
@@ -736,8 +729,10 @@ export default function ClientesPage() {
             />
           )
         ) : (
-          <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-gray-200">
-            <Users className="w-16 h-16 text-gray-300 mb-4" />
+          <div className="flex flex-col items-center justify-center h-full">
+            <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+              <Users className="w-8 h-8 text-gray-400" />
+            </div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Nenhum cliente encontrado</h3>
             <p className="text-gray-500 text-center max-w-md mb-4">
               {busca || statusFiltro || rotaFiltro 
@@ -755,31 +750,33 @@ export default function ClientesPage() {
             )}
           </div>
         )}
+      </div>
 
-        {/* Modal de Nova Venda */}
-        {empresaId && userId && (
-          <ModalNovaVenda
-            isOpen={modalNovaVenda}
-            onClose={() => setModalNovaVenda(false)}
-            cliente={clienteSelecionado}
-            segmentos={segmentos}
-            rotas={rotas}
-            empresaId={empresaId}
-            userId={userId}
-            rotaIdContexto={rotaIdContexto}
-            onSucesso={handleSucessoVenda}
-          />
-        )}
-
-        {/* Modal de Detalhes do Cliente */}
-        <ModalDetalhesCliente
-          isOpen={modalDetalhes}
-          onClose={() => {
-            setModalDetalhes(false);
-            setClienteDetalhes(null);
-          }}
-          cliente={clienteDetalhes}
+      {/* Modal de Nova Venda */}
+      {empresaId && userId && (
+        <ModalNovaVenda
+          isOpen={modalNovaVenda}
+          onClose={() => setModalNovaVenda(false)}
+          cliente={clienteSelecionado}
+          segmentos={segmentos}
+          rotas={rotas}
+          empresaId={empresaId}
+          userId={userId}
+          rotaIdContexto={rotaIdContexto}
+          onSucesso={handleSucessoVenda}
         />
+      )}
+
+      {/* Modal de Detalhes do Cliente */}
+      <ModalDetalhesCliente
+        isOpen={modalDetalhes}
+        onClose={() => {
+          setModalDetalhes(false);
+          setClienteDetalhes(null);
+        }}
+        cliente={clienteDetalhes}
+        onClienteAtualizado={carregarDados}
+      />
     </div>
   );
 }
