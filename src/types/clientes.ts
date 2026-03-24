@@ -45,6 +45,7 @@ export interface Cliente {
 
 export interface ClienteComTotais extends Cliente {
   qtd_emprestimos_ativos: number;
+  qtd_emprestimos_vencidos: number;  // ✅ NOVO
   qtd_emprestimos_total: number;
   valor_total_emprestimos: number;
   valor_total_pago: number;
