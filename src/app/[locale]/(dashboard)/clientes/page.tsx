@@ -187,7 +187,7 @@ function TabelaClientes({
               <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Endereço</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
               <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-gray-50">Saldo Devedor</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Emp. Ativos</th>
+              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Empréstimos</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
             </tr>
@@ -213,11 +213,26 @@ function TabelaClientes({
                   {formatarMoeda(cliente.valor_saldo_devedor)}
                 </td>
                 <td className="px-4 py-3 text-center">
-                  <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full text-xs font-medium ${
-                    cliente.qtd_emprestimos_ativos > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {cliente.qtd_emprestimos_ativos}
-                  </span>
+                  <div className="inline-flex items-center gap-1 text-sm">
+                    {(cliente.qtd_emprestimos_ativos || 0) > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-green-600 font-medium">
+                        {cliente.qtd_emprestimos_ativos}
+                        <span className="text-green-500">✓</span>
+                      </span>
+                    )}
+                    {(cliente.qtd_emprestimos_ativos || 0) > 0 && (cliente.qtd_emprestimos_vencidos || 0) > 0 && (
+                      <span className="text-gray-400">/</span>
+                    )}
+                    {(cliente.qtd_emprestimos_vencidos || 0) > 0 && (
+                      <span className="inline-flex items-center gap-0.5 text-red-600 font-medium">
+                        {cliente.qtd_emprestimos_vencidos}
+                        <span className="text-red-500">⚠</span>
+                      </span>
+                    )}
+                    {(cliente.qtd_emprestimos_ativos || 0) === 0 && (cliente.qtd_emprestimos_vencidos || 0) === 0 && (
+                      <span className="text-gray-400">-</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-center">
                   <BadgeStatus status={cliente.status} />
