@@ -8,17 +8,10 @@ import {
   UserCheck,
   UserX,
   AlertTriangle,
-  MapPin,
-  Phone,
-  Mail,
   ChevronDown,
   Loader2,
   AlertCircle,
   X,
-  ArrowUpAZ,
-  ArrowDownAZ,
-  LayoutGrid,
-  List,
   Download,
   FileSpreadsheet
 } from 'lucide-react';
@@ -33,7 +26,6 @@ import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
 // =====================================================
 
 type TipoOrdenacao = 'nome_asc' | 'nome_desc' | 'codigo_asc' | 'codigo_desc' | 'data_asc' | 'data_desc';
-type TipoVisualizacao = 'cards' | 'tabela';
 
 // =====================================================
 // COMPONENTES AUXILIARES
@@ -87,77 +79,6 @@ function BadgeStatus({ status }: { status: string }) {
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${config.bg} ${config.text}`}>
       {config.label}
     </span>
-  );
-}
-
-function CardCliente({ 
-  cliente, 
-  onDetalhes, 
-  onNovaVenda 
-}: { 
-  cliente: ClienteComTotais; 
-  onDetalhes: () => void;
-  onNovaVenda: () => void;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 hover:shadow-md transition-shadow">
-      <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-lg flex-shrink-0">
-          {cliente.nome.charAt(0).toUpperCase()}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            {/* Código do cliente (consecutivo) */}
-            <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 text-xs font-mono text-gray-600">
-              #{cliente.codigo_cliente}
-            </span>
-            <h3 className="font-semibold text-gray-900 truncate">{cliente.nome}</h3>
-            <BadgeStatus status={cliente.status} />
-          </div>
-
-          {cliente.documento && (
-            <p className="text-sm text-gray-500 mb-1">{cliente.documento}</p>
-          )}
-
-          <div className="flex flex-wrap gap-3 text-sm text-gray-500">
-            {cliente.telefone_celular && (
-              <span className="flex items-center gap-1">
-                <Phone className="w-3.5 h-3.5" />
-                {cliente.telefone_celular}
-              </span>
-            )}
-            {cliente.email && (
-              <span className="flex items-center gap-1">
-                <Mail className="w-3.5 h-3.5" />
-                {cliente.email}
-              </span>
-            )}
-            {cliente.rotas_nomes && (
-              <span className="flex items-center gap-1">
-                <MapPin className="w-3.5 h-3.5" />
-                {cliente.rotas_nomes}
-              </span>
-            )}
-          </div>
-        </div>
-
-        <div className="flex gap-2 flex-shrink-0">
-          <button
-            onClick={onDetalhes}
-            className="px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Detalhes
-          </button>
-          <button
-            onClick={onNovaVenda}
-            className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
-          >
-            Nova Venda
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -400,9 +321,8 @@ export default function ClientesPage() {
   const [statusFiltro, setStatusFiltro] = useState<string>('');
   const [rotaFiltro, setRotaFiltro] = useState<string>('');
   
-  // Novos estados para ordenação e visualização
+  // Novos estados para ordenação
   const [ordenacao, setOrdenacao] = useState<TipoOrdenacao>('nome_asc');
-  const [visualizacao, setVisualizacao] = useState<TipoVisualizacao>('cards');
   const [menuExportarAberto, setMenuExportarAberto] = useState(false);
   
   const [modalNovaVenda, setModalNovaVenda] = useState(false);
@@ -630,32 +550,6 @@ export default function ClientesPage() {
             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
           </div>
 
-          {/* Toggle Visualização */}
-          <div className="flex border border-gray-300 rounded-xl overflow-hidden">
-            <button
-              onClick={() => setVisualizacao('cards')}
-              className={`px-3 py-2.5 flex items-center gap-1 transition-colors ${
-                visualizacao === 'cards' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
-              }`}
-              title="Visualização em Cards"
-            >
-              <LayoutGrid className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setVisualizacao('tabela')}
-              className={`px-3 py-2.5 flex items-center gap-1 transition-colors ${
-                visualizacao === 'tabela' 
-                  ? 'bg-blue-600 text-white' 
-                  : 'bg-white text-gray-600 hover:bg-gray-50'
-              }`}
-              title="Visualização em Tabela"
-            >
-              <List className="w-4 h-4" />
-            </button>
-          </div>
-
           {/* Exportar */}
           <div className="relative">
             <button
@@ -719,30 +613,14 @@ export default function ClientesPage() {
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
           </div>
         ) : clientesOrdenados.length > 0 ? (
-          visualizacao === 'cards' ? (
-            <div className="space-y-3">
-              {clientesOrdenados.map(cliente => (
-                <CardCliente
-                  key={cliente.id}
-                  cliente={cliente}
-                  onDetalhes={() => {
-                    setClienteDetalhes(cliente);
-                    setModalDetalhes(true);
-                  }}
-                  onNovaVenda={() => handleNovaVenda(cliente)}
-                />
-              ))}
-            </div>
-          ) : (
-            <TabelaClientes
-              clientes={clientesOrdenados}
-              onDetalhes={(cliente) => {
-                setClienteDetalhes(cliente);
-                setModalDetalhes(true);
-              }}
-              onNovaVenda={(cliente) => handleNovaVenda(cliente)}
-            />
-          )
+          <TabelaClientes
+            clientes={clientesOrdenados}
+            onDetalhes={(cliente) => {
+              setClienteDetalhes(cliente);
+              setModalDetalhes(true);
+            }}
+            onNovaVenda={(cliente) => handleNovaVenda(cliente)}
+          />
         ) : (
           <div className="flex flex-col items-center justify-center h-full">
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
