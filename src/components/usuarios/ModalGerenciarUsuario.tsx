@@ -391,7 +391,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         cidades_ids: cidadesIds,
         rotas_ids: rotasIds,
         recebe_notificacoes_solicitacoes: recebeNotificacoes,
-      });
+      } as any);
 
       // Salvar permissões (apenas se não for monitor)
       if (!ehMonitor) {
