@@ -15,7 +15,8 @@ import {
   Building2,
   MapPin,
   Smartphone,
-  Unlock
+  Unlock,
+  Bell
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
@@ -111,6 +112,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === ABA LIBERAÇÕES ===
   const [liberacoes, setLiberacoes] = useState<Record<string, boolean>>({});
+  const [recebeNotificacoes, setRecebeNotificacoes] = useState(false);
 
   // Derivados para seleção cascata
   const paises = [...new Set(hierarquias.map((h) => h.pais))];
@@ -192,6 +194,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         } catch (err) {
           console.warn('Erro ao carregar liberações (tabela pode não existir ainda):', err);
         }
+
+        // Carregar flag de notificações
+        setRecebeNotificacoes(usuario.recebe_notificacoes_solicitacoes || false);
 
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
@@ -385,6 +390,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         empresas_ids: empresasIds,
         cidades_ids: cidadesIds,
         rotas_ids: rotasIds,
+        recebe_notificacoes_solicitacoes: recebeNotificacoes,
       });
 
       // Salvar permissões (apenas se não for monitor)
@@ -869,56 +875,91 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
               {/* ABA LIBERAÇÕES */}
               {activeTab === 'liberacoes' && (
-                <div>
-                  <p className="text-sm text-gray-600 mb-4">
-                    Configure quais tipos de solicitações este usuário pode aprovar/rejeitar.
-                  </p>
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                            Tipo de Solicitação
-                          </th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-28">
-                            Pode Liberar
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-gray-200">
-                        {/* LIQUIDAÇÃO */}
-                        <tr className="bg-gray-100">
-                          <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
-                            Liquidação
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <button
-                              onClick={() => {
-                                const todosAtivos = TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]);
-                                marcarTodasLiberacoes('LIQUIDACAO', !todosAtivos);
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-700"
-                            >
-                              {TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
-                            </button>
-                          </td>
-                        </tr>
-                        {TIPOS_SOLICITACAO.LIQUIDACAO.map((item) => (
-                          <tr key={item.tipo} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <div>
-                                <span className="text-sm text-gray-700">{item.label}</span>
-                                <p className="text-xs text-gray-500">{item.descricao}</p>
-                              </div>
+                <div className="space-y-6">
+                  {/* Toggle de Notificações */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                          <Bell className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-blue-900">
+                            Receber Notificações de Solicitações
+                          </p>
+                          <p className="text-xs text-blue-700">
+                            Este usuário será notificado quando houver novas solicitações pendentes
+                          </p>
+                        </div>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={recebeNotificacoes}
+                          onChange={(e) => setRecebeNotificacoes(e.target.checked)}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    {recebeNotificacoes && (
+                      <p className="text-xs text-amber-700 mt-3 bg-amber-50 p-2 rounded">
+                        Atenção: Apenas 1 usuário por empresa pode receber notificações. Ao ativar aqui, outros usuários da mesma empresa serão desmarcados automaticamente.
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Tabela de Liberações */}
+                  <div>
+                    <p className="text-sm text-gray-600 mb-4">
+                      Configure quais tipos de solicitações este usuário pode aprovar/rejeitar.
+                    </p>
+                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                              Tipo de Solicitação
+                            </th>
+                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-28">
+                              Pode Liberar
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-200">
+                          {/* LIQUIDAÇÃO */}
+                          <tr className="bg-gray-100">
+                            <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                              Liquidação
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              <Checkbox
-                                checked={liberacoes[item.tipo] || false}
-                                onChange={() => toggleLiberacao(item.tipo)}
-                              />
+                            <td className="px-4 py-2 text-center">
+                              <button
+                                onClick={() => {
+                                  const todosAtivos = TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]);
+                                  marcarTodasLiberacoes('LIQUIDACAO', !todosAtivos);
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                {TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
+                              </button>
                             </td>
                           </tr>
-                        ))}
+                          {TIPOS_SOLICITACAO.LIQUIDACAO.map((item) => (
+                            <tr key={item.tipo} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div>
+                                  <span className="text-sm text-gray-700">{item.label}</span>
+                                  <p className="text-xs text-gray-500">{item.descricao}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <Checkbox
+                                  checked={liberacoes[item.tipo] || false}
+                                  onChange={() => toggleLiberacao(item.tipo)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
 
                         {/* LIMITES */}
                         <tr className="bg-gray-100">
@@ -989,6 +1030,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                         ))}
                       </tbody>
                     </table>
+                  </div>
                   </div>
                 </div>
               )}
