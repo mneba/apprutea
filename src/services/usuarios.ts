@@ -380,4 +380,39 @@ export const usuariosService = {
 
     if (error) throw error;
   },
+
+
+async listarLiberacoesUsuario(userId: string) {
+  const { data, error } = await supabase.rpc('fn_listar_liberacoes_usuario', {
+    p_user_id: userId
+  });
+  
+  if (error) throw error;
+  return data || [];
+},
+
+async salvarLiberacoesUsuario(userId: string, liberacoes: { tipo_solicitacao: string; pode_liberar: boolean }[]) {
+  const { data, error } = await supabase.rpc('fn_salvar_liberacoes_usuario', {
+    p_user_id: userId,
+    p_liberacoes: liberacoes
+  });
+  
+  if (error) throw error;
+  return data;
+},
+
+async verificarPodeLiberarTipo(userId: string, tipoSolicitacao: string): Promise<boolean> {
+  const { data, error } = await supabase.rpc('fn_usuario_pode_liberar', {
+    p_user_id: userId,
+    p_tipo_solicitacao: tipoSolicitacao
+  });
+  
+  if (error) {
+    console.error('Erro ao verificar permissão:', error);
+    return false;
+  }
+  
+  return data || false;
+},
+
 };

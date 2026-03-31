@@ -14,7 +14,8 @@ import {
   Shield,
   Building2,
   MapPin,
-  Smartphone
+  Smartphone,
+  Unlock
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
@@ -26,13 +27,34 @@ interface Props {
   onSave: () => void;
 }
 
-type TabType = 'dados' | 'acesso' | 'codigo' | 'permissoes';
+type TabType = 'dados' | 'acesso' | 'codigo' | 'permissoes' | 'liberacoes';
 
 interface SelecaoAcesso {
   hierarquia_id: string;
   empresa_id: string;
   rotas_ids: string[];
 }
+
+// Tipos de solicitação agrupados por categoria
+const TIPOS_SOLICITACAO = {
+  LIQUIDACAO: [
+    { tipo: 'ABERTURA_RETROATIVA', label: 'Abertura Retroativa', descricao: 'Abrir liquidação de data passada' },
+    { tipo: 'ABERTURA_DIAS_FALTANTES', label: 'Abertura Dias Faltantes', descricao: 'Abrir hoje pulando dias sem liquidação' },
+    { tipo: 'REABRIR_LIQUIDACAO', label: 'Reabrir Liquidação', descricao: 'Reabrir liquidação já fechada' },
+  ],
+  LIMITES: [
+    { tipo: 'VENDA_EXCEDE_LIMITE', label: 'Venda Excede Limite', descricao: 'Venda acima do limite permitido' },
+    { tipo: 'RENOVACAO_EXCEDE_LIMITE', label: 'Renovação Excede Limite', descricao: 'Renovação acima do limite' },
+    { tipo: 'DESPESA_EXCEDE_LIMITE', label: 'Despesa Excede Limite', descricao: 'Despesa acima do limite' },
+    { tipo: 'RECEITA_EXCEDE_LIMITE', label: 'Receita Excede Limite', descricao: 'Receita acima do limite' },
+  ],
+  OPERACOES: [
+    { tipo: 'ESTORNO_PAGAMENTO', label: 'Estorno de Pagamento', descricao: 'Estornar pagamento já registrado' },
+    { tipo: 'CANCELAR_EMPRESTIMO', label: 'Cancelar Empréstimo', descricao: 'Cancelar empréstimo ativo' },
+    { tipo: 'QUITAR_COM_DESCONTO', label: 'Quitar com Desconto', descricao: 'Quitar com valor menor que saldo' },
+    { tipo: 'CLIENTE_OUTRA_ROTA', label: 'Cliente de Outra Rota', descricao: 'Atender cliente de outra rota' },
+  ],
+};
 
 export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('dados');
@@ -86,6 +108,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === ABA PERMISSÕES ===
   const [permissoes, setPermissoes] = useState<Record<string, UserPermissao>>({});
+
+  // === ABA LIBERAÇÕES ===
+  const [liberacoes, setLiberacoes] = useState<Record<string, boolean>>({});
 
   // Derivados para seleção cascata
   const paises = [...new Set(hierarquias.map((h) => h.pais))];
@@ -155,6 +180,18 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
           }
         });
         setSelecoes(selecoesExistentes);
+
+        // Carregar liberações
+        try {
+          const liberacoesData = await usuariosService.listarLiberacoesUsuario(usuario.user_id);
+          const liberacoesMap: Record<string, boolean> = {};
+          liberacoesData.forEach((lib: { tipo_solicitacao: string; pode_liberar: boolean }) => {
+            liberacoesMap[lib.tipo_solicitacao] = lib.pode_liberar;
+          });
+          setLiberacoes(liberacoesMap);
+        } catch (err) {
+          console.warn('Erro ao carregar liberações (tabela pode não existir ainda):', err);
+        }
 
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
@@ -293,6 +330,24 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     });
   };
 
+  // === FUNÇÕES ABA LIBERAÇÕES ===
+  const toggleLiberacao = (tipo: string) => {
+    setLiberacoes((prev) => ({
+      ...prev,
+      [tipo]: !prev[tipo],
+    }));
+  };
+
+  const marcarTodasLiberacoes = (categoria: keyof typeof TIPOS_SOLICITACAO, marcar: boolean) => {
+    setLiberacoes((prev) => {
+      const novas = { ...prev };
+      TIPOS_SOLICITACAO[categoria].forEach((item) => {
+        novas[item.tipo] = marcar;
+      });
+      return novas;
+    });
+  };
+
   // Agrupar módulos por categoria
   const modulosPorCategoria = modulos.reduce((acc, modulo) => {
     const categoria = modulo.categoria || 'Outros';
@@ -337,6 +392,16 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
       }
 
+      // Salvar liberações
+      const liberacoesArray = Object.entries(liberacoes).map(([tipo, pode]) => ({
+        tipo_solicitacao: tipo,
+        pode_liberar: pode,
+      }));
+      
+      if (liberacoesArray.length > 0) {
+        await usuariosService.salvarLiberacoesUsuario(usuario.user_id, liberacoesArray);
+      }
+
       onSave();
     } catch (err) {
       console.error('Erro ao salvar:', err);
@@ -351,6 +416,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     { id: 'acesso' as TabType, label: 'Acesso', icon: Building2 },
     { id: 'codigo' as TabType, label: 'Código', icon: Key },
     { id: 'permissoes' as TabType, label: 'Permissões', icon: Shield },
+    { id: 'liberacoes' as TabType, label: 'Liberações', icon: Unlock },
   ];
 
   // Monitor não vê aba de permissões (só usa app móvel)
@@ -382,7 +448,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-gray-200 px-6">
+        <div className="flex border-b border-gray-200 px-6 overflow-x-auto">
           {tabsVisiveis.map((tab) => {
             const Icon = tab.icon;
             return (
@@ -390,7 +456,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={`
-                  flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors
+                  flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap
                   ${activeTab === tab.id
                     ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-500 hover:text-gray-700'}
@@ -414,81 +480,89 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
               {/* ABA DADOS */}
               {activeTab === 'dados' && (
                 <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Nome */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
-                      <input
-                        type="text"
-                        value={nome}
-                        onChange={(e) => setNome(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Nome completo"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
+                    <input
+                      type="text"
+                      value={nome}
+                      onChange={(e) => setNome(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
 
-                    {/* Telefone com DDI */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone</label>
-                      <div className="flex">
-                        <select
-                          value={ddi}
-                          onChange={(e) => setDdi(e.target.value)}
-                          className="px-3 py-2.5 rounded-l-lg border border-r-0 border-gray-200 bg-gray-50 text-sm focus:ring-2 focus:ring-blue-500 min-w-[110px]"
-                        >
-                          {ddis.map((d) => (
-                            <option key={d.codigo} value={d.codigo}>
-                              {d.bandeira} {d.codigo}
-                            </option>
-                          ))}
-                        </select>
-                        <input
-                          type="tel"
-                          value={telefoneNumero}
-                          onChange={(e) => setTelefoneNumero(e.target.value)}
-                          className="flex-1 px-4 py-2.5 rounded-r-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="11999999999"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Documento */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Documento</label>
-                      <input
-                        type="text"
-                        value={documento}
-                        onChange={(e) => setDocumento(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="CPF, RUT, CI, etc."
-                      />
-                    </div>
-
-                    {/* Endereço */}
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
-                      <input
-                        type="text"
-                        value={endereco}
-                        onChange={(e) => setEndereco(e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                        placeholder="Rua, número, bairro, cidade"
-                      />
-                    </div>
-
-                    {/* Status */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Telefone</label>
+                    <div className="flex gap-2">
                       <select
-                        value={status}
-                        onChange={(e) => setStatus(e.target.value as any)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500"
+                        value={ddi}
+                        onChange={(e) => setDdi(e.target.value)}
+                        className="w-32 px-3 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                       >
-                        <option value="APROVADO">Aprovado</option>
-                        <option value="PENDENTE">Pendente</option>
-                        <option value="REJEITADO">Rejeitado</option>
+                        {ddis.map((d) => (
+                          <option key={d.codigo} value={d.codigo}>
+                            {d.bandeira} {d.codigo}
+                          </option>
+                        ))}
                       </select>
+                      <input
+                        type="text"
+                        value={telefoneNumero}
+                        onChange={(e) => setTelefoneNumero(e.target.value)}
+                        placeholder="11999999999"
+                        className="flex-1 px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
                     </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Apenas números, sem espaços ou traços
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Documento</label>
+                    <input
+                      type="text"
+                      value={documento}
+                      onChange={(e) => setDocumento(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Endereço</label>
+                    <input
+                      type="text"
+                      value={endereco}
+                      onChange={(e) => setEndereco(e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
+                    <select
+                      value={status}
+                      onChange={(e) => setStatus(e.target.value as typeof status)}
+                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    >
+                      <option value="PENDENTE">Pendente</option>
+                      <option value="APROVADO">Aprovado</option>
+                      <option value="REJEITADO">Rejeitado</option>
+                    </select>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2">
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={ehMonitor}
+                        onChange={(e) => setEhMonitor(e.target.checked)}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                    <span className="text-sm text-gray-700">
+                      É Monitor (apenas app móvel)
+                    </span>
                   </div>
                 </div>
               )}
@@ -496,74 +570,46 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
               {/* ABA ACESSO */}
               {activeTab === 'acesso' && (
                 <div className="space-y-6">
-                  {/* Checkbox Monitor */}
-                  <div className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-                    <label className="flex items-start gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={ehMonitor}
-                        onChange={(e) => setEhMonitor(e.target.checked)}
-                        className="w-5 h-5 mt-0.5 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <Smartphone className="w-4 h-4 text-orange-600" />
-                          <span className="font-medium text-gray-900">Apenas App Móvel</span>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                          Este usuário terá acesso apenas ao aplicativo móvel, não poderá acessar o sistema web.
-                        </p>
-                      </div>
-                    </label>
-                  </div>
-
-                  {/* Lista de empresas vinculadas */}
-                  <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                      <Building2 className="w-4 h-4" />
-                      Empresas com Acesso
-                    </h3>
-
-                    {selecoes.length > 0 ? (
-                      <div className="space-y-2 mb-4">
-                        {selecoes.map((selecao, index) => (
-                          <div
-                            key={index}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                          >
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-gray-700">
-                                {getNomeEmpresa(selecao.empresa_id)}
+                  {/* Seleções existentes */}
+                  {selecoes.length > 0 && (
+                    <div className="space-y-3">
+                      <h3 className="text-sm font-medium text-gray-700">Acessos Configurados</h3>
+                      {selecoes.map((selecao, index) => (
+                        <div
+                          key={index}
+                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                        >
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-gray-900">
+                              {getNomeEmpresa(selecao.empresa_id)}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {getNomeHierarquia(selecao.hierarquia_id)}
+                            </p>
+                            {selecao.rotas_ids.length > 0 && (
+                              <p className="text-xs text-blue-600 mt-1">
+                                Rotas: {getNomesRotas(selecao.rotas_ids)}
                               </p>
-                              <p className="text-xs text-gray-500">
-                                {getNomeHierarquia(selecao.hierarquia_id)}
-                              </p>
-                              {selecao.rotas_ids.length > 0 && (
-                                <p className="text-xs text-blue-600 mt-1">
-                                  Rotas: {getNomesRotas(selecao.rotas_ids)}
-                                </p>
-                              )}
-                            </div>
-                            <button
-                              onClick={() => handleRemoverSelecao(index)}
-                              className="p-1.5 hover:bg-red-100 rounded text-red-500"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 bg-gray-50 rounded-xl mb-4">
-                        <MapPin className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm text-gray-500">Nenhuma empresa vinculada</p>
-                      </div>
-                    )}
+                          <button
+                            onClick={() => handleRemoverSelecao(index)}
+                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
 
-                    {/* Adicionar nova empresa */}
-                    <div className="bg-blue-50 rounded-xl p-4 space-y-3">
-                      <p className="text-sm font-medium text-blue-700">Adicionar acesso:</p>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Adicionar novo acesso */}
+                  <div className="space-y-4 p-4 border border-dashed border-gray-300 rounded-xl">
+                    <h3 className="text-sm font-medium text-gray-700">Adicionar Acesso</h3>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">País</label>
                         <select
                           value={novoPais}
                           onChange={(e) => {
@@ -572,14 +618,19 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             setNovaEmpresaId('');
                             setNovasRotasIds([]);
                           }}
-                          className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
                         >
-                          <option value="">Selecione o país</option>
+                          <option value="">Selecione...</option>
                           {paises.map((pais) => (
-                            <option key={pais} value={pais}>{pais}</option>
+                            <option key={pais} value={pais}>
+                              {pais}
+                            </option>
                           ))}
                         </select>
+                      </div>
 
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Estado/Cidade</label>
                         <select
                           value={novaHierarquiaId}
                           onChange={(e) => {
@@ -588,61 +639,69 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             setNovasRotasIds([]);
                           }}
                           disabled={!novoPais}
-                          className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm disabled:opacity-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-100"
                         >
-                          <option value="">Selecione o estado</option>
+                          <option value="">Selecione...</option>
                           {estadosDoPais.map((h) => (
-                            <option key={h.id} value={h.id}>{h.estado}</option>
+                            <option key={h.id} value={h.id}>
+                              {h.estado}
+                            </option>
                           ))}
                         </select>
-
-                        <select
-                          value={novaEmpresaId}
-                          onChange={(e) => {
-                            setNovaEmpresaId(e.target.value);
-                            setNovasRotasIds([]);
-                          }}
-                          disabled={!novaHierarquiaId}
-                          className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm disabled:opacity-50"
-                        >
-                          <option value="">Selecione a empresa</option>
-                          {empresasDaHierarquia.map((e) => (
-                            <option key={e.id} value={e.id}>{e.nome}</option>
-                          ))}
-                        </select>
-
-                        <button
-                          onClick={handleAdicionarSelecao}
-                          disabled={!novaEmpresaId}
-                          className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-                        >
-                          <Plus className="w-4 h-4" />
-                          Adicionar
-                        </button>
                       </div>
-
-                      {/* Rotas (opcional) */}
-                      {novaEmpresaId && rotasDaEmpresa.length > 0 && (
-                        <div>
-                          <p className="text-xs text-gray-600 mb-2">Rotas (opcional):</p>
-                          <div className="flex flex-wrap gap-2">
-                            {rotasDaEmpresa.map((rota) => (
-                              <button
-                                key={rota.id}
-                                onClick={() => toggleRota(rota.id)}
-                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
-                                  novasRotasIds.includes(rota.id)
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'
-                                }`}
-                              >
-                                {rota.nome}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                     </div>
+
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">Empresa</label>
+                      <select
+                        value={novaEmpresaId}
+                        onChange={(e) => {
+                          setNovaEmpresaId(e.target.value);
+                          setNovasRotasIds([]);
+                        }}
+                        disabled={!novaHierarquiaId}
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-100"
+                      >
+                        <option value="">Selecione...</option>
+                        {empresasDaHierarquia.map((e) => (
+                          <option key={e.id} value={e.id}>
+                            {e.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {novaEmpresaId && rotasDaEmpresa.length > 0 && (
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-2">
+                          Rotas (opcional - deixe vazio para todas)
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {rotasDaEmpresa.map((rota) => (
+                            <button
+                              key={rota.id}
+                              onClick={() => toggleRota(rota.id)}
+                              className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                novasRotasIds.includes(rota.id)
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                              }`}
+                            >
+                              {rota.nome}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={handleAdicionarSelecao}
+                      disabled={!novaEmpresaId}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar
+                    </button>
                   </div>
                 </div>
               )}
@@ -650,17 +709,18 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
               {/* ABA CÓDIGO */}
               {activeTab === 'codigo' && (
                 <div className="space-y-6">
-                  {/* Aviso se não aprovado */}
                   {status !== 'APROVADO' && (
-                    <div className="bg-yellow-50 border border-yellow-300 rounded-xl p-4 flex items-start gap-3">
-                      <div className="w-6 h-6 rounded-full bg-yellow-400 flex items-center justify-center flex-shrink-0 mt-0.5">
-                        <span className="text-white text-sm font-bold">!</span>
-                      </div>
-                      <div>
-                        <p className="font-medium text-yellow-800">Usuário não aprovado</p>
-                        <p className="text-sm text-yellow-700 mt-1">
-                          Para gerar o código de acesso, primeiro aprove o usuário na aba "Dados".
-                        </p>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                      <div className="flex items-start gap-3">
+                        <Smartphone className="w-5 h-5 text-yellow-600 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-medium text-yellow-800">
+                            Usuário não aprovado
+                          </p>
+                          <p className="text-sm text-yellow-700 mt-1">
+                            Para gerar o código de acesso, primeiro aprove o usuário na aba "Dados".
+                          </p>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -800,6 +860,132 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                               );
                             })}
                           </Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* ABA LIBERAÇÕES */}
+              {activeTab === 'liberacoes' && (
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Configure quais tipos de solicitações este usuário pode aprovar/rejeitar.
+                  </p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                            Tipo de Solicitação
+                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-28">
+                            Pode Liberar
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {/* LIQUIDAÇÃO */}
+                        <tr className="bg-gray-100">
+                          <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                            Liquidação
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => {
+                                const todosAtivos = TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]);
+                                marcarTodasLiberacoes('LIQUIDACAO', !todosAtivos);
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-700"
+                            >
+                              {TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
+                            </button>
+                          </td>
+                        </tr>
+                        {TIPOS_SOLICITACAO.LIQUIDACAO.map((item) => (
+                          <tr key={item.tipo} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div>
+                                <span className="text-sm text-gray-700">{item.label}</span>
+                                <p className="text-xs text-gray-500">{item.descricao}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Checkbox
+                                checked={liberacoes[item.tipo] || false}
+                                onChange={() => toggleLiberacao(item.tipo)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+
+                        {/* LIMITES */}
+                        <tr className="bg-gray-100">
+                          <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                            Limites
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => {
+                                const todosAtivos = TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]);
+                                marcarTodasLiberacoes('LIMITES', !todosAtivos);
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-700"
+                            >
+                              {TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
+                            </button>
+                          </td>
+                        </tr>
+                        {TIPOS_SOLICITACAO.LIMITES.map((item) => (
+                          <tr key={item.tipo} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div>
+                                <span className="text-sm text-gray-700">{item.label}</span>
+                                <p className="text-xs text-gray-500">{item.descricao}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Checkbox
+                                checked={liberacoes[item.tipo] || false}
+                                onChange={() => toggleLiberacao(item.tipo)}
+                              />
+                            </td>
+                          </tr>
+                        ))}
+
+                        {/* OPERAÇÕES */}
+                        <tr className="bg-gray-100">
+                          <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                            Operações
+                          </td>
+                          <td className="px-4 py-2 text-center">
+                            <button
+                              onClick={() => {
+                                const todosAtivos = TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]);
+                                marcarTodasLiberacoes('OPERACOES', !todosAtivos);
+                              }}
+                              className="text-xs text-blue-600 hover:text-blue-700"
+                            >
+                              {TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
+                            </button>
+                          </td>
+                        </tr>
+                        {TIPOS_SOLICITACAO.OPERACOES.map((item) => (
+                          <tr key={item.tipo} className="hover:bg-gray-50">
+                            <td className="px-4 py-3">
+                              <div>
+                                <span className="text-sm text-gray-700">{item.label}</span>
+                                <p className="text-xs text-gray-500">{item.descricao}</p>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <Checkbox
+                                checked={liberacoes[item.tipo] || false}
+                                onChange={() => toggleLiberacao(item.tipo)}
+                              />
+                            </td>
+                          </tr>
                         ))}
                       </tbody>
                     </table>
