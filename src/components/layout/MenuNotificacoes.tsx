@@ -5,7 +5,7 @@ import { Bell, X, Check, CheckCheck, User, AlertTriangle, Clock, ChevronRight, F
 import { usuariosService } from '@/services/usuarios';
 import { solicitacoesService } from '@/services/solicitacoes';
 import { useUser } from '@/contexts/UserContext';
-import { useRouter } from 'next/navigation';
+import { useRouter } from '@/i18n/routing';
 
 interface Mensagem {
   id: string;
@@ -126,7 +126,7 @@ export function MenuNotificacoes() {
   // Ir para central de solicitações
   const handleIrParaCentral = () => {
     setIsOpen(false);
-    router.push('/pt/liberacoes');
+    router.push('/liberacoes');
   };
 
   // Marcar solicitação como vista e ir para central
