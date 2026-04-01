@@ -109,7 +109,11 @@ function ModalDetalhesSolicitacao({
               </div>
               <p className="font-medium text-gray-900">
                 {solicitacao.data_solicitada 
-                  ? new Date(solicitacao.data_solicitada).toLocaleDateString('pt-BR')
+                  ? (() => {
+                      // Evitar problema de timezone - data vem como "YYYY-MM-DD"
+                      const [ano, mes, dia] = solicitacao.data_solicitada.split('-');
+                      return `${dia}/${mes}/${ano}`;
+                    })()
                   : '-'}
               </p>
             </div>
