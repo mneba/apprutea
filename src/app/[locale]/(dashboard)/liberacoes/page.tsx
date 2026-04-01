@@ -293,7 +293,7 @@ function BadgeStatus({ status }: { status: string }) {
 export default function LiberacoesPage() {
   const { user } = useUser();
   const [loading, setLoading] = useState(true);
-  const [solicitacoes, setSolicitacoes] = useState<Solicitacao[]>([]);
+  const [todasSolicitacoes, setTodasSolicitacoes] = useState<Solicitacao[]>([]);
   const [solicitacaoSelecionada, setSolicitacaoSelecionada] = useState<Solicitacao | null>(null);
   const [loadingAcao, setLoadingAcao] = useState(false);
 
@@ -302,16 +302,16 @@ export default function LiberacoesPage() {
   const [filtroTipo, setFiltroTipo] = useState<string>('');
   const [busca, setBusca] = useState('');
 
-  // Carregar solicitações
+  // Carregar TODAS as solicitações (sem filtro de status)
   const carregarSolicitacoes = async () => {
     if (!user) return;
     setLoading(true);
     try {
       const data = await solicitacoesService.listarTodas(user.id, {
-        status: filtroStatus || null,
+        status: null, // Busca todas
         tipo: filtroTipo || null,
       });
-      setSolicitacoes(data);
+      setTodasSolicitacoes(data);
     } catch (err) {
       console.error('Erro ao carregar solicitações:', err);
     } finally {
@@ -321,7 +321,7 @@ export default function LiberacoesPage() {
 
   useEffect(() => {
     carregarSolicitacoes();
-  }, [user, filtroStatus, filtroTipo]);
+  }, [user, filtroTipo]);
 
   // Aprovar solicitação
   const handleAprovar = async (motivo?: string) => {
@@ -367,8 +367,19 @@ export default function LiberacoesPage() {
     }
   };
 
-  // Filtrar por busca
-  const solicitacoesFiltradas = solicitacoes.filter((s) => {
+  // Contadores (baseados em TODAS as solicitações)
+  const contadores = {
+    pendentes: todasSolicitacoes.filter((s) => s.status === 'PENDENTE').length,
+    aprovadas: todasSolicitacoes.filter((s) => s.status === 'APROVADO').length,
+    rejeitadas: todasSolicitacoes.filter((s) => s.status === 'REJEITADO').length,
+  };
+
+  // Filtrar por status e busca (para a tabela)
+  const solicitacoesFiltradas = todasSolicitacoes.filter((s) => {
+    // Filtro de status
+    if (filtroStatus && s.status !== filtroStatus) return false;
+    
+    // Filtro de busca
     if (!busca) return true;
     const termo = busca.toLowerCase();
     return (
@@ -378,13 +389,6 @@ export default function LiberacoesPage() {
       TIPO_SOLICITACAO_LABELS[s.tipo_solicitacao]?.toLowerCase().includes(termo)
     );
   });
-
-  // Contadores
-  const contadores = {
-    pendentes: solicitacoes.filter((s) => s.status === 'PENDENTE').length,
-    aprovadas: solicitacoes.filter((s) => s.status === 'APROVADO').length,
-    rejeitadas: solicitacoes.filter((s) => s.status === 'REJEITADO').length,
-  };
 
   const formatarData = (data: string) => {
     return new Date(data).toLocaleDateString('pt-BR', {
