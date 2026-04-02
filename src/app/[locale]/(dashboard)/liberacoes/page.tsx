@@ -227,24 +227,6 @@ function ModalDetalhesSolicitacao({
                   <span className="text-sm text-gray-500">Cliente</span>
                   <p className="font-medium text-gray-900">{solicitacao.cliente_nome || '-'}</p>
                 </div>
-                {solicitacao.cliente_id && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">ID Cliente</span>
-                      <p className="text-xs text-gray-400 font-mono">{solicitacao.cliente_id.slice(0, 8)}...</p>
-                    </div>
-                  </>
-                )}
-                {solicitacao.emprestimo_id && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">ID Parcela</span>
-                      <p className="text-xs text-gray-400 font-mono">{solicitacao.emprestimo_id.slice(0, 8)}...</p>
-                    </div>
-                  </>
-                )}
                 {solicitacao.valor_solicitado !== null && (
                   <>
                     <div className="border-t border-gray-200" />
