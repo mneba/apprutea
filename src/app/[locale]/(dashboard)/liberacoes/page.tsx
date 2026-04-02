@@ -20,6 +20,76 @@ import {
 import { useUser } from '@/contexts/UserContext';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
 
+// Labels e ícones por tipo de solicitação
+const TIPO_CONFIG: Record<string, { titulo: string; subtitulo: string; icone: string; cor: string }> = {
+  'ABERTURA_RETROATIVA': { 
+    titulo: 'Abertura de Liquidação', 
+    subtitulo: 'Abertura Retroativa',
+    icone: '📅',
+    cor: 'amber'
+  },
+  'ABERTURA_DIAS_FALTANTES': { 
+    titulo: 'Abertura de Liquidação', 
+    subtitulo: 'Dias Faltantes',
+    icone: '📅',
+    cor: 'amber'
+  },
+  'ESTORNO_PAGAMENTO': { 
+    titulo: 'Exclusão de Parcela', 
+    subtitulo: 'Estorno de Pagamento',
+    icone: '🗑️',
+    cor: 'red'
+  },
+  'VENDA_EXCEDE_LIMITE': { 
+    titulo: 'Limite Excedido', 
+    subtitulo: 'Venda',
+    icone: '💰',
+    cor: 'blue'
+  },
+  'RENOVACAO_EXCEDE_LIMITE': { 
+    titulo: 'Limite Excedido', 
+    subtitulo: 'Renovação',
+    icone: '🔄',
+    cor: 'blue'
+  },
+  'DESPESA_EXCEDE_LIMITE': { 
+    titulo: 'Limite Excedido', 
+    subtitulo: 'Despesa',
+    icone: '📤',
+    cor: 'red'
+  },
+  'RECEITA_EXCEDE_LIMITE': { 
+    titulo: 'Limite Excedido', 
+    subtitulo: 'Receita',
+    icone: '📥',
+    cor: 'green'
+  },
+  'CANCELAR_EMPRESTIMO': { 
+    titulo: 'Cancelar Empréstimo', 
+    subtitulo: 'Cancelamento',
+    icone: '❌',
+    cor: 'red'
+  },
+  'REABRIR_LIQUIDACAO': { 
+    titulo: 'Reabrir Liquidação', 
+    subtitulo: 'Reabertura',
+    icone: '🔓',
+    cor: 'amber'
+  },
+  'QUITAR_COM_DESCONTO': { 
+    titulo: 'Quitação com Desconto', 
+    subtitulo: 'Desconto',
+    icone: '💵',
+    cor: 'green'
+  },
+  'CLIENTE_OUTRA_ROTA': { 
+    titulo: 'Cliente de Outra Rota', 
+    subtitulo: 'Rota Diferente',
+    icone: '🔀',
+    cor: 'purple'
+  },
+};
+
 // Modal de Detalhes/Ação
 function ModalDetalhesSolicitacao({
   solicitacao,
@@ -39,8 +109,14 @@ function ModalDetalhesSolicitacao({
   const [mostrarMotivoRejeicao, setMostrarMotivoRejeicao] = useState(false);
 
   const statusColors = STATUS_SOLICITACAO_COLORS[solicitacao.status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
+  const tipoConfig = TIPO_CONFIG[solicitacao.tipo_solicitacao] || { 
+    titulo: solicitacao.tipo_solicitacao, 
+    subtitulo: '', 
+    icone: '📋',
+    cor: 'gray'
+  };
 
-  const formatarData = (data: string | null) => {
+  const formatarDataHora = (data: string | null) => {
     if (!data) return '-';
     return new Date(data).toLocaleDateString('pt-BR', {
       day: '2-digit',
@@ -51,139 +127,234 @@ function ModalDetalhesSolicitacao({
     });
   };
 
+  const formatarDataSimples = (data: string | null) => {
+    if (!data) return '-';
+    const [ano, mes, dia] = data.split('-');
+    return `${dia}/${mes}/${ano}`;
+  };
+
   const formatarMoeda = (valor: number | null) => {
-    if (valor === null) return '-';
+    if (valor === null || valor === undefined) return '-';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
   };
+
+  // Verificar tipo de solicitação
+  const isAbertura = ['ABERTURA_RETROATIVA', 'ABERTURA_DIAS_FALTANTES'].includes(solicitacao.tipo_solicitacao);
+  const isExclusaoParcela = solicitacao.tipo_solicitacao === 'ESTORNO_PAGAMENTO';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-lg ${statusColors.bg} flex items-center justify-center`}>
-              <FileText className={`w-5 h-5 ${statusColors.text}`} />
-            </div>
+            <span className="text-2xl">{tipoConfig.icone}</span>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                {TIPO_SOLICITACAO_LABELS[solicitacao.tipo_solicitacao] || solicitacao.tipo_solicitacao}
-              </h2>
+              <h2 className="text-lg font-semibold text-gray-900">{tipoConfig.titulo}</h2>
               <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors.bg} ${statusColors.text}`}>
                 {statusColors.label}
               </span>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">
+          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
             <XCircle className="w-5 h-5 text-gray-500" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          {/* Informações Principais */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 text-gray-500 mb-1">
-                <User className="w-4 h-4" />
-                <span className="text-sm">Vendedor</span>
-              </div>
-              <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
-              <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 text-gray-500 mb-1">
-                <MapPin className="w-4 h-4" />
-                <span className="text-sm">Rota</span>
-              </div>
-              <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 text-gray-500 mb-1">
-                <Calendar className="w-4 h-4" />
-                <span className="text-sm">Data Solicitada</span>
-              </div>
-              <p className="font-medium text-gray-900">
-                {solicitacao.data_solicitada 
-                  ? (() => {
-                      // Evitar problema de timezone - data vem como "YYYY-MM-DD"
-                      const [ano, mes, dia] = solicitacao.data_solicitada.split('-');
-                      return `${dia}/${mes}/${ano}`;
-                    })()
-                  : '-'}
-              </p>
-            </div>
-
-            <div className="bg-gray-50 rounded-xl p-4">
-              <div className="flex items-center gap-2 text-gray-500 mb-1">
-                <Clock className="w-4 h-4" />
-                <span className="text-sm">Criada em</span>
-              </div>
-              <p className="font-medium text-gray-900">{formatarData(solicitacao.created_at)}</p>
-            </div>
-
-            {solicitacao.valor_solicitado !== null && (
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <DollarSign className="w-4 h-4" />
-                  <span className="text-sm">Valor Solicitado</span>
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          
+          {/* === ABERTURA DE LIQUIDAÇÃO === */}
+          {isAbertura && (
+            <>
+              {/* Info Grid */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Vendedor</span>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
+                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
+                  </div>
                 </div>
-                <p className="font-medium text-gray-900">{formatarMoeda(solicitacao.valor_solicitado)}</p>
-              </div>
-            )}
-
-            {solicitacao.valor_limite !== null && (
-              <div className="bg-gray-50 rounded-xl p-4">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <AlertTriangle className="w-4 h-4" />
-                  <span className="text-sm">Limite Atual</span>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Rota</span>
+                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
                 </div>
-                <p className="font-medium text-gray-900">{formatarMoeda(solicitacao.valor_limite)}</p>
-              </div>
-            )}
-
-            {solicitacao.cliente_nome && (
-              <div className="bg-gray-50 rounded-xl p-4 col-span-2">
-                <div className="flex items-center gap-2 text-gray-500 mb-1">
-                  <User className="w-4 h-4" />
-                  <span className="text-sm">Cliente</span>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Data</span>
+                  <p className="font-medium text-gray-900 text-lg">{formatarDataSimples(solicitacao.data_solicitada)}</p>
                 </div>
-                <p className="font-medium text-gray-900">{solicitacao.cliente_nome}</p>
               </div>
-            )}
-          </div>
 
-          {/* Motivo da Solicitação */}
-          <div>
-            <h3 className="text-sm font-medium text-gray-700 mb-2">Motivo da Solicitação</h3>
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-              <p className="text-sm text-amber-900 whitespace-pre-wrap">
-                {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
-              </p>
-            </div>
-          </div>
-
-          {/* Expiração */}
-          {solicitacao.status === 'PENDENTE' && (
-            <div className="flex items-center gap-2 text-sm text-gray-500">
-              <Clock className="w-4 h-4" />
-              <span>Expira em: {formatarData(solicitacao.expira_em)}</span>
-            </div>
+              {/* Motivo */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo}</span>
+                </div>
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                  <p className="text-xs text-amber-600 mb-1">Comentário do vendedor:</p>
+                  <p className="text-sm text-amber-900 whitespace-pre-wrap">
+                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
+                  </p>
+                </div>
+              </div>
+            </>
           )}
+
+          {/* === EXCLUSÃO DE PARCELA === */}
+          {isExclusaoParcela && (
+            <>
+              {/* Info Grid */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Vendedor</span>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
+                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
+                  </div>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Rota</span>
+                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Cliente</span>
+                  <p className="font-medium text-gray-900">{solicitacao.cliente_nome || '-'}</p>
+                </div>
+                {solicitacao.cliente_id && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">ID Cliente</span>
+                      <p className="text-xs text-gray-400 font-mono">{solicitacao.cliente_id.slice(0, 8)}...</p>
+                    </div>
+                  </>
+                )}
+                {solicitacao.emprestimo_id && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">ID Parcela</span>
+                      <p className="text-xs text-gray-400 font-mono">{solicitacao.emprestimo_id.slice(0, 8)}...</p>
+                    </div>
+                  </>
+                )}
+                {solicitacao.valor_solicitado !== null && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Valor</span>
+                      <p className="font-semibold text-red-600 text-lg">{formatarMoeda(solicitacao.valor_solicitado)}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Motivo */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo}</span>
+                </div>
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+                  <p className="text-xs text-red-600 mb-1">Comentário do vendedor:</p>
+                  <p className="text-sm text-red-900 whitespace-pre-wrap">
+                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* === OUTROS TIPOS (layout genérico) === */}
+          {!isAbertura && !isExclusaoParcela && (
+            <>
+              {/* Info Grid */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Vendedor</span>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
+                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
+                  </div>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Rota</span>
+                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
+                </div>
+                {solicitacao.cliente_nome && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Cliente</span>
+                      <p className="font-medium text-gray-900">{solicitacao.cliente_nome}</p>
+                    </div>
+                  </>
+                )}
+                {solicitacao.data_solicitada && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Data</span>
+                      <p className="font-medium text-gray-900">{formatarDataSimples(solicitacao.data_solicitada)}</p>
+                    </div>
+                  </>
+                )}
+                {solicitacao.valor_solicitado !== null && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Valor Solicitado</span>
+                      <p className="font-semibold text-gray-900">{formatarMoeda(solicitacao.valor_solicitado)}</p>
+                    </div>
+                  </>
+                )}
+                {solicitacao.valor_limite !== null && (
+                  <>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Limite</span>
+                      <p className="font-medium text-gray-900">{formatarMoeda(solicitacao.valor_limite)}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Motivo */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo || 'Motivo'}</span>
+                </div>
+                <div className="bg-gray-100 border border-gray-200 rounded-xl p-4">
+                  <p className="text-xs text-gray-500 mb-1">Comentário do vendedor:</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Solicitado em */}
+          <p className="text-xs text-gray-400 text-center">
+            Solicitado em: {formatarDataHora(solicitacao.created_at)}
+          </p>
 
           {/* Resolução (se já foi resolvida) */}
           {solicitacao.status !== 'PENDENTE' && solicitacao.resolvido_por_nome && (
-            <div className="bg-gray-50 rounded-xl p-4">
+            <div className="bg-gray-50 rounded-xl p-4 mt-2">
               <h3 className="text-sm font-medium text-gray-700 mb-2">Resolução</h3>
-              <div className="space-y-2 text-sm">
+              <div className="space-y-1 text-sm">
                 <p><span className="text-gray-500">Por:</span> {solicitacao.resolvido_por_nome}</p>
-                <p><span className="text-gray-500">Em:</span> {formatarData(solicitacao.data_resolucao)}</p>
+                <p><span className="text-gray-500">Em:</span> {formatarDataHora(solicitacao.data_resolucao)}</p>
                 {solicitacao.motivo_resolucao && (
-                  <p><span className="text-gray-500">Motivo:</span> {solicitacao.motivo_resolucao}</p>
+                  <p><span className="text-gray-500">Obs:</span> {solicitacao.motivo_resolucao}</p>
                 )}
               </div>
             </div>
@@ -191,17 +362,17 @@ function ModalDetalhesSolicitacao({
 
           {/* Ações (se pendente) */}
           {solicitacao.status === 'PENDENTE' && (
-            <div className="space-y-4 pt-4 border-t border-gray-200">
-              {/* Campo de motivo para aprovação (opcional) */}
+            <div className="space-y-3 pt-2">
+              {/* Campo de observação para aprovação */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+                <label className="block text-xs font-medium text-gray-500 mb-1">
                   Observação (opcional)
                 </label>
                 <textarea
                   value={motivoAprovacao}
                   onChange={(e) => setMotivoAprovacao(e.target.value)}
-                  placeholder="Adicione uma observação à aprovação..."
-                  className="w-full px-4 py-2 rounded-lg border border-gray-200 text-sm resize-none"
+                  placeholder="Adicione uma observação..."
+                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   rows={2}
                 />
               </div>
@@ -209,15 +380,16 @@ function ModalDetalhesSolicitacao({
               {/* Campo de motivo para rejeição */}
               {mostrarMotivoRejeicao && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Motivo da Rejeição <span className="text-red-500">*</span>
+                  <label className="block text-xs font-medium text-red-600 mb-1">
+                    Motivo da Rejeição *
                   </label>
                   <textarea
                     value={motivoRejeicao}
                     onChange={(e) => setMotivoRejeicao(e.target.value)}
-                    placeholder="Informe o motivo da rejeição..."
-                    className="w-full px-4 py-2 rounded-lg border border-gray-200 text-sm resize-none"
-                    rows={3}
+                    placeholder="Informe o motivo..."
+                    className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm resize-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                    rows={2}
+                    autoFocus
                   />
                 </div>
               )}
@@ -227,10 +399,10 @@ function ModalDetalhesSolicitacao({
 
         {/* Footer */}
         {solicitacao.status === 'PENDENTE' && (
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
             >
               Cancelar
             </button>
@@ -240,7 +412,7 @@ function ModalDetalhesSolicitacao({
                 <button
                   onClick={() => setMostrarMotivoRejeicao(true)}
                   disabled={loading}
-                  className="flex items-center gap-2 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   <XCircle className="w-4 h-4" />
                   Rejeitar
@@ -248,7 +420,7 @@ function ModalDetalhesSolicitacao({
                 <button
                   onClick={() => onAprovar(motivoAprovacao || undefined)}
                   disabled={loading}
-                  className="flex items-center gap-2 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                   Aprovar
@@ -258,14 +430,14 @@ function ModalDetalhesSolicitacao({
               <>
                 <button
                   onClick={() => setMostrarMotivoRejeicao(false)}
-                  className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
                 >
                   Voltar
                 </button>
                 <button
                   onClick={() => onRejeitar(motivoRejeicao)}
                   disabled={loading || !motivoRejeicao.trim()}
-                  className="flex items-center gap-2 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                   Confirmar Rejeição
