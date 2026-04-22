@@ -670,17 +670,22 @@ export default function FinanceiroPage() {
 
   const carregarExtrato = useCallback(async () => {
     if (!empresaId) return;
+    
+    // No modo liquidação, só carrega se tiver data selecionada
+    if (modoFiltroTemporal === 'liquidacao' && !dataLiquidacao) {
+      setMovimentos([]);
+      return;
+    }
+
     setLoadingExtrato(true);
     try {
-      // No modo liquidação, busca pela data específica
-      // No modo período, usa os filtros de período normais
       const params: any = {
         conta_id: contaFiltro || undefined,
         categoria: categoriaFiltro || undefined,
         rota_id: rotaId,
       };
 
-      if (modoFiltroTemporal === 'liquidacao' && dataLiquidacao) {
+      if (modoFiltroTemporal === 'liquidacao') {
         // Busca apenas a data específica da liquidação
         params.data_inicio = dataLiquidacao;
         params.data_fim = dataLiquidacao;
@@ -690,6 +695,8 @@ export default function FinanceiroPage() {
         params.data_inicio = filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataInicio : undefined;
         params.data_fim = filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataFim : undefined;
       }
+
+      console.log('Buscando extrato com params:', params); // Debug
 
       const data = await financeiroService.buscarExtrato(empresaId, params);
       setMovimentos(data);
@@ -1122,6 +1129,14 @@ export default function FinanceiroPage() {
                     <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
                   ) : movimentosFiltrados.length > 0 ? (
                     movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
+                  ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
+                    <tr><td colSpan={5} className="px-4 py-12 text-center">
+                      <div className="flex flex-col items-center">
+                        <Calendar className="w-12 h-12 text-blue-300 mb-3" />
+                        <p className="text-gray-600 font-medium">Selecione uma data de liquidação</p>
+                        <p className="text-gray-400 text-sm mt-1">Escolha a data para ver os lançamentos</p>
+                      </div>
+                    </td></tr>
                   ) : (
                     <tr><td colSpan={5} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center">
