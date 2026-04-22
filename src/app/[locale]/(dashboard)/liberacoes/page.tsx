@@ -454,7 +454,17 @@ export default function LiberacoesPage() {
   // Filtros
   const [filtroStatus, setFiltroStatus] = useState<string>('PENDENTE');
   const [filtroTipo, setFiltroTipo] = useState<string>('');
+  const [filtroCategoria, setFiltroCategoria] = useState<string>(''); // '', 'ENTRADAS', 'SAIDAS', 'LIQUIDACAO'
+  const [filtroCliente, setFiltroCliente] = useState<string>('');
+  const [filtroData, setFiltroData] = useState<string>(''); // YYYY-MM-DD
   const [busca, setBusca] = useState('');
+
+  // Categorias de tipos
+  const CATEGORIAS: Record<string, string[]> = {
+    'LIQUIDACAO': ['ABERTURA_RETROATIVA', 'ABERTURA_DIAS_FALTANTES', 'REABRIR_LIQUIDACAO'],
+    'ENTRADAS': ['VENDA_EXCEDE_LIMITE', 'RENOVACAO_EXCEDE_LIMITE', 'RECEITA_EXCEDE_LIMITE'],
+    'SAIDAS': ['DESPESA_EXCEDE_LIMITE', 'ESTORNO_PAGAMENTO', 'CANCELAR_EMPRESTIMO', 'QUITAR_COM_DESCONTO'],
+  };
 
   // Carregar TODAS as solicitações (sem filtro de status)
   const carregarSolicitacoes = async () => {
@@ -533,16 +543,50 @@ export default function LiberacoesPage() {
     // Filtro de status
     if (filtroStatus && s.status !== filtroStatus) return false;
     
-    // Filtro de busca
-    if (!busca) return true;
-    const termo = busca.toLowerCase();
-    return (
-      s.vendedor_nome?.toLowerCase().includes(termo) ||
-      s.rota_nome?.toLowerCase().includes(termo) ||
-      s.cliente_nome?.toLowerCase().includes(termo) ||
-      TIPO_SOLICITACAO_LABELS[s.tipo_solicitacao]?.toLowerCase().includes(termo)
-    );
+    // Filtro de tipo específico
+    if (filtroTipo && s.tipo_solicitacao !== filtroTipo) return false;
+
+    // Filtro de categoria
+    if (filtroCategoria && CATEGORIAS[filtroCategoria]) {
+      if (!CATEGORIAS[filtroCategoria].includes(s.tipo_solicitacao)) return false;
+    }
+
+    // Filtro de cliente
+    if (filtroCliente) {
+      const termoCliente = filtroCliente.toLowerCase();
+      if (!s.cliente_nome?.toLowerCase().includes(termoCliente)) return false;
+    }
+
+    // Filtro de data (data_solicitada)
+    if (filtroData && s.data_solicitada !== filtroData) return false;
+    
+    // Filtro de busca geral
+    if (busca) {
+      const termo = busca.toLowerCase();
+      const encontrou = (
+        s.vendedor_nome?.toLowerCase().includes(termo) ||
+        s.rota_nome?.toLowerCase().includes(termo) ||
+        s.cliente_nome?.toLowerCase().includes(termo) ||
+        TIPO_SOLICITACAO_LABELS[s.tipo_solicitacao]?.toLowerCase().includes(termo)
+      );
+      if (!encontrou) return false;
+    }
+
+    return true;
   });
+
+  // Limpar todos os filtros
+  const limparFiltros = () => {
+    setFiltroStatus('');
+    setFiltroTipo('');
+    setFiltroCategoria('');
+    setFiltroCliente('');
+    setFiltroData('');
+    setBusca('');
+  };
+
+  // Verificar se há filtros ativos
+  const temFiltrosAtivos = filtroStatus || filtroTipo || filtroCategoria || filtroCliente || filtroData || busca;
 
   const formatarData = (data: string) => {
     return new Date(data).toLocaleDateString('pt-BR', {
@@ -634,35 +678,90 @@ export default function LiberacoesPage() {
         </div>
 
         {/* Filtros */}
-        <div className="flex items-center gap-4">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por vendedor, rota, cliente..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+        <div className="space-y-3">
+          {/* Linha 1: Busca geral + Cliente + Data */}
+          <div className="flex items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por vendedor, rota..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+
+            <div className="relative flex-1">
+              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={filtroCliente}
+                onChange={(e) => setFiltroCliente(e.target.value)}
+                placeholder="Filtrar por cliente..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+
+            <div className="relative">
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="date"
+                value={filtroData}
+                onChange={(e) => setFiltroData(e.target.value)}
+                className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white min-w-[160px]"
+              />
+            </div>
           </div>
 
-          <select
-            value={filtroTipo}
-            onChange={(e) => setFiltroTipo(e.target.value)}
-            className="px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white min-w-[200px]"
-          >
-            <option value="">Todos os tipos</option>
-            {Object.entries(TIPO_SOLICITACAO_LABELS).map(([tipo, label]) => (
-              <option key={tipo} value={tipo}>{label}</option>
-            ))}
-          </select>
+          {/* Linha 2: Categoria + Tipo + Limpar */}
+          <div className="flex items-center gap-3">
+            <select
+              value={filtroCategoria}
+              onChange={(e) => { setFiltroCategoria(e.target.value); setFiltroTipo(''); }}
+              className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[160px]"
+            >
+              <option value="">Todas categorias</option>
+              <option value="LIQUIDACAO">📅 Liquidação</option>
+              <option value="ENTRADAS">📥 Entradas</option>
+              <option value="SAIDAS">📤 Saídas</option>
+            </select>
 
-          <button
-            onClick={() => { setFiltroStatus(''); setFiltroTipo(''); setBusca(''); }}
-            className="px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Limpar filtros
-          </button>
+            <select
+              value={filtroTipo}
+              onChange={(e) => setFiltroTipo(e.target.value)}
+              className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[200px]"
+            >
+              <option value="">Todos os tipos</option>
+              {filtroCategoria && CATEGORIAS[filtroCategoria] ? (
+                // Mostrar apenas tipos da categoria selecionada
+                CATEGORIAS[filtroCategoria].map((tipo) => (
+                  <option key={tipo} value={tipo}>{TIPO_SOLICITACAO_LABELS[tipo]}</option>
+                ))
+              ) : (
+                // Mostrar todos os tipos
+                Object.entries(TIPO_SOLICITACAO_LABELS).map(([tipo, label]) => (
+                  <option key={tipo} value={tipo}>{label}</option>
+                ))
+              )}
+            </select>
+
+            {temFiltrosAtivos && (
+              <button
+                onClick={limparFiltros}
+                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm flex items-center gap-1"
+              >
+                <XCircle className="w-4 h-4" />
+                Limpar filtros
+              </button>
+            )}
+
+            <div className="flex-1" />
+
+            <span className="text-sm text-gray-500">
+              {solicitacoesFiltradas.length} resultado{solicitacoesFiltradas.length !== 1 ? 's' : ''}
+            </span>
+          </div>
         </div>
       </div>
 
