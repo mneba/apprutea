@@ -394,12 +394,18 @@ function LinhaExtrato({
     }
     return null;
   };
+  // Formatar data sem timezone bug
+  const formatarData = (dataStr: string) => {
+    if (!dataStr) return '-';
+    const [ano, mes, dia] = dataStr.split('T')[0].split('-');
+    return `${dia}/${mes}/${ano}`;
+  };
   
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3">
         <span className="text-sm text-gray-600">
-          {new Date(movimento.data_lancamento).toLocaleDateString('pt-BR')}
+          {formatarData(movimento.data_lancamento)}
         </span>
       </td>
       <td className="px-4 py-3">
@@ -559,6 +565,7 @@ export default function FinanceiroPage() {
   const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
   const [modoFiltroTemporal, setModoFiltroTemporal] = useState<'periodo' | 'liquidacao'>('periodo');
   const [dataLiquidacao, setDataLiquidacao] = useState<string>(''); // YYYY-MM-DD
+  const [loadingUltimaLiquidacao, setLoadingUltimaLiquidacao] = useState(false);
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingResumo, setLoadingResumo] = useState(false);
@@ -714,6 +721,44 @@ export default function FinanceiroPage() {
       carregarCategorias();
     }
   }, [empresaId, rotaId, carregarSaldos, carregarContas, carregarCategorias]);
+
+  // Buscar última liquidação quando mudar para modo liquidação
+  useEffect(() => {
+    const buscarUltimaLiquidacao = async () => {
+      if (modoFiltroTemporal !== 'liquidacao' || !rotaId) return;
+      if (dataLiquidacao) return; // Já tem data selecionada
+      
+      setLoadingUltimaLiquidacao(true);
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        
+        // Buscar última liquidação (ABERTO primeiro, depois FECHADO)
+        const { data, error } = await supabase
+          .from('liquidacoes_diarias')
+          .select('id, data_abertura, status')
+          .eq('rota_id', rotaId)
+          .in('status', ['ABERTO', 'REABERTO', 'FECHADO'])
+          .order('data_abertura', { ascending: false })
+          .limit(10);
+        
+        if (!error && data && data.length > 0) {
+          // Priorizar ABERTO/REABERTO
+          const aberta = data.find(l => l.status === 'ABERTO' || l.status === 'REABERTO');
+          const liquidacao = aberta || data[0];
+          
+          // Extrair data (formato YYYY-MM-DD)
+          const dataAbertura = liquidacao.data_abertura.split('T')[0];
+          setDataLiquidacao(dataAbertura);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar última liquidação:', error);
+      } finally {
+        setLoadingUltimaLiquidacao(false);
+      }
+    };
+    
+    buscarUltimaLiquidacao();
+  }, [modoFiltroTemporal, rotaId, dataLiquidacao]);
 
   useEffect(() => {
     if (empresaId && abaAtiva === 'resumo') {
@@ -1022,19 +1067,28 @@ export default function FinanceiroPage() {
               ) : (
                 <div className="flex items-center gap-3">
                   <span className="text-sm text-gray-600">Data da liquidação:</span>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                    <input
-                      type="date"
-                      value={dataLiquidacao}
-                      onChange={(e) => setDataLiquidacao(e.target.value)}
-                      className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white min-w-[180px]"
-                    />
-                  </div>
-                  {dataLiquidacao && (
-                    <span className="text-sm text-blue-600 font-medium">
-                      {new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
-                    </span>
+                  {loadingUltimaLiquidacao ? (
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Buscando...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                        <input
+                          type="date"
+                          value={dataLiquidacao}
+                          onChange={(e) => setDataLiquidacao(e.target.value)}
+                          className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white min-w-[180px]"
+                        />
+                      </div>
+                      {dataLiquidacao && (
+                        <span className="text-sm text-blue-600 font-medium">
+                          {new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               )}
