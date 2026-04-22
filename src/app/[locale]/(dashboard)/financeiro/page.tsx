@@ -769,22 +769,22 @@ export default function FinanceiroPage() {
 
       // Filtro por data de liquidação
       if (dataLiquidacao) {
-        const dataMovimento = m.data_movimento?.split('T')[0] || m.created_at?.split('T')[0];
+        const dataMovimento = m.data_lancamento?.split('T')[0];
         if (dataMovimento !== dataLiquidacao) return false;
       }
 
-      // Filtro por busca (descrição, detalhe, referência)
+      // Filtro por busca (descrição, observações)
       if (buscaExtrato) {
         const termo = buscaExtrato.toLowerCase();
         const descricao = (m.descricao || '').toLowerCase();
-        const detalhe = (m.detalhe || '').toLowerCase();
-        const referencia = (m.referencia || '').toLowerCase();
-        const clienteNome = (m.cliente_nome || '').toLowerCase();
+        const observacoes = (m.observacoes || '').toLowerCase();
+        const contaOrigem = (m.conta_origem_nome || '').toLowerCase();
+        const contaDestino = (m.conta_destino_nome || '').toLowerCase();
         
         if (!descricao.includes(termo) && 
-            !detalhe.includes(termo) && 
-            !referencia.includes(termo) &&
-            !clienteNome.includes(termo)) {
+            !observacoes.includes(termo) && 
+            !contaOrigem.includes(termo) &&
+            !contaDestino.includes(termo)) {
           return false;
         }
       }
