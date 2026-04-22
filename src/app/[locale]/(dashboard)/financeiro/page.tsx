@@ -18,7 +18,8 @@ import {
   FileText,
   AlertCircle,
   X,
-  Eye
+  Eye,
+  Search
 } from 'lucide-react';
 import {
   BarChart,
@@ -554,6 +555,9 @@ export default function FinanceiroPage() {
   });
   const [contaFiltro, setContaFiltro] = useState<string>('');
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
+  const [buscaExtrato, setBuscaExtrato] = useState<string>('');
+  const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
+  const [dataLiquidacao, setDataLiquidacao] = useState<string>(''); // YYYY-MM-DD
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingResumo, setLoadingResumo] = useState(false);
@@ -756,6 +760,43 @@ export default function FinanceiroPage() {
   const totalEntradas = movimentos.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
 
+  // Filtrar movimentos localmente (busca, tipo, data liquidação)
+  const movimentosFiltrados = React.useMemo(() => {
+    return movimentos.filter(m => {
+      // Filtro por tipo (ENTRADA/SAIDA)
+      if (tipoMovimento === 'ENTRADA' && m.tipo !== 'RECEBER') return false;
+      if (tipoMovimento === 'SAIDA' && m.tipo !== 'PAGAR') return false;
+
+      // Filtro por data de liquidação
+      if (dataLiquidacao) {
+        const dataMovimento = m.data_movimento?.split('T')[0] || m.created_at?.split('T')[0];
+        if (dataMovimento !== dataLiquidacao) return false;
+      }
+
+      // Filtro por busca (descrição, detalhe, referência)
+      if (buscaExtrato) {
+        const termo = buscaExtrato.toLowerCase();
+        const descricao = (m.descricao || '').toLowerCase();
+        const detalhe = (m.detalhe || '').toLowerCase();
+        const referencia = (m.referencia || '').toLowerCase();
+        const clienteNome = (m.cliente_nome || '').toLowerCase();
+        
+        if (!descricao.includes(termo) && 
+            !detalhe.includes(termo) && 
+            !referencia.includes(termo) &&
+            !clienteNome.includes(termo)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [movimentos, tipoMovimento, dataLiquidacao, buscaExtrato]);
+
+  // Recalcular totais com base nos filtrados
+  const totalEntradasFiltrado = movimentosFiltrados.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
+  const totalSaidasFiltrado = movimentosFiltrados.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
+
   // Preparar itens para os cards detalhados
   const rotasItens = saldos.rotas_detalhe?.map(r => ({ nome: r.rota_nome, valor: r.saldo })) || [];
   const microsegurosItens = saldos.microseguros_detalhe?.map(m => ({ 
@@ -928,10 +969,59 @@ export default function FinanceiroPage() {
 
       {abaAtiva === 'extrato' && (
         <div className="space-y-4">
+          {/* Linha 1: Busca + Data Liquidação */}
+          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={buscaExtrato}
+                onChange={(e) => setBuscaExtrato(e.target.value)}
+                placeholder="Buscar por descrição, detalhe, cliente..."
+                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-500 whitespace-nowrap">Liquidação:</span>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                <input
+                  type="date"
+                  value={dataLiquidacao}
+                  onChange={(e) => setDataLiquidacao(e.target.value)}
+                  className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white min-w-[160px]"
+                />
+              </div>
+              {dataLiquidacao && (
+                <button
+                  onClick={() => setDataLiquidacao('')}
+                  className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Linha 2: Período + Conta + Categoria + Tipo */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <FiltroPeriodo filtro={filtroExtrato} onChange={setFiltroExtrato} />
             
             <div className="flex flex-wrap items-center gap-3">
+              <div className="relative">
+                <select 
+                  value={tipoMovimento} 
+                  onChange={(e) => setTipoMovimento(e.target.value)} 
+                  className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                >
+                  <option value="">Entradas e Saídas</option>
+                  <option value="ENTRADA">📥 Entradas</option>
+                  <option value="SAIDA">📤 Saídas</option>
+                </select>
+                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              </div>
+
               <div className="relative">
                 <select value={contaFiltro} onChange={(e) => setContaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
                   <option value="">Todas as Contas</option>
@@ -955,6 +1045,22 @@ export default function FinanceiroPage() {
                 </select>
                 <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
               </div>
+
+              {(buscaExtrato || dataLiquidacao || tipoMovimento || contaFiltro || categoriaFiltro) && (
+                <button
+                  onClick={() => {
+                    setBuscaExtrato('');
+                    setDataLiquidacao('');
+                    setTipoMovimento('');
+                    setContaFiltro('');
+                    setCategoriaFiltro('');
+                  }}
+                  className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm flex items-center gap-1"
+                >
+                  <X className="w-4 h-4" />
+                  Limpar
+                </button>
+              )}
             </div>
           </div>
 
@@ -973,8 +1079,8 @@ export default function FinanceiroPage() {
                 <tbody className="divide-y divide-gray-100">
                   {loadingExtrato ? (
                     <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
-                  ) : movimentos.length > 0 ? (
-                    movimentos.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
+                  ) : movimentosFiltrados.length > 0 ? (
+                    movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
                   ) : (
                     <tr><td colSpan={5} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center">
@@ -987,13 +1093,13 @@ export default function FinanceiroPage() {
               </table>
             </div>
             
-            {movimentos.length > 0 && (
+            {movimentosFiltrados.length > 0 && (
               <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
                 <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-                  <span className="text-gray-600">{movimentos.length} registros</span>
+                  <span className="text-gray-600">{movimentosFiltrados.length} registros</span>
                   <div className="flex items-center gap-6">
-                    <span className="text-green-600 font-medium">Entradas: {totalEntradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                    <span className="text-red-600 font-medium">Saídas: {totalSaidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    <span className="text-green-600 font-medium">Entradas: {totalEntradasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                    <span className="text-red-600 font-medium">Saídas: {totalSaidasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                   </div>
                 </div>
               </div>
