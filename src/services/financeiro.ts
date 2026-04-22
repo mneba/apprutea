@@ -187,26 +187,19 @@ export const financeiroService = {
   ): Promise<MovimentoFinanceiro[]> {
     const supabase = createClient();
     
-    // Converter para periodo se for datas customizadas
-    let periodoParam = filtros.periodo || 'hoje';
+    // Se tiver datas específicas, passa direto para a function
+    // Senão, converte período para o formato esperado
+    let periodoParam: string | null = null;
+    let dataInicioParam: string | null = null;
+    let dataFimParam: string | null = null;
     
-    if (filtros.data_inicio && filtros.data_fim && !filtros.periodo) {
-      const inicio = new Date(filtros.data_inicio);
-      const fim = new Date(filtros.data_fim);
-      const hoje = new Date();
-      hoje.setHours(0, 0, 0, 0);
-      
-      const diffDias = Math.ceil((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24));
-      
-      if (diffDias <= 1) {
-        periodoParam = inicio.toDateString() === hoje.toDateString() ? 'hoje' : 'ontem';
-      } else if (diffDias <= 7) {
-        periodoParam = '7dias';
-      } else if (diffDias <= 15) {
-        periodoParam = '15dias';
-      } else {
-        periodoParam = '30dias';
-      }
+    if (filtros.data_inicio && filtros.data_fim) {
+      // Modo: datas específicas (ex: liquidação de um dia)
+      dataInicioParam = filtros.data_inicio;
+      dataFimParam = filtros.data_fim;
+    } else {
+      // Modo: período (hoje, ontem, 7dias, etc.)
+      periodoParam = filtros.periodo || 'hoje';
     }
     
     const { data, error } = await supabase.rpc('fn_buscar_extrato_financeiro', {
@@ -217,6 +210,8 @@ export const financeiroService = {
       p_tipo: filtros.tipo || null,
       p_limite: 100,
       p_rota_id: filtros.rota_id || null,
+      p_data_inicio: dataInicioParam,
+      p_data_fim: dataFimParam,
     });
     
     if (error) {
