@@ -1,3 +1,4 @@
+
 // =====================================================
 // SERVICE DO MÓDULO FINANCEIRO - SISTEMA BELLA KIDS
 // Integrado com Functions do Supabase
