@@ -733,12 +733,13 @@ export default function FinanceiroPage() {
         const supabase = (await import('@/lib/supabase/client')).createClient();
         
         // Buscar última liquidação (ABERTO primeiro, depois FECHADO)
+        // Usar data_liquidacao, não data_abertura
         const { data, error } = await supabase
           .from('liquidacoes_diarias')
-          .select('id, data_abertura, status')
+          .select('id, data_liquidacao, status')
           .eq('rota_id', rotaId)
           .in('status', ['ABERTO', 'REABERTO', 'FECHADO'])
-          .order('data_abertura', { ascending: false })
+          .order('data_liquidacao', { ascending: false })
           .limit(10);
         
         if (!error && data && data.length > 0) {
@@ -746,9 +747,8 @@ export default function FinanceiroPage() {
           const aberta = data.find(l => l.status === 'ABERTO' || l.status === 'REABERTO');
           const liquidacao = aberta || data[0];
           
-          // Extrair data (formato YYYY-MM-DD)
-          const dataAbertura = liquidacao.data_abertura.split('T')[0];
-          setDataLiquidacao(dataAbertura);
+          // Usar data_liquidacao diretamente (já é DATE, formato YYYY-MM-DD)
+          setDataLiquidacao(liquidacao.data_liquidacao);
         }
       } catch (error) {
         console.error('Erro ao buscar última liquidação:', error);
