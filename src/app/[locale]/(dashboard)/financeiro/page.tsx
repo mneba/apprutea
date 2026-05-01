@@ -400,13 +400,30 @@ function LinhaExtrato({
     const [ano, mes, dia] = dataStr.split('T')[0].split('-');
     return `${dia}/${mes}/${ano}`;
   };
+
+  // Formatar data curta (DD/MM/AA)
+  const formatarDataCurta = (dataStr: string) => {
+    if (!dataStr) return '';
+    const [ano, mes, dia] = dataStr.split('T')[0].split('-');
+    return `${dia}/${mes}/${ano.slice(2)}`;
+  };
+
+  // Verificar se data_lancamento é diferente de data_liquidacao
+  const dataLancStr = movimento.data_lancamento?.split('T')[0];
+  const dataLiqStr = (movimento as any).data_liquidacao?.split('T')[0];
+  const temDataLiqDiferente = dataLiqStr && dataLancStr && dataLancStr !== dataLiqStr;
   
   return (
     <tr className="hover:bg-gray-50 transition-colors">
       <td className="px-4 py-3">
-        <span className="text-sm text-gray-600">
+        <div className="text-sm text-gray-600">
           {formatarData(movimento.data_lancamento)}
-        </span>
+          {temDataLiqDiferente && (
+            <span className="text-xs text-gray-400 ml-1">
+              (liq {formatarDataCurta(dataLiqStr)})
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <div>
