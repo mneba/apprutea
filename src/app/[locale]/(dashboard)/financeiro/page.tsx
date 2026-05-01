@@ -832,11 +832,8 @@ export default function FinanceiroPage() {
       if (tipoMovimento === 'ENTRADA' && m.tipo !== 'RECEBER') return false;
       if (tipoMovimento === 'SAIDA' && m.tipo !== 'PAGAR') return false;
 
-      // Filtro por data de liquidação (apenas no modo liquidação)
-      if (modoFiltroTemporal === 'liquidacao' && dataLiquidacao) {
-        const dataMovimento = m.data_lancamento?.split('T')[0];
-        if (dataMovimento !== dataLiquidacao) return false;
-      }
+      // No modo liquidação, o backend já filtrou por liquidacao_id
+      // Não precisa filtrar por data aqui
 
       // Filtro por busca (descrição, observações)
       if (buscaExtrato) {
@@ -856,7 +853,7 @@ export default function FinanceiroPage() {
 
       return true;
     });
-  }, [movimentos, tipoMovimento, modoFiltroTemporal, dataLiquidacao, buscaExtrato]);
+  }, [movimentos, tipoMovimento, buscaExtrato]);
 
   // Recalcular totais com base nos filtrados
   const totalEntradasFiltrado = movimentosFiltrados.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
