@@ -171,30 +171,20 @@ function ModalDetalhesSolicitacao({
       try {
         const supabase = createClient();
         
-        // Buscar empréstimo
-        const { data: emprestimo, error: errEmprestimo } = await supabase
-          .from('emprestimos')
-          .select('id, valor_principal, valor_total, valor_saldo, status, data_emprestimo, qtd_parcelas')
-          .eq('id', solicitacao.emprestimo_id)
-          .single();
+        // Usar RPC para evitar problemas de RLS
+        const { data, error } = await supabase.rpc('fn_buscar_detalhes_emprestimo_solicitacao', {
+          p_emprestimo_id: solicitacao.emprestimo_id
+        });
 
-        if (errEmprestimo || !emprestimo) {
-          console.error('Erro ao buscar empréstimo:', errEmprestimo);
+        if (error) {
+          console.error('Erro ao buscar empréstimo:', error);
           setLoadingDetalhes(false);
           return;
         }
 
-        // Buscar parcelas vencidas separadamente
-        const { count: parcelasVencidas } = await supabase
-          .from('emprestimo_parcelas')
-          .select('*', { count: 'exact', head: true })
-          .eq('emprestimo_id', solicitacao.emprestimo_id)
-          .eq('status', 'VENCIDA');
-        
-        setDetalhesEmprestimo({
-          ...emprestimo,
-          parcelas_vencidas: parcelasVencidas || 0
-        });
+        if (data && data.length > 0) {
+          setDetalhesEmprestimo(data[0]);
+        }
       } catch (err) {
         console.error('Erro ao carregar detalhes do empréstimo:', err);
       } finally {
