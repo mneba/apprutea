@@ -170,32 +170,31 @@ function ModalDetalhesSolicitacao({
       setLoadingDetalhes(true);
       try {
         const supabase = createClient();
-        const { data, error } = await supabase
+        
+        // Buscar empréstimo
+        const { data: emprestimo, error: errEmprestimo } = await supabase
           .from('emprestimos')
-          .select(`
-            id,
-            valor_principal,
-            valor_total,
-            valor_saldo,
-            status,
-            data_emprestimo,
-            qtd_parcelas,
-            emprestimo_parcelas!inner(status)
-          `)
+          .select('id, valor_principal, valor_total, valor_saldo, status, data_emprestimo, qtd_parcelas')
           .eq('id', solicitacao.emprestimo_id)
           .single();
 
-        if (!error && data) {
-          // Contar parcelas vencidas
-          const parcelasVencidas = data.emprestimo_parcelas?.filter(
-            (p: any) => p.status === 'VENCIDA'
-          ).length || 0;
-          
-          setDetalhesEmprestimo({
-            ...data,
-            parcelas_vencidas: parcelasVencidas
-          });
+        if (errEmprestimo || !emprestimo) {
+          console.error('Erro ao buscar empréstimo:', errEmprestimo);
+          setLoadingDetalhes(false);
+          return;
         }
+
+        // Buscar parcelas vencidas separadamente
+        const { count: parcelasVencidas } = await supabase
+          .from('emprestimo_parcelas')
+          .select('*', { count: 'exact', head: true })
+          .eq('emprestimo_id', solicitacao.emprestimo_id)
+          .eq('status', 'VENCIDA');
+        
+        setDetalhesEmprestimo({
+          ...emprestimo,
+          parcelas_vencidas: parcelasVencidas || 0
+        });
       } catch (err) {
         console.error('Erro ao carregar detalhes do empréstimo:', err);
       } finally {
