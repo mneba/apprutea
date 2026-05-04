@@ -15,9 +15,11 @@ import {
   User,
   MapPin,
   DollarSign,
-  RefreshCw
+  RefreshCw,
+  PlusCircle
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { createClient } from '@/lib/supabase/client';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
 
 // Labels e ícones por tipo de solicitação
@@ -88,6 +90,18 @@ const TIPO_CONFIG: Record<string, { titulo: string; subtitulo: string; icone: st
     icone: '🔀',
     cor: 'purple'
   },
+  'RENEGOCIACAO': { 
+    titulo: 'Renegociação', 
+    subtitulo: 'Autorização de Renegociação',
+    icone: '🔄',
+    cor: 'blue'
+  },
+  'EMPRESTIMO_ADICIONAL': { 
+    titulo: 'Empréstimo Adicional', 
+    subtitulo: 'Autorização de Empréstimo Adicional',
+    icone: '➕',
+    cor: 'green'
+  },
 };
 
 // Modal de Detalhes/Ação
@@ -107,6 +121,9 @@ function ModalDetalhesSolicitacao({
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [motivoAprovacao, setMotivoAprovacao] = useState('');
   const [mostrarMotivoRejeicao, setMostrarMotivoRejeicao] = useState(false);
+  const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
+  const [detalhesEmprestimo, setDetalhesEmprestimo] = useState<any>(null);
+  const [loadingDetalhes, setLoadingDetalhes] = useState(false);
 
   const statusColors = STATUS_SOLICITACAO_COLORS[solicitacao.status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
   const tipoConfig = TIPO_CONFIG[solicitacao.tipo_solicitacao] || { 
@@ -141,6 +158,67 @@ function ModalDetalhesSolicitacao({
   // Verificar tipo de solicitação
   const isAbertura = ['ABERTURA_RETROATIVA', 'ABERTURA_DIAS_FALTANTES'].includes(solicitacao.tipo_solicitacao);
   const isExclusaoParcela = solicitacao.tipo_solicitacao === 'ESTORNO_PAGAMENTO';
+  const isRenegociacao = solicitacao.tipo_solicitacao === 'RENEGOCIACAO';
+  const isEmprestimoAdicional = solicitacao.tipo_solicitacao === 'EMPRESTIMO_ADICIONAL';
+  const isAutorizacaoCliente = isRenegociacao || isEmprestimoAdicional;
+
+  // Carregar detalhes do empréstimo para renegociação
+  useEffect(() => {
+    const carregarDetalhesEmprestimo = async () => {
+      if (!isRenegociacao || !solicitacao.emprestimo_id) return;
+      
+      setLoadingDetalhes(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('emprestimos')
+          .select(`
+            id,
+            valor_principal,
+            valor_total,
+            valor_saldo,
+            status,
+            data_emprestimo,
+            qtd_parcelas,
+            emprestimo_parcelas!inner(status)
+          `)
+          .eq('id', solicitacao.emprestimo_id)
+          .single();
+
+        if (!error && data) {
+          // Contar parcelas vencidas
+          const parcelasVencidas = data.emprestimo_parcelas?.filter(
+            (p: any) => p.status === 'VENCIDA'
+          ).length || 0;
+          
+          setDetalhesEmprestimo({
+            ...data,
+            parcelas_vencidas: parcelasVencidas
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao carregar detalhes do empréstimo:', err);
+      } finally {
+        setLoadingDetalhes(false);
+      }
+    };
+
+    carregarDetalhesEmprestimo();
+  }, [isRenegociacao, solicitacao.emprestimo_id]);
+
+  // Handler para confirmar aprovação de autorização de cliente
+  const handleConfirmarAprovacao = () => {
+    if (isAutorizacaoCliente) {
+      setMostrarConfirmacao(true);
+    } else {
+      onAprovar(motivoAprovacao || undefined);
+    }
+  };
+
+  const handleAprovacaoConfirmada = () => {
+    setMostrarConfirmacao(false);
+    onAprovar(motivoAprovacao || undefined);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -253,8 +331,108 @@ function ModalDetalhesSolicitacao({
             </>
           )}
 
+          {/* === RENEGOCIAÇÃO ou EMPRÉSTIMO ADICIONAL === */}
+          {isAutorizacaoCliente && (
+            <>
+              {/* Info Grid */}
+              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Cliente</span>
+                  <p className="font-medium text-gray-900 text-lg">{solicitacao.cliente_nome || '-'}</p>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Vendedor</span>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
+                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
+                  </div>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Rota</span>
+                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
+                </div>
+              </div>
+
+              {/* Detalhes do Empréstimo (apenas para renegociação) */}
+              {isRenegociacao && (
+                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-blue-800 mb-3 flex items-center gap-2">
+                    <RefreshCw className="w-4 h-4" />
+                    Empréstimo a Renegociar
+                  </h4>
+                  {loadingDetalhes ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
+                    </div>
+                  ) : detalhesEmprestimo ? (
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-blue-600">Valor Principal:</span>
+                        <span className="font-medium text-blue-900">{formatarMoeda(detalhesEmprestimo.valor_principal)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-600">Valor Total:</span>
+                        <span className="font-medium text-blue-900">{formatarMoeda(detalhesEmprestimo.valor_total)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-600">Saldo Devedor:</span>
+                        <span className="font-semibold text-blue-900">{formatarMoeda(detalhesEmprestimo.valor_saldo)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-600">Data do Empréstimo:</span>
+                        <span className="text-blue-900">{formatarDataSimples(detalhesEmprestimo.data_emprestimo)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-blue-600">Status:</span>
+                        <span className={`font-medium ${detalhesEmprestimo.status === 'VENCIDO' ? 'text-red-600' : 'text-blue-900'}`}>
+                          {detalhesEmprestimo.status}
+                        </span>
+                      </div>
+                      {detalhesEmprestimo.parcelas_vencidas > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-blue-600">Parcelas Vencidas:</span>
+                          <span className="font-medium text-red-600">{detalhesEmprestimo.parcelas_vencidas}</span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-blue-600">Detalhes do empréstimo não disponíveis</p>
+                  )}
+                </div>
+              )}
+
+              {/* Info para Empréstimo Adicional */}
+              {isEmprestimoAdicional && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
+                  <h4 className="text-sm font-medium text-green-800 mb-2 flex items-center gap-2">
+                    <PlusCircle className="w-4 h-4" />
+                    Empréstimo Adicional
+                  </h4>
+                  <p className="text-sm text-green-700">
+                    O cliente já possui um empréstimo ativo e o vendedor está solicitando autorização para conceder um empréstimo adicional.
+                  </p>
+                </div>
+              )}
+
+              {/* Motivo */}
+              <div>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-sm font-medium text-gray-700">Motivo da Solicitação</span>
+                </div>
+                <div className={`${isRenegociacao ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'} border rounded-xl p-4`}>
+                  <p className={`text-xs ${isRenegociacao ? 'text-blue-600' : 'text-green-600'} mb-1`}>Comentário do vendedor:</p>
+                  <p className={`text-sm ${isRenegociacao ? 'text-blue-900' : 'text-green-900'} whitespace-pre-wrap`}>
+                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
           {/* === OUTROS TIPOS (layout genérico) === */}
-          {!isAbertura && !isExclusaoParcela && (
+          {!isAbertura && !isExclusaoParcela && !isAutorizacaoCliente && (
             <>
               {/* Info Grid */}
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -380,7 +558,7 @@ function ModalDetalhesSolicitacao({
         </div>
 
         {/* Footer */}
-        {solicitacao.status === 'PENDENTE' && (
+        {solicitacao.status === 'PENDENTE' && !mostrarConfirmacao && (
           <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={onClose}
@@ -400,12 +578,12 @@ function ModalDetalhesSolicitacao({
                   Rejeitar
                 </button>
                 <button
-                  onClick={() => onAprovar(motivoAprovacao || undefined)}
+                  onClick={handleConfirmarAprovacao}
                   disabled={loading}
                   className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  Aprovar
+                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : 'Aprovar'}
                 </button>
               </>
             ) : (
@@ -426,6 +604,41 @@ function ModalDetalhesSolicitacao({
                 </button>
               </>
             )}
+          </div>
+        )}
+
+        {/* Modal de Confirmação para Autorização de Cliente */}
+        {mostrarConfirmacao && (
+          <div className="px-6 py-4 border-t border-gray-200 bg-amber-50">
+            <div className="mb-4">
+              <div className="flex items-center gap-2 text-amber-800 mb-2">
+                <AlertTriangle className="w-5 h-5" />
+                <span className="font-medium">Confirmar Autorização</span>
+              </div>
+              <p className="text-sm text-amber-700">
+                Tem certeza que deseja autorizar o cliente <strong>{solicitacao.cliente_nome}</strong> a {' '}
+                {isRenegociacao ? 'renegociar seu empréstimo' : 'obter um empréstimo adicional'}?
+              </p>
+              <p className="text-xs text-amber-600 mt-2">
+                Esta autorização será válida até que o vendedor a utilize.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                onClick={() => setMostrarConfirmacao(false)}
+                className="px-4 py-2 text-gray-600 hover:bg-amber-100 rounded-lg transition-colors text-sm"
+              >
+                Voltar
+              </button>
+              <button
+                onClick={handleAprovacaoConfirmada}
+                disabled={loading}
+                className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
+              >
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                Sim, Autorizar
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -464,6 +677,7 @@ export default function LiberacoesPage() {
     'LIQUIDACAO': ['ABERTURA_RETROATIVA', 'ABERTURA_DIAS_FALTANTES', 'REABRIR_LIQUIDACAO'],
     'ENTRADAS': ['VENDA_EXCEDE_LIMITE', 'RENOVACAO_EXCEDE_LIMITE', 'RECEITA_EXCEDE_LIMITE'],
     'SAIDAS': ['DESPESA_EXCEDE_LIMITE', 'ESTORNO_PAGAMENTO', 'CANCELAR_EMPRESTIMO', 'QUITAR_COM_DESCONTO'],
+    'CLIENTES': ['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL', 'CLIENTE_OUTRA_ROTA'],
   };
 
   // Carregar TODAS as solicitações (sem filtro de status)
@@ -492,7 +706,15 @@ export default function LiberacoesPage() {
     if (!solicitacaoSelecionada || !user) return;
     setLoadingAcao(true);
     try {
-      const resultado = await solicitacoesService.aprovar(solicitacaoSelecionada.id, user.id, motivo);
+      let resultado;
+      
+      // Para RENEGOCIACAO e EMPRESTIMO_ADICIONAL, usar função especial
+      if (['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL'].includes(solicitacaoSelecionada.tipo_solicitacao)) {
+        resultado = await solicitacoesService.aprovarAutorizacaoCliente(solicitacaoSelecionada, user.id);
+      } else {
+        resultado = await solicitacoesService.aprovar(solicitacaoSelecionada.id, user.id, motivo);
+      }
+      
       if (resultado.success) {
         setSolicitacaoSelecionada(null);
         carregarSolicitacoes();
@@ -725,6 +947,7 @@ export default function LiberacoesPage() {
               <option value="LIQUIDACAO">📅 Liquidação</option>
               <option value="ENTRADAS">📥 Entradas</option>
               <option value="SAIDAS">📤 Saídas</option>
+              <option value="CLIENTES">👤 Clientes</option>
             </select>
 
             <select

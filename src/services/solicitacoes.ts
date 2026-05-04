@@ -20,6 +20,8 @@ export const TIPO_SOLICITACAO_LABELS: Record<string, string> = {
   'REABRIR_LIQUIDACAO': 'Reabrir Liquidação',
   'QUITAR_COM_DESCONTO': 'Quitar com Desconto',
   'CLIENTE_OUTRA_ROTA': 'Cliente de Outra Rota',
+  'RENEGOCIACAO': 'Renegociação',
+  'EMPRESTIMO_ADICIONAL': 'Empréstimo Adicional',
 };
 
 export const STATUS_SOLICITACAO_COLORS: Record<string, { bg: string; text: string; label: string }> = {
@@ -144,6 +146,39 @@ export const solicitacoesService = {
     return {
       success: resultado?.sucesso || false,
       message: resultado?.mensagem || 'Erro desconhecido',
+    };
+  },
+
+  // Aprovar autorização de cliente (RENEGOCIACAO ou EMPRESTIMO_ADICIONAL)
+  // Atualiza a flag no cliente e o trigger cuida de atualizar a solicitação
+  async aprovarAutorizacaoCliente(
+    solicitacao: Solicitacao, 
+    userId: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!solicitacao.cliente_id) {
+      return { success: false, message: 'Cliente não encontrado na solicitação' };
+    }
+
+    const colunaFlag = solicitacao.tipo_solicitacao === 'RENEGOCIACAO' 
+      ? 'permite_renegociacao' 
+      : 'permite_emprestimo_adicional';
+
+    const { error } = await supabase
+      .from('clientes')
+      .update({ [colunaFlag]: true })
+      .eq('id', solicitacao.cliente_id);
+
+    if (error) {
+      console.error('Erro ao aprovar autorização de cliente:', error);
+      return { success: false, message: error.message };
+    }
+
+    // O trigger tr_cliente_flag_autorizacao cuida de atualizar a solicitação para APROVADO
+    return { 
+      success: true, 
+      message: solicitacao.tipo_solicitacao === 'RENEGOCIACAO' 
+        ? 'Renegociação autorizada com sucesso' 
+        : 'Empréstimo adicional autorizado com sucesso' 
     };
   },
 
