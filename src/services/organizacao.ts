@@ -1,5 +1,13 @@
 import { createClient } from '@/lib/supabase/client';
-import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio } from '@/types/organizacao';
+import type {
+  EmpresaResumo,
+  RotaResumo,
+  ResumoGeral,
+  VendedorDisponivel,
+  Socio,
+  Cidade,
+  CidadeComResumo,
+} from '@/types/organizacao';
 
 const supabase = createClient();
 
@@ -270,6 +278,182 @@ export const organizacaoService = {
     }
 
     return data?.hierarquia_id || null;
+  },
+
+  // ============================================
+  // CIDADES
+  // ============================================
+
+  /**
+   * Lista cidades de uma hierarquia específica (sem contagens).
+   * Uso típico: popular select em cascata na tela de empresa.
+   */
+  async listarCidadesPorHierarquia(hierarquiaId: string): Promise<Cidade[]> {
+    const { data, error } = await supabase
+      .from('cidades')
+      .select('id, hierarquia_id, nome, created_at, updated_at')
+      .eq('hierarquia_id', hierarquiaId)
+      .order('nome');
+
+    if (error) {
+      console.error('Erro ao listar cidades por hierarquia:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  /**
+   * Lista todas as cidades com país/estado e contagem de empresas.
+   * Uso típico: tela de gestão de cidades.
+   */
+  async listarTodasCidades(): Promise<CidadeComResumo[]> {
+    // 1. Buscar cidades com hierarquia
+    const { data: cidades, error } = await supabase
+      .from('cidades')
+      .select(`
+        id,
+        hierarquia_id,
+        nome,
+        created_at,
+        updated_at,
+        hierarquias!inner (
+          pais,
+          estado
+        )
+      `)
+      .order('nome');
+
+    if (error) {
+      console.error('Erro ao listar cidades:', error);
+      return [];
+    }
+
+    if (!cidades || cidades.length === 0) {
+      return [];
+    }
+
+    // 2. Buscar contagens de empresas em uma única query
+    const cidadeIds = cidades.map((c: any) => c.id);
+
+    const { data: empresas, error: errEmpresas } = await supabase
+      .from('empresas')
+      .select('cidade_id')
+      .in('cidade_id', cidadeIds);
+
+    if (errEmpresas) {
+      console.error('Erro ao contar empresas por cidade:', errEmpresas);
+    }
+
+    const contagemPorCidade = new Map<string, number>();
+    (empresas || []).forEach((e: any) => {
+      contagemPorCidade.set(e.cidade_id, (contagemPorCidade.get(e.cidade_id) || 0) + 1);
+    });
+
+    // 3. Montar resultado
+    return cidades.map((c: any) => ({
+      id: c.id,
+      hierarquia_id: c.hierarquia_id,
+      nome: c.nome,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+      pais: c.hierarquias.pais,
+      estado: c.hierarquias.estado,
+      total_empresas: contagemPorCidade.get(c.id) || 0,
+    }));
+  },
+
+  /**
+   * Cria uma nova cidade.
+   * UNIQUE(hierarquia_id, nome) é validado no banco.
+   */
+  async criarCidade(dados: {
+    hierarquia_id: string;
+    nome: string;
+  }): Promise<Cidade> {
+    const nome = dados.nome.trim();
+    if (!nome) {
+      throw new Error('Nome da cidade é obrigatório');
+    }
+
+    const { data, error } = await supabase
+      .from('cidades')
+      .insert({
+        hierarquia_id: dados.hierarquia_id,
+        nome,
+      })
+      .select('id, hierarquia_id, nome, created_at, updated_at')
+      .single();
+
+    if (error) {
+      console.error('Erro ao criar cidade:', error);
+      if (error.code === '23505') {
+        throw new Error('Já existe uma cidade com este nome neste estado');
+      }
+      throw error;
+    }
+
+    return data;
+  },
+
+  /**
+   * Atualiza o nome de uma cidade.
+   * Hierarquia não é alterável.
+   */
+  async atualizarCidade(cidadeId: string, dados: { nome: string }): Promise<void> {
+    const nome = dados.nome.trim();
+    if (!nome) {
+      throw new Error('Nome da cidade é obrigatório');
+    }
+
+    const { error } = await supabase
+      .from('cidades')
+      .update({
+        nome,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', cidadeId);
+
+    if (error) {
+      console.error('Erro ao atualizar cidade:', error);
+      if (error.code === '23505') {
+        throw new Error('Já existe uma cidade com este nome neste estado');
+      }
+      throw error;
+    }
+  },
+
+  /**
+   * Deleta uma cidade. Só permite se não houver empresas vinculadas.
+   */
+  async deletarCidade(cidadeId: string): Promise<void> {
+    // 1. Validar: cidade não pode ter empresas
+    const { count, error: errCount } = await supabase
+      .from('empresas')
+      .select('id', { count: 'exact', head: true })
+      .eq('cidade_id', cidadeId);
+
+    if (errCount) {
+      console.error('Erro ao validar empresas da cidade:', errCount);
+      throw errCount;
+    }
+
+    if ((count || 0) > 0) {
+      throw new Error(
+        `Não é possível excluir esta cidade: existem ${count} empresa(s) vinculada(s)`
+      );
+    }
+
+    // 2. Deletar
+    const { error } = await supabase
+      .from('cidades')
+      .delete()
+      .eq('id', cidadeId);
+
+    if (error) {
+      console.error('Erro ao deletar cidade:', error);
+      throw error;
+    }
   },
 
   // ============================================

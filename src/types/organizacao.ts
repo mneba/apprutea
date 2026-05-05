@@ -63,3 +63,27 @@ export interface UsuarioEmpresa {
   is_socio: boolean;
   percentual_participacao?: number;
 }
+
+// ============================================
+// HIERARQUIAS E CIDADES
+// ============================================
+
+export interface Hierarquia {
+  id: string;
+  pais: string;
+  estado: string;
+}
+
+export interface Cidade {
+  id: string;
+  hierarquia_id: string;
+  nome: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CidadeComResumo extends Cidade {
+  pais: string;
+  estado: string;
+  total_empresas: number;
+}
