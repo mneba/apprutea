@@ -26,8 +26,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { organizacaoService } from '@/services/organizacao';
-import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio, Cidade } from '@/types/organizacao';
-import ModalGerenciarCidades from '@/components/organizacao/ModalGerenciarCidades';
+import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio } from '@/types/organizacao';
 
 type ViewMode = 'empresas' | 'rotas';
 
@@ -74,15 +73,9 @@ export default function OrganizacaoPage() {
   const [novoSocioDocumento, setNovoSocioDocumento] = useState('');
   const [novoSocioPercentual, setNovoSocioPercentual] = useState('');
 
-  // Hierarquias e cidades (para seletores em cascata)
+  // Hierarquias (para seletor de cidade)
   const [hierarquias, setHierarquias] = useState<{ id: string; pais: string; estado: string }[]>([]);
   const [hierarquiaIdEmpresa, setHierarquiaIdEmpresa] = useState('');
-  const [cidadesEmpresa, setCidadesEmpresa] = useState<Cidade[]>([]);
-  const [cidadeIdEmpresa, setCidadeIdEmpresa] = useState('');
-  const [carregandoCidades, setCarregandoCidades] = useState(false);
-
-  // Modal de gerenciar cidades (somente SUPER_ADMIN)
-  const [modalCidades, setModalCidades] = useState(false);
 
   // Modal de clientes da rota (ordenação)
   const [modalClientes, setModalClientes] = useState(false);
@@ -146,26 +139,6 @@ export default function OrganizacaoPage() {
       carregarDados();
     }
   }, [loadingUser, profile, localizacao]);
-
-  // Carregar cidades quando muda o estado/hierarquia selecionada no modal de empresa
-  useEffect(() => {
-    const carregarCidadesDaHierarquia = async () => {
-      if (!hierarquiaIdEmpresa) {
-        setCidadesEmpresa([]);
-        return;
-      }
-      setCarregandoCidades(true);
-      try {
-        const lista = await organizacaoService.listarCidadesPorHierarquia(hierarquiaIdEmpresa);
-        setCidadesEmpresa(lista);
-      } catch (err) {
-        console.error('Erro ao carregar cidades:', err);
-      } finally {
-        setCarregandoCidades(false);
-      }
-    };
-    carregarCidadesDaHierarquia();
-  }, [hierarquiaIdEmpresa]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -779,7 +752,6 @@ export default function OrganizacaoPage() {
     setEnderecoEmpresa('');
     setSociosEmpresa([]);
     setHierarquiaIdEmpresa(hierarquiaId || '');
-    setCidadeIdEmpresa('');
     
     // Carregar hierarquias disponíveis
     const listaHierarquias = await organizacaoService.listarHierarquias();
@@ -803,9 +775,6 @@ export default function OrganizacaoPage() {
     // Buscar hierarquia_id da empresa
     const hierarquiaAtual = await organizacaoService.buscarHierarquiaEmpresa(empresa.id);
     setHierarquiaIdEmpresa(hierarquiaAtual || '');
-
-    // Carregar cidade atual da empresa
-    setCidadeIdEmpresa(empresa.cidade_id || '');
     
     // Carregar sócios
     const socios = await organizacaoService.listarSocios(empresa.id);
@@ -860,19 +829,14 @@ export default function OrganizacaoPage() {
     }
 
     if (!hierarquiaIdEmpresa) {
-      alert('Selecione um estado');
-      return;
-    }
-
-    if (!cidadeIdEmpresa) {
-      alert('Selecione uma cidade');
+      alert('Selecione uma cidade/estado');
       return;
     }
 
     setSalvandoEmpresa(true);
     try {
       if (empresaEditando) {
-        // Atualizar empresa (incluindo hierarquia_id e cidade_id)
+        // Atualizar empresa (incluindo hierarquia_id)
         await organizacaoService.atualizarEmpresa(empresaEditando.id, {
           nome: nomeEmpresa.trim(),
           cnpj: cnpjEmpresa.trim() || undefined,
@@ -880,7 +844,6 @@ export default function OrganizacaoPage() {
           email: emailEmpresa.trim() || undefined,
           endereco: enderecoEmpresa.trim() || undefined,
           hierarquia_id: hierarquiaIdEmpresa,
-          cidade_id: cidadeIdEmpresa,
         });
 
         // Salvar sócios
@@ -898,7 +861,6 @@ export default function OrganizacaoPage() {
         const novaEmpresa = await organizacaoService.criarEmpresa({
           nome: nomeEmpresa.trim(),
           hierarquia_id: hierarquiaIdEmpresa,
-          cidade_id: cidadeIdEmpresa,
           cnpj: cnpjEmpresa.trim() || undefined,
           telefone: telefoneEmpresa.trim() || undefined,
           email: emailEmpresa.trim() || undefined,
@@ -984,33 +946,22 @@ export default function OrganizacaoPage() {
         {isSuperAdmin && (
           <div className="flex items-center gap-2">
             {viewMode === 'rotas' && empresaSelecionada && (
-              <button
-                onClick={() => handleAbrirModalEditarEmpresa(empresaSelecionada)}
-                className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-              >
-                <Edit className="w-5 h-5" />
-                Gerenciar Empresa
-              </button>
-            )}
-
-            {/* Botão Cidades - apenas SUPER_ADMIN */}
-            <button
-              onClick={() => setModalCidades(true)}
-              className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-              title="Gerenciar cidades disponíveis"
-            >
-              <MapPin className="w-5 h-5" />
-              Cidades
-            </button>
-
-            {viewMode === 'rotas' && empresaSelecionada && (
-              <button
-                onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
-              >
-                <Plus className="w-5 h-5" />
-                Nova Rota
-              </button>
+              <>
+                <button
+                  onClick={() => handleAbrirModalEditarEmpresa(empresaSelecionada)}
+                  className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                >
+                  <Edit className="w-5 h-5" />
+                  Gerenciar Empresa
+                </button>
+                <button
+                  onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                >
+                  <Plus className="w-5 h-5" />
+                  Nova Rota
+                </button>
+              </>
             )}
             <button
               onClick={handleAbrirModalNovaEmpresa}
@@ -1506,61 +1457,23 @@ export default function OrganizacaoPage() {
 
             {/* Body */}
             <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-              {/* Estado / País (Hierarquia) */}
+              {/* Cidade/Estado (Hierarquia) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Estado / País
+                  Cidade / Estado
                 </label>
                 <select
                   value={hierarquiaIdEmpresa}
-                  onChange={(e) => {
-                    setHierarquiaIdEmpresa(e.target.value);
-                    setCidadeIdEmpresa(''); // limpa cidade ao trocar estado
-                  }}
+                  onChange={(e) => setHierarquiaIdEmpresa(e.target.value)}
                   className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 >
-                  <option value="">Selecione um estado</option>
+                  <option value="">Selecione uma cidade</option>
                   {hierarquias.map((h) => (
                     <option key={h.id} value={h.id}>
                       {h.estado} - {h.pais}
                     </option>
                   ))}
                 </select>
-              </div>
-
-              {/* Cidade */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Cidade
-                </label>
-                <select
-                  value={cidadeIdEmpresa}
-                  onChange={(e) => setCidadeIdEmpresa(e.target.value)}
-                  disabled={!hierarquiaIdEmpresa || carregandoCidades}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white disabled:bg-gray-50 disabled:text-gray-400"
-                >
-                  <option value="">
-                    {!hierarquiaIdEmpresa
-                      ? 'Selecione um estado primeiro'
-                      : carregandoCidades
-                      ? 'Carregando cidades...'
-                      : cidadesEmpresa.length === 0
-                      ? 'Nenhuma cidade cadastrada'
-                      : 'Selecione uma cidade'}
-                  </option>
-                  {cidadesEmpresa.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.nome}
-                    </option>
-                  ))}
-                </select>
-                {hierarquiaIdEmpresa &&
-                  !carregandoCidades &&
-                  cidadesEmpresa.length === 0 && (
-                    <p className="text-xs text-amber-600 mt-1">
-                      Nenhuma cidade cadastrada para este estado. Use o botão "Cidades" no topo para adicionar.
-                    </p>
-                  )}
               </div>
 
               {/* Nome */}
@@ -2076,23 +1989,6 @@ export default function OrganizacaoPage() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Modal de Gerenciamento de Cidades (apenas SUPER_ADMIN) */}
-      {isSuperAdmin && (
-        <ModalGerenciarCidades
-          aberto={modalCidades}
-          onFechar={() => setModalCidades(false)}
-          onCidadesAlteradas={() => {
-            // Recarrega cidades do select de empresa se estiver aberto
-            if (hierarquiaIdEmpresa) {
-              organizacaoService
-                .listarCidadesPorHierarquia(hierarquiaIdEmpresa)
-                .then(setCidadesEmpresa)
-                .catch(() => {});
-            }
-          }}
-        />
       )}
     </div>
   );
