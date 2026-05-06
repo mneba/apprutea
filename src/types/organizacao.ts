@@ -9,6 +9,8 @@ export interface EmpresaResumo {
   telefone?: string;
   email?: string;
   endereco?: string;
+  cidade_id?: string;
+  cidade_nome?: string;
   total_rotas: number;
   total_clientes: number;
   total_emprestimos: number;

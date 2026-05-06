@@ -97,10 +97,13 @@ export const organizacaoService = {
   // ============================================
 
   async listarEmpresasPorHierarquia(hierarquiaId: string): Promise<EmpresaResumo[]> {
-    // Buscar empresas
+    // Buscar empresas com cidade
     const { data: empresas, error } = await supabase
       .from('empresas')
-      .select('id, nome, cnpj, telefone, email, endereco')
+      .select(`
+        id, nome, cnpj, telefone, email, endereco, cidade_id,
+        cidades ( nome )
+      `)
       .eq('hierarquia_id', hierarquiaId)
       .eq('status', 'ATIVA')
       .order('nome');
@@ -116,7 +119,7 @@ export const organizacaoService = {
 
     // Para cada empresa, buscar contagens
     const empresasComResumo: EmpresaResumo[] = await Promise.all(
-      empresas.map(async (empresa) => {
+      empresas.map(async (empresa: any) => {
         // Buscar rotas da empresa com quantidade_clientes
         const { data: rotasEmpresa } = await supabase
           .from('rotas')
@@ -143,6 +146,8 @@ export const organizacaoService = {
           telefone: empresa.telefone,
           email: empresa.email,
           endereco: empresa.endereco,
+          cidade_id: empresa.cidade_id,
+          cidade_nome: empresa.cidades?.nome,
           total_rotas: totalRotas,
           total_clientes: totalClientes,
           total_emprestimos: totalEmprestimos || 0,
@@ -156,7 +161,10 @@ export const organizacaoService = {
   async buscarEmpresa(empresaId: string): Promise<EmpresaResumo | null> {
     const { data, error } = await supabase
       .from('empresas')
-      .select('id, nome, cnpj, telefone, email, endereco')
+      .select(`
+        id, nome, cnpj, telefone, email, endereco, cidade_id,
+        cidades ( nome )
+      `)
       .eq('id', empresaId)
       .single();
 
@@ -184,8 +192,17 @@ export const organizacaoService = {
       .eq('empresa_id', empresaId)
       .eq('status', 'ATIVO');
 
+    const empresaData: any = data;
+
     return {
-      ...data,
+      id: empresaData.id,
+      nome: empresaData.nome,
+      cnpj: empresaData.cnpj,
+      telefone: empresaData.telefone,
+      email: empresaData.email,
+      endereco: empresaData.endereco,
+      cidade_id: empresaData.cidade_id,
+      cidade_nome: empresaData.cidades?.nome,
       total_rotas: totalRotas,
       total_clientes: totalClientes,
       total_emprestimos: totalEmprestimos || 0,
@@ -195,6 +212,7 @@ export const organizacaoService = {
   async criarEmpresa(dados: {
     nome: string;
     hierarquia_id: string;
+    cidade_id: string;
     cnpj?: string;
     telefone?: string;
     email?: string;
@@ -221,6 +239,7 @@ export const organizacaoService = {
       telefone: data.telefone,
       email: data.email,
       endereco: data.endereco,
+      cidade_id: data.cidade_id,
       total_rotas: 0,
       total_clientes: 0,
       total_emprestimos: 0,
@@ -234,6 +253,7 @@ export const organizacaoService = {
     email?: string;
     endereco?: string;
     hierarquia_id?: string;
+    cidade_id?: string;
   }): Promise<void> {
     const { error } = await supabase
       .from('empresas')
