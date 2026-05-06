@@ -81,7 +81,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
         // Montar seleções existentes do usuário
         const selecoesExistentes: HierarquiaComEmpresa[] = [];
         const empresasIds = usuario.empresas_ids || [];
-        const cidadesIds = usuario.cidades_ids || [];
+        const hierarquiasIds = usuario.hierarquias_ids || [];
         const rotasIds = usuario.rotas_ids || [];
 
         // Para cada empresa, encontrar a hierarquia e rotas correspondentes
@@ -156,7 +156,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
     try {
       // Extrair arrays únicos
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
-      const cidadesIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
+      const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
       const rotasIds = [...new Set(selecoes.flatMap((s) => s.rotas_ids))];
 
       await usuariosService.atualizarUsuario(usuario.user_id, {
@@ -166,7 +166,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
         tipo_usuario: tipoUsuario,
         status,
         empresas_ids: empresasIds,
-        cidades_ids: cidadesIds,
+        hierarquias_ids: hierarquiasIds,
         rotas_ids: rotasIds,
       });
 
@@ -339,7 +339,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
                       ))}
                     </select>
 
-                    {/* Estado/Cidade */}
+                    {/* Estado */}
                     <select
                       value={novaHierarquiaId}
                       onChange={(e) => {

@@ -34,7 +34,7 @@ export const authService = {
         empresa_pretendida: dados.empresa_pretendida,
         status: 'APROVADO',
         tipo_usuario: 'USUARIO_PADRAO',
-        cidades_ids: hierarquia ? [dados.hierarquia_id] : [],
+        hierarquias_ids: hierarquia ? [dados.hierarquia_id] : [],
       })
       .select()
       .single();

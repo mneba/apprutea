@@ -51,7 +51,7 @@ export interface UserProfile {
   observacoes_aprovacao?: string;
   tipo_usuario: 'SUPER_ADMIN' | 'ADMIN' | 'MONITOR' | 'USUARIO_PADRAO' | 'VENDEDOR';
   empresas_ids?: string[];
-  cidades_ids?: string[];
+  hierarquias_ids?: string[];
   rotas_ids?: string[];
   token_acesso?: string;
   token_gerado_por?: string;
@@ -61,7 +61,7 @@ export interface UserProfile {
   Url_foto_usuario?: string; // Campo com maiúscula no banco
   pagina_atual?: string;
   ultima_empresa_id?: string;
-  ultima_cidade_id?: string;
+  ultima_hierarquia_id?: string;
   ultima_rota_id?: string;
   created_at?: string;
   updated_at?: string;

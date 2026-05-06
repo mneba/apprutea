@@ -367,7 +367,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     try {
       // Extrair arrays únicos
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
-      const cidadesIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
+      const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
       const rotasIds = [...new Set(selecoes.flatMap((s) => s.rotas_ids))];
 
       // Tipo interno: SUPER_ADMIN mantém, senão é USUARIO_PADRAO ou MONITOR
@@ -388,7 +388,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         status,
         tipo_usuario: tipoUsuario,
         empresas_ids: empresasIds,
-        cidades_ids: cidadesIds,
+        hierarquias_ids: hierarquiasIds,
         rotas_ids: rotasIds,
         recebe_notificacoes_solicitacoes: recebeNotificacoes,
       } as any);
@@ -636,7 +636,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       </div>
 
                       <div>
-                        <label className="block text-xs text-gray-500 mb-1">Estado/Cidade</label>
+                        <label className="block text-xs text-gray-500 mb-1">Estado</label>
                         <select
                           value={novaHierarquiaId}
                           onChange={(e) => {

@@ -83,7 +83,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   // Carregar localização salva do perfil
   const loadLocalizacaoSalva = async (profileData: UserProfile) => {
     const newLocalizacao: LocalizacaoAtual = {
-      hierarquia_id: profileData.ultima_cidade_id || null,
+      hierarquia_id: profileData.ultima_hierarquia_id || null,
       hierarquia: null,
       empresa_id: profileData.ultima_empresa_id || null,
       empresa: null,
@@ -92,11 +92,11 @@ export function UserProvider({ children }: { children: ReactNode }) {
     };
 
     // Buscar dados da hierarquia
-    if (profileData.ultima_cidade_id) {
+    if (profileData.ultima_hierarquia_id) {
       const { data: hierarquia } = await supabase
         .from('hierarquias')
         .select('*')
-        .eq('id', profileData.ultima_cidade_id)
+        .eq('id', profileData.ultima_hierarquia_id)
         .single();
       newLocalizacao.hierarquia = hierarquia;
     }
@@ -134,7 +134,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       await supabase
         .from('user_profiles')
         .update({
-          ultima_cidade_id: newLocalizacao.hierarquia_id,
+          ultima_hierarquia_id: newLocalizacao.hierarquia_id,
           ultima_empresa_id: newLocalizacao.empresa_id,
           ultima_rota_id: newLocalizacao.rota_id,
         })

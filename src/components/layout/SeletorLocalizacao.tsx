@@ -50,10 +50,10 @@ export function SeletorLocalizacao() {
 
       // Se não for SUPER_ADMIN, filtrar apenas hierarquias e empresas do usuário
       if (!isSuperAdmin && profile) {
-        const cidadesPermitidas = profile.cidades_ids || [];
+        const hierarquiasPermitidas = profile.hierarquias_ids || [];
         const empresasPermitidas = profile.empresas_ids || [];
         
-        setHierarquias(hierarquiasData.filter(h => cidadesPermitidas.includes(h.id)));
+        setHierarquias(hierarquiasData.filter(h => hierarquiasPermitidas.includes(h.id)));
         setEmpresas(empresasData.filter(e => empresasPermitidas.includes(e.id)));
       } else {
         setHierarquias(hierarquiasData);
