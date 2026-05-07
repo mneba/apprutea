@@ -10,9 +10,18 @@ export interface Hierarquia {
   created_at?: string;
 }
 
+export interface Cidade {
+  id: string;
+  hierarquia_id: string;
+  nome: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface Empresa {
   id: string;
   hierarquia_id: string;
+  cidade_id?: string;
   nome: string;
   cnpj?: string;
   telefone?: string;
@@ -26,6 +35,7 @@ export interface Empresa {
   created_at?: string;
   // Join
   hierarquia?: Hierarquia;
+  cidade?: Cidade;
 }
 
 export interface Rota {
@@ -52,6 +62,7 @@ export interface UserProfile {
   tipo_usuario: 'SUPER_ADMIN' | 'ADMIN' | 'MONITOR' | 'USUARIO_PADRAO' | 'VENDEDOR';
   empresas_ids?: string[];
   hierarquias_ids?: string[];
+  cidades_ids?: string[];
   rotas_ids?: string[];
   token_acesso?: string;
   token_gerado_por?: string;
@@ -62,6 +73,7 @@ export interface UserProfile {
   pagina_atual?: string;
   ultima_empresa_id?: string;
   ultima_hierarquia_id?: string;
+  ultima_cidade_id?: string;
   ultima_rota_id?: string;
   created_at?: string;
   updated_at?: string;
@@ -200,6 +212,8 @@ export interface ValidarCodigo {
 export interface LocalizacaoAtual {
   hierarquia_id: string | null;
   hierarquia?: Hierarquia | null;
+  cidade_id: string | null;
+  cidade?: Cidade | null;
   empresa_id: string | null;
   empresa?: Empresa | null;
   rota_id: string | null;

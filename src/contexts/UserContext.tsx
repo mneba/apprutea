@@ -2,11 +2,13 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { UserProfile, Hierarquia, Empresa, Rota } from '@/types/database';
+import type { UserProfile, Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
 
 interface LocalizacaoAtual {
   hierarquia_id: string | null;
   hierarquia?: Hierarquia | null;
+  cidade_id: string | null;
+  cidade?: Cidade | null;
   empresa_id: string | null;
   empresa?: Empresa | null;
   rota_id: string | null;
@@ -36,6 +38,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [localizacao, setLocalizacaoState] = useState<LocalizacaoAtual>({
     hierarquia_id: null,
     hierarquia: null,
+    cidade_id: null,
+    cidade: null,
     empresa_id: null,
     empresa: null,
     rota_id: null,
@@ -85,6 +89,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const newLocalizacao: LocalizacaoAtual = {
       hierarquia_id: profileData.ultima_hierarquia_id || null,
       hierarquia: null,
+      cidade_id: profileData.ultima_cidade_id || null,
+      cidade: null,
       empresa_id: profileData.ultima_empresa_id || null,
       empresa: null,
       rota_id: profileData.ultima_rota_id || null,
@@ -99,6 +105,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .eq('id', profileData.ultima_hierarquia_id)
         .single();
       newLocalizacao.hierarquia = hierarquia;
+    }
+
+    // Buscar dados da cidade
+    if (profileData.ultima_cidade_id) {
+      const { data: cidade } = await supabase
+        .from('cidades')
+        .select('*')
+        .eq('id', profileData.ultima_cidade_id)
+        .single();
+      newLocalizacao.cidade = cidade;
     }
 
     // Buscar dados da empresa
@@ -135,6 +151,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .from('user_profiles')
         .update({
           ultima_hierarquia_id: newLocalizacao.hierarquia_id,
+          ultima_cidade_id: newLocalizacao.cidade_id,
           ultima_empresa_id: newLocalizacao.empresa_id,
           ultima_rota_id: newLocalizacao.rota_id,
         })

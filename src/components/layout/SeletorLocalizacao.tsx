@@ -4,22 +4,25 @@ import { useState, useEffect, useRef } from 'react';
 import { MapPin, ChevronRight, X, Building2, Navigation, Check, Loader2 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { usuariosService } from '@/services/usuarios';
-import type { Hierarquia, Empresa, Rota } from '@/types/database';
+import { organizacaoService } from '@/services/organizacao';
+import type { Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
 
 export function SeletorLocalizacao() {
   const { profile, isSuperAdmin, localizacao, setLocalizacao } = useUser();
   const [isOpen, setIsOpen] = useState(false);
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
+  const [cidades, setCidades] = useState<Cidade[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingRotas, setLoadingRotas] = useState(false);
-  
+
   // Seleções temporárias
   const [paisSelecionado, setPaisSelecionado] = useState<string | null>(null);
   const [hierarquiaIdSelecionada, setHierarquiaIdSelecionada] = useState<string | null>(null);
+  const [cidadeIdSelecionada, setCidadeIdSelecionada] = useState<string | null>(null);
   const [empresaIdSelecionada, setEmpresaIdSelecionada] = useState<string | null>(null);
-  
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Fechar ao clicar fora
@@ -43,20 +46,33 @@ export function SeletorLocalizacao() {
   const carregarDados = async () => {
     setLoading(true);
     try {
-      const [hierarquiasData, empresasData] = await Promise.all([
+      const [hierarquiasData, cidadesResumo, empresasData] = await Promise.all([
         usuariosService.listarHierarquias(),
+        organizacaoService.listarTodasCidades(),
         usuariosService.listarEmpresas(),
       ]);
 
-      // Se não for SUPER_ADMIN, filtrar apenas hierarquias e empresas do usuário
+      // Reduzir CidadeComResumo para Cidade (campos básicos)
+      const cidadesData: Cidade[] = cidadesResumo.map((c) => ({
+        id: c.id,
+        hierarquia_id: c.hierarquia_id,
+        nome: c.nome,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+      }));
+
+      // Filtrar por permissões para usuários não SUPER_ADMIN
       if (!isSuperAdmin && profile) {
         const hierarquiasPermitidas = profile.hierarquias_ids || [];
+        const cidadesPermitidas = profile.cidades_ids || [];
         const empresasPermitidas = profile.empresas_ids || [];
-        
+
         setHierarquias(hierarquiasData.filter(h => hierarquiasPermitidas.includes(h.id)));
+        setCidades(cidadesData.filter(c => cidadesPermitidas.includes(c.id)));
         setEmpresas(empresasData.filter(e => empresasPermitidas.includes(e.id)));
       } else {
         setHierarquias(hierarquiasData);
+        setCidades(cidadesData);
         setEmpresas(empresasData);
       }
 
@@ -65,9 +81,11 @@ export function SeletorLocalizacao() {
         setPaisSelecionado(localizacao.hierarquia.pais);
         setHierarquiaIdSelecionada(localizacao.hierarquia_id);
       }
+      if (localizacao.cidade_id) {
+        setCidadeIdSelecionada(localizacao.cidade_id);
+      }
       if (localizacao.empresa_id) {
         setEmpresaIdSelecionada(localizacao.empresa_id);
-        // Se já tem empresa selecionada, carregar suas rotas
         carregarRotas(localizacao.empresa_id);
       }
     } catch (err) {
@@ -81,7 +99,7 @@ export function SeletorLocalizacao() {
     setLoadingRotas(true);
     try {
       const rotasData = await usuariosService.listarRotasPorEmpresa(empresaId);
-      
+
       // Filtrar por permissões se não for SUPER_ADMIN
       if (!isSuperAdmin && profile) {
         const rotasPermitidas = profile.rotas_ids || [];
@@ -89,7 +107,7 @@ export function SeletorLocalizacao() {
       } else {
         setRotas(rotasData);
       }
-      
+
       return rotasData;
     } catch (err) {
       console.error('Erro ao carregar rotas:', err);
@@ -102,52 +120,52 @@ export function SeletorLocalizacao() {
   // Países únicos
   const paises = [...new Set(hierarquias.map((h) => h.pais))];
 
-  // Estados/cidades do país selecionado
+  // Estados do país selecionado
   const estadosDoPais = hierarquias.filter((h) => h.pais === paisSelecionado);
 
-  // Empresas da hierarquia selecionada
-  const empresasDaHierarquia = empresas.filter(
-    (e) => e.hierarquia_id === hierarquiaIdSelecionada
-  );
+  // Cidades da hierarquia (estado) selecionada
+  const cidadesDaHierarquia = (hierarquiaId: string | null) =>
+    hierarquiaId ? cidades.filter((c) => c.hierarquia_id === hierarquiaId) : [];
+
+  // Empresas da cidade selecionada
+  const empresasDaCidade = (cidadeId: string | null) =>
+    cidadeId ? empresas.filter((e) => e.cidade_id === cidadeId) : [];
 
   // Selecionar empresa - SÓ FECHA SE NÃO TIVER ROTAS
   const handleSelecionarEmpresa = async (empresa: Empresa) => {
     const hierarquia = hierarquias.find(h => h.id === empresa.hierarquia_id);
-    
-    // Atualizar localização com a empresa (sem rota por enquanto)
+    const cidade = empresa.cidade_id ? cidades.find(c => c.id === empresa.cidade_id) : null;
+
     setLocalizacao({
       hierarquia_id: empresa.hierarquia_id,
       hierarquia: hierarquia || null,
+      cidade_id: empresa.cidade_id || null,
+      cidade: cidade || null,
       empresa_id: empresa.id,
       empresa: empresa,
       rota_id: null,
       rota: null,
     });
-    
-    // Atualizar empresa selecionada para mostrar rotas
+
     setEmpresaIdSelecionada(empresa.id);
-    
+
     // Carregar rotas para verificar se tem
     setLoadingRotas(true);
     try {
       const rotasData = await usuariosService.listarRotasPorEmpresa(empresa.id);
-      
+
       let rotasFiltradas = rotasData;
       if (!isSuperAdmin && profile) {
         const rotasPermitidas = profile.rotas_ids || [];
         rotasFiltradas = rotasData.filter(r => rotasPermitidas.includes(r.id));
       }
-      
+
       setRotas(rotasFiltradas);
-      
-      // ============================================
-      // REGRA: SÓ FECHA SE NÃO TIVER ROTAS
-      // Se tiver rotas, mantém aberto para o usuário selecionar
-      // ============================================
+
+      // Se não tem rotas, fecha o dropdown
       if (rotasFiltradas.length === 0) {
         setIsOpen(false);
       }
-      
     } catch (err) {
       console.error('Erro ao carregar rotas:', err);
       setIsOpen(false);
@@ -163,7 +181,6 @@ export function SeletorLocalizacao() {
       rota_id: rota.id,
       rota: rota,
     });
-    
     setIsOpen(false);
   };
 
@@ -174,16 +191,47 @@ export function SeletorLocalizacao() {
       rota_id: null,
       rota: null,
     });
-    
     setIsOpen(false);
+  };
+
+  // Toggle estado: expande/fecha. Se hierarquia tem só 1 cidade, auto-seleciona ela.
+  const handleToggleHierarquia = (hierarquiaId: string) => {
+    if (hierarquiaIdSelecionada === hierarquiaId) {
+      // Fechar
+      setHierarquiaIdSelecionada(null);
+      setCidadeIdSelecionada(null);
+      setEmpresaIdSelecionada(null);
+      return;
+    }
+
+    // Abrir
+    setHierarquiaIdSelecionada(hierarquiaId);
+    setEmpresaIdSelecionada(null);
+
+    const cidadesAqui = cidadesDaHierarquia(hierarquiaId);
+    if (cidadesAqui.length === 1) {
+      // Auto-select: vai direto para mostrar empresas
+      setCidadeIdSelecionada(cidadesAqui[0].id);
+    } else {
+      setCidadeIdSelecionada(null);
+    }
+  };
+
+  // Toggle cidade
+  const handleToggleCidade = (cidadeId: string) => {
+    setCidadeIdSelecionada(cidadeIdSelecionada === cidadeId ? null : cidadeId);
+    setEmpresaIdSelecionada(null);
   };
 
   // Gerar breadcrumb
   const getBreadcrumb = () => {
-    const parts = [];
+    const parts: string[] = [];
     if (localizacao.hierarquia) {
       parts.push(localizacao.hierarquia.pais);
       parts.push(localizacao.hierarquia.estado);
+    }
+    if (localizacao.cidade) {
+      parts.push(localizacao.cidade.nome);
     }
     if (localizacao.empresa) {
       parts.push(localizacao.empresa.nome);
@@ -226,7 +274,7 @@ export function SeletorLocalizacao() {
           {/* Header */}
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
             <span className="font-semibold text-gray-800">Localização</span>
-            <button 
+            <button
               onClick={() => setIsOpen(false)}
               className="p-1 hover:bg-gray-100 rounded"
             >
@@ -251,6 +299,7 @@ export function SeletorLocalizacao() {
                         setPaisSelecionado(paisSelecionado === pais ? null : pais);
                         if (paisSelecionado !== pais) {
                           setHierarquiaIdSelecionada(null);
+                          setCidadeIdSelecionada(null);
                           setEmpresaIdSelecionada(null);
                         }
                       }}
@@ -269,35 +318,32 @@ export function SeletorLocalizacao() {
                     {paisSelecionado === pais && (
                       <div className="ml-4 mt-1 space-y-1">
                         {estadosDoPais.map((hierarquia) => {
-                          // Quantidade de empresas ativas deste estado
                           const totalEmpresas = (hierarquia as any).total_empresas_ativas || 0;
-                          
+                          const cidadesAqui = cidadesDaHierarquia(hierarquia.id);
+                          const cidadeUnica = cidadesAqui.length === 1;
+                          const expandido = hierarquiaIdSelecionada === hierarquia.id;
+
                           return (
                             <div key={hierarquia.id}>
+                              {/* Estado */}
                               <button
-                                onClick={() => {
-                                  setHierarquiaIdSelecionada(
-                                    hierarquiaIdSelecionada === hierarquia.id ? null : hierarquia.id
-                                  );
-                                  setEmpresaIdSelecionada(null);
-                                }}
+                                onClick={() => handleToggleHierarquia(hierarquia.id)}
                                 className={`
                                   w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors
-                                  ${hierarquiaIdSelecionada === hierarquia.id 
-                                    ? 'bg-blue-600 text-white' 
+                                  ${expandido
+                                    ? 'bg-blue-600 text-white'
                                     : 'hover:bg-gray-100 text-gray-600'}
                                 `}
                               >
                                 <span className="flex items-center gap-2">
-                                  <ChevronRight className={`w-3 h-3 transition-transform ${hierarquiaIdSelecionada === hierarquia.id ? 'rotate-90' : ''}`} />
+                                  <ChevronRight className={`w-3 h-3 transition-transform ${expandido ? 'rotate-90' : ''}`} />
                                   {hierarquia.estado}
                                 </span>
-                                {/* Badge com quantidade de empresas */}
                                 {totalEmpresas > 0 && (
                                   <span className={`
                                     px-2 py-0.5 rounded-full text-xs font-medium
-                                    ${hierarquiaIdSelecionada === hierarquia.id 
-                                      ? 'bg-blue-500 text-white' 
+                                    ${expandido
+                                      ? 'bg-blue-500 text-white'
                                       : 'bg-gray-200 text-gray-600'}
                                   `}>
                                     {totalEmpresas} {totalEmpresas === 1 ? 'empresa' : 'empresas'}
@@ -305,27 +351,100 @@ export function SeletorLocalizacao() {
                                 )}
                               </button>
 
-                              {/* Empresas da Hierarquia */}
-                              {hierarquiaIdSelecionada === hierarquia.id && empresasDaHierarquia.length > 0 && (
+                              {/* Cidades / Empresas dentro do estado */}
+                              {expandido && (
                                 <div className="ml-4 mt-1 space-y-1">
-                                  {empresasDaHierarquia.map((empresa) => (
-                                    <button
-                                      key={empresa.id}
-                                      onClick={() => handleSelecionarEmpresa(empresa)}
-                                      className={`
-                                        w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
-                                        ${localizacao.empresa_id === empresa.id
-                                          ? 'bg-green-100 text-green-700 border border-green-300'
-                                          : 'hover:bg-gray-100 text-gray-600'}
-                                      `}
-                                    >
-                                      <Building2 className="w-3 h-3" />
-                                      {empresa.nome}
-                                      {localizacao.empresa_id === empresa.id && (
-                                        <Check className="w-3 h-3 ml-auto" />
-                                      )}
-                                    </button>
-                                  ))}
+                                  {cidadesAqui.length === 0 ? (
+                                    <div className="px-3 py-2 text-xs text-gray-400 italic">
+                                      Nenhuma cidade cadastrada
+                                    </div>
+                                  ) : cidadeUnica ? (
+                                    // 1 cidade só: pula direto pra empresas
+                                    empresasDaCidade(cidadesAqui[0].id).length > 0 ? (
+                                      <div className="space-y-1">
+                                        {empresasDaCidade(cidadesAqui[0].id).map((empresa) => (
+                                          <button
+                                            key={empresa.id}
+                                            onClick={() => handleSelecionarEmpresa(empresa)}
+                                            className={`
+                                              w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                                              ${localizacao.empresa_id === empresa.id
+                                                ? 'bg-green-100 text-green-700 border border-green-300'
+                                                : 'hover:bg-gray-100 text-gray-600'}
+                                            `}
+                                          >
+                                            <Building2 className="w-3 h-3" />
+                                            {empresa.nome}
+                                            {localizacao.empresa_id === empresa.id && (
+                                              <Check className="w-3 h-3 ml-auto" />
+                                            )}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="px-3 py-2 text-xs text-gray-400 italic">
+                                        Nenhuma empresa cadastrada
+                                      </div>
+                                    )
+                                  ) : (
+                                    // 2+ cidades: mostra nível extra
+                                    cidadesAqui.map((cidade) => {
+                                      const empresasAqui = empresasDaCidade(cidade.id);
+                                      const cidadeExpandida = cidadeIdSelecionada === cidade.id;
+
+                                      return (
+                                        <div key={cidade.id}>
+                                          <button
+                                            onClick={() => handleToggleCidade(cidade.id)}
+                                            className={`
+                                              w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs transition-colors
+                                              ${cidadeExpandida
+                                                ? 'bg-blue-500 text-white'
+                                                : 'hover:bg-gray-100 text-gray-500'}
+                                            `}
+                                          >
+                                            <span className="flex items-center gap-2">
+                                              <ChevronRight className={`w-3 h-3 transition-transform ${cidadeExpandida ? 'rotate-90' : ''}`} />
+                                              {cidade.nome}
+                                            </span>
+                                            {empresasAqui.length > 0 && (
+                                              <span className={`
+                                                px-2 py-0.5 rounded-full text-xs font-medium
+                                                ${cidadeExpandida
+                                                  ? 'bg-blue-400 text-white'
+                                                  : 'bg-gray-200 text-gray-600'}
+                                              `}>
+                                                {empresasAqui.length}
+                                              </span>
+                                            )}
+                                          </button>
+
+                                          {cidadeExpandida && empresasAqui.length > 0 && (
+                                            <div className="ml-4 mt-1 space-y-1">
+                                              {empresasAqui.map((empresa) => (
+                                                <button
+                                                  key={empresa.id}
+                                                  onClick={() => handleSelecionarEmpresa(empresa)}
+                                                  className={`
+                                                    w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                                                    ${localizacao.empresa_id === empresa.id
+                                                      ? 'bg-green-100 text-green-700 border border-green-300'
+                                                      : 'hover:bg-gray-100 text-gray-600'}
+                                                  `}
+                                                >
+                                                  <Building2 className="w-3 h-3" />
+                                                  {empresa.nome}
+                                                  {localizacao.empresa_id === empresa.id && (
+                                                    <Check className="w-3 h-3 ml-auto" />
+                                                  )}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -359,7 +478,6 @@ export function SeletorLocalizacao() {
                 <>
                   <div className="text-xs text-gray-500 mb-2">Selecione a rota (opcional):</div>
                   <div className="flex flex-wrap gap-2">
-                    {/* Opção "Todas as rotas" */}
                     <button
                       onClick={handleLimparRota}
                       className={`
