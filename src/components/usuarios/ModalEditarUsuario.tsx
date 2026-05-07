@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { X, User, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
-import type { UserProfile, Hierarquia, Empresa, Rota } from '@/types/database';
+import { organizacaoService } from '@/services/organizacao';
+import type { UserProfile, Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
 
 type TipoUsuario = 'SUPER_ADMIN' | 'ADMIN' | 'MONITOR' | 'USUARIO_PADRAO' | 'VENDEDOR';
 
@@ -14,8 +15,9 @@ interface Props {
   onSave: () => void;
 }
 
-interface HierarquiaComEmpresa {
+interface SelecaoAcesso {
   hierarquia_id: string;
+  cidade_id: string;
   empresa_id: string;
   rotas_ids: string[];
 }
@@ -23,37 +25,53 @@ interface HierarquiaComEmpresa {
 export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+
   // Dados base
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
+  const [todasCidades, setTodasCidades] = useState<Cidade[]>([]);
   const [todasEmpresas, setTodasEmpresas] = useState<Empresa[]>([]);
   const [todasRotas, setTodasRotas] = useState<Rota[]>([]);
-  
+
   // Formulário
   const [nome, setNome] = useState(usuario.nome || '');
   const [telefone, setTelefone] = useState(usuario.telefone || '');
   const [documento, setDocumento] = useState(usuario.documento || '');
   const [tipoUsuario, setTipoUsuario] = useState<TipoUsuario>(usuario.tipo_usuario);
   const [status, setStatus] = useState(usuario.status);
-  
+
   // Seleções hierárquicas (múltiplas)
-  const [selecoes, setSelecoes] = useState<HierarquiaComEmpresa[]>([]);
-  
+  const [selecoes, setSelecoes] = useState<SelecaoAcesso[]>([]);
+
   // Estado para nova seleção
-  const [novaPaisSelecionado, setNovaPaisSelecionado] = useState('');
+  const [novoPais, setNovoPais] = useState('');
   const [novaHierarquiaId, setNovaHierarquiaId] = useState('');
+  const [novaCidadeId, setNovaCidadeId] = useState('');
   const [novaEmpresaId, setNovaEmpresaId] = useState('');
   const [novasRotasIds, setNovasRotasIds] = useState<string[]>([]);
 
   // Países únicos
   const paises = [...new Set(hierarquias.map((h) => h.pais))];
 
-  // Estados/cidades do país selecionado
-  const estadosDoPais = hierarquias.filter((h) => h.pais === novaPaisSelecionado);
+  // Estados do país selecionado
+  const estadosDoPais = hierarquias.filter((h) => h.pais === novoPais);
 
-  // Empresas da hierarquia selecionada
-  const empresasDaHierarquia = todasEmpresas.filter(
-    (e) => e.hierarquia_id === novaHierarquiaId
+  // Cidades da hierarquia selecionada
+  const cidadesDaHierarquia = todasCidades.filter(
+    (c) => c.hierarquia_id === novaHierarquiaId
+  );
+
+  // Auto-select: se hierarquia tem só 1 cidade, seleciona ela automaticamente
+  useEffect(() => {
+    if (novaHierarquiaId && cidadesDaHierarquia.length === 1) {
+      setNovaCidadeId(cidadesDaHierarquia[0].id);
+    }
+  }, [novaHierarquiaId, cidadesDaHierarquia.length]);
+
+  const cidadeUnicaDaHierarquia = cidadesDaHierarquia.length === 1;
+
+  // Empresas da cidade selecionada
+  const empresasDaCidade = todasEmpresas.filter(
+    (e) => e.cidade_id === novaCidadeId
   );
 
   // Rotas da empresa selecionada
@@ -68,23 +86,33 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
     async function carregarDados() {
       setLoading(true);
       try {
-        const [hierarquiasData, empresasData, rotasData] = await Promise.all([
+        const [hierarquiasData, cidadesResumo, empresasData, rotasData] = await Promise.all([
           usuariosService.listarHierarquias(),
+          organizacaoService.listarTodasCidades(),
           usuariosService.listarEmpresas(),
           usuariosService.listarRotas(),
         ]);
 
+        // Reduzir CidadeComResumo para Cidade
+        const cidadesData: Cidade[] = cidadesResumo.map((c) => ({
+          id: c.id,
+          hierarquia_id: c.hierarquia_id,
+          nome: c.nome,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        }));
+
         setHierarquias(hierarquiasData);
+        setTodasCidades(cidadesData);
         setTodasEmpresas(empresasData);
         setTodasRotas(rotasData);
 
         // Montar seleções existentes do usuário
-        const selecoesExistentes: HierarquiaComEmpresa[] = [];
+        const selecoesExistentes: SelecaoAcesso[] = [];
         const empresasIds = usuario.empresas_ids || [];
-        const hierarquiasIds = usuario.hierarquias_ids || [];
         const rotasIds = usuario.rotas_ids || [];
 
-        // Para cada empresa, encontrar a hierarquia e rotas correspondentes
+        // Para cada empresa, encontrar hierarquia, cidade e rotas correspondentes
         empresasIds.forEach((empresaId: string) => {
           const empresa = empresasData.find((e) => e.id === empresaId);
           if (empresa) {
@@ -93,6 +121,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
             );
             selecoesExistentes.push({
               hierarquia_id: empresa.hierarquia_id,
+              cidade_id: empresa.cidade_id || '',
               empresa_id: empresaId,
               rotas_ids: rotasDaEmpresa,
             });
@@ -111,7 +140,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
 
   // Adicionar nova seleção
   const handleAdicionarSelecao = () => {
-    if (!novaHierarquiaId || !novaEmpresaId) return;
+    if (!novaHierarquiaId || !novaCidadeId || !novaEmpresaId) return;
 
     // Verificar se já existe
     const jaExiste = selecoes.some((s) => s.empresa_id === novaEmpresaId);
@@ -124,14 +153,16 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
       ...selecoes,
       {
         hierarquia_id: novaHierarquiaId,
+        cidade_id: novaCidadeId,
         empresa_id: novaEmpresaId,
         rotas_ids: novasRotasIds,
       },
     ]);
 
     // Limpar seleção
-    setNovaPaisSelecionado('');
+    setNovoPais('');
     setNovaHierarquiaId('');
+    setNovaCidadeId('');
     setNovaEmpresaId('');
     setNovasRotasIds([]);
   };
@@ -157,6 +188,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
       // Extrair arrays únicos
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
       const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
+      const cidadesIds = [...new Set(selecoes.map((s) => s.cidade_id).filter(Boolean))];
       const rotasIds = [...new Set(selecoes.flatMap((s) => s.rotas_ids))];
 
       await usuariosService.atualizarUsuario(usuario.user_id, {
@@ -167,6 +199,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
         status,
         empresas_ids: empresasIds,
         hierarquias_ids: hierarquiasIds,
+        cidades_ids: cidadesIds,
         rotas_ids: rotasIds,
       });
 
@@ -179,19 +212,22 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
     }
   };
 
-  // Obter nome da hierarquia
+  // Helpers para exibir seleções existentes
   const getNomeHierarquia = (hierarquiaId: string) => {
     const h = hierarquias.find((h) => h.id === hierarquiaId);
     return h ? `${h.pais} > ${h.estado}` : '';
   };
 
-  // Obter nome da empresa
+  const getNomeCidade = (cidadeId: string) => {
+    const c = todasCidades.find((c) => c.id === cidadeId);
+    return c?.nome || '';
+  };
+
   const getNomeEmpresa = (empresaId: string) => {
     const e = todasEmpresas.find((e) => e.id === empresaId);
     return e?.nome || '';
   };
 
-  // Obter nomes das rotas
   const getNomesRotas = (rotasIds: string[]) => {
     return rotasIds
       .map((id) => todasRotas.find((r) => r.id === id)?.nome)
@@ -299,6 +335,7 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
                           </p>
                           <p className="text-xs text-gray-500">
                             {getNomeHierarquia(selecao.hierarquia_id)}
+                            {selecao.cidade_id && ` > ${getNomeCidade(selecao.cidade_id)}`}
                           </p>
                           {selecao.rotas_ids.length > 0 && (
                             <p className="text-xs text-blue-600 mt-1">
@@ -324,10 +361,11 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {/* País */}
                     <select
-                      value={novaPaisSelecionado}
+                      value={novoPais}
                       onChange={(e) => {
-                        setNovaPaisSelecionado(e.target.value);
+                        setNovoPais(e.target.value);
                         setNovaHierarquiaId('');
+                        setNovaCidadeId('');
                         setNovaEmpresaId('');
                         setNovasRotasIds([]);
                       }}
@@ -344,10 +382,11 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
                       value={novaHierarquiaId}
                       onChange={(e) => {
                         setNovaHierarquiaId(e.target.value);
+                        setNovaCidadeId('');
                         setNovaEmpresaId('');
                         setNovasRotasIds([]);
                       }}
-                      disabled={!novaPaisSelecionado}
+                      disabled={!novoPais}
                       className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm disabled:opacity-50"
                     >
                       <option value="">Selecione o estado</option>
@@ -356,6 +395,24 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
                       ))}
                     </select>
 
+                    {/* Cidade — só aparece se hierarquia tem 2+ cidades */}
+                    {novaHierarquiaId && !cidadeUnicaDaHierarquia && (
+                      <select
+                        value={novaCidadeId}
+                        onChange={(e) => {
+                          setNovaCidadeId(e.target.value);
+                          setNovaEmpresaId('');
+                          setNovasRotasIds([]);
+                        }}
+                        className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm md:col-span-2"
+                      >
+                        <option value="">Selecione a cidade</option>
+                        {cidadesDaHierarquia.map((c) => (
+                          <option key={c.id} value={c.id}>{c.nome}</option>
+                        ))}
+                      </select>
+                    )}
+
                     {/* Empresa */}
                     <select
                       value={novaEmpresaId}
@@ -363,11 +420,11 @@ export function ModalEditarUsuario({ usuario, onClose, onSave }: Props) {
                         setNovaEmpresaId(e.target.value);
                         setNovasRotasIds([]);
                       }}
-                      disabled={!novaHierarquiaId}
+                      disabled={!novaCidadeId}
                       className="px-3 py-2 rounded-lg border border-gray-200 bg-white text-sm disabled:opacity-50"
                     >
                       <option value="">Selecione a empresa</option>
-                      {empresasDaHierarquia.map((e) => (
+                      {empresasDaCidade.map((e) => (
                         <option key={e.id} value={e.id}>{e.nome}</option>
                       ))}
                     </select>

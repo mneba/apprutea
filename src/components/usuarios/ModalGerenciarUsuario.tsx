@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
-import type { UserProfile, Hierarquia, Empresa, Rota, ModuloSistema, UserPermissao } from '@/types/database';
+import { organizacaoService } from '@/services/organizacao';
+import type { UserProfile, Hierarquia, Cidade, Empresa, Rota, ModuloSistema, UserPermissao } from '@/types/database';
 
 interface Props {
   usuario: UserProfile;
@@ -32,6 +33,7 @@ type TabType = 'dados' | 'acesso' | 'codigo' | 'permissoes' | 'liberacoes';
 
 interface SelecaoAcesso {
   hierarquia_id: string;
+  cidade_id: string;
   empresa_id: string;
   rotas_ids: string[];
 }
@@ -64,6 +66,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // Dados base carregados
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
+  const [todasCidades, setTodasCidades] = useState<Cidade[]>([]);
   const [todasEmpresas, setTodasEmpresas] = useState<Empresa[]>([]);
   const [todasRotas, setTodasRotas] = useState<Rota[]>([]);
   const [modulos, setModulos] = useState<ModuloSistema[]>([]);
@@ -99,6 +102,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   // Seleção sendo adicionada
   const [novoPais, setNovoPais] = useState('');
   const [novaHierarquiaId, setNovaHierarquiaId] = useState('');
+  const [novaCidadeId, setNovaCidadeId] = useState('');
   const [novaEmpresaId, setNovaEmpresaId] = useState('');
   const [novasRotasIds, setNovasRotasIds] = useState<string[]>([]);
 
@@ -117,27 +121,54 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   // Derivados para seleção cascata
   const paises = [...new Set(hierarquias.map((h) => h.pais))];
   const estadosDoPais = hierarquias.filter((h) => h.pais === novoPais);
-  const empresasDaHierarquia = todasEmpresas.filter((e) => e.hierarquia_id === novaHierarquiaId);
+  const cidadesDaHierarquia = todasCidades.filter((c) => c.hierarquia_id === novaHierarquiaId);
+  const cidadeUnicaDaHierarquia = cidadesDaHierarquia.length === 1;
+  const empresasDaCidade = todasEmpresas.filter((e) => e.cidade_id === novaCidadeId);
   const rotasDaEmpresa = (() => {
     const empresa = todasEmpresas.find((e) => e.id === novaEmpresaId);
     if (!empresa?.rotas_ids) return [];
     return todasRotas.filter((r) => empresa.rotas_ids?.includes(r.id));
   })();
 
+  // Auto-select: se hierarquia tem só 1 cidade, seleciona ela automaticamente
+  useEffect(() => {
+    if (novaHierarquiaId && cidadesDaHierarquia.length === 1) {
+      setNovaCidadeId(cidadesDaHierarquia[0].id);
+    }
+  }, [novaHierarquiaId, cidadesDaHierarquia.length]);
+
   // Carregar dados iniciais
   useEffect(() => {
     async function carregarDados() {
       setLoading(true);
       try {
-        const [hierarquiasData, empresasData, rotasData, modulosData, permissoesData] = await Promise.all([
+        const [
+          hierarquiasData,
+          cidadesResumo,
+          empresasData,
+          rotasData,
+          modulosData,
+          permissoesData,
+        ] = await Promise.all([
           usuariosService.listarHierarquias(),
+          organizacaoService.listarTodasCidades(),
           usuariosService.listarEmpresas(),
           usuariosService.listarRotas(),
           usuariosService.listarModulos(),
           usuariosService.listarPermissoesUsuario(usuario.user_id),
         ]);
 
+        // Reduzir CidadeComResumo para Cidade
+        const cidadesData: Cidade[] = cidadesResumo.map((c) => ({
+          id: c.id,
+          hierarquia_id: c.hierarquia_id,
+          nome: c.nome,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        }));
+
         setHierarquias(hierarquiasData);
+        setTodasCidades(cidadesData);
         setTodasEmpresas(empresasData);
         setTodasRotas(rotasData);
         setModulos(modulosData);
@@ -145,13 +176,11 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         // Extrair DDI do telefone existente
         if (usuario.telefone) {
           const telefoneExistente = usuario.telefone;
-          // Tentar encontrar DDI no início
           const ddiEncontrado = ddis.find(d => telefoneExistente.startsWith(d.codigo));
           if (ddiEncontrado) {
             setDdi(ddiEncontrado.codigo);
             setTelefoneNumero(telefoneExistente.substring(ddiEncontrado.codigo.length).trim());
           } else {
-            // Se não encontrar DDI, assumir que é número sem DDI
             setTelefoneNumero(telefoneExistente.replace(/^\+/, ''));
           }
         }
@@ -176,6 +205,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
             );
             selecoesExistentes.push({
               hierarquia_id: empresa.hierarquia_id,
+              cidade_id: empresa.cidade_id || '',
               empresa_id: empresaId,
               rotas_ids: rotasDaEmpresa,
             });
@@ -209,7 +239,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === FUNÇÕES ABA ACESSO ===
   const handleAdicionarSelecao = () => {
-    if (!novaHierarquiaId || !novaEmpresaId) return;
+    if (!novaHierarquiaId || !novaCidadeId || !novaEmpresaId) return;
     
     const jaExiste = selecoes.some((s) => s.empresa_id === novaEmpresaId);
     if (jaExiste) {
@@ -219,6 +249,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     
     setSelecoes([...selecoes, {
       hierarquia_id: novaHierarquiaId,
+      cidade_id: novaCidadeId,
       empresa_id: novaEmpresaId,
       rotas_ids: novasRotasIds,
     }]);
@@ -226,6 +257,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     // Limpar seleção
     setNovoPais('');
     setNovaHierarquiaId('');
+    setNovaCidadeId('');
     setNovaEmpresaId('');
     setNovasRotasIds([]);
   };
@@ -247,6 +279,11 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     return h ? `${h.pais} > ${h.estado}` : '';
   };
 
+  const getNomeCidade = (cidadeId: string) => {
+    const c = todasCidades.find((c) => c.id === cidadeId);
+    return c?.nome || '';
+  };
+
   const getNomeEmpresa = (empresaId: string) => {
     const e = todasEmpresas.find((e) => e.id === empresaId);
     return e?.nome || '';
@@ -261,7 +298,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === FUNÇÕES ABA CÓDIGO ===
   const gerarCodigo = async () => {
-    // Verificar se usuário está aprovado ANTES de chamar a API
     if (status !== 'APROVADO') {
       alert('⚠️ O usuário precisa estar APROVADO para gerar código de acesso.\n\nVá na aba "Dados" e altere o status para "Aprovado" primeiro.');
       return;
@@ -276,7 +312,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
       console.error('Erro ao gerar código:', err);
       const mensagemErro = err?.message || 'Erro desconhecido';
       
-      // Verificar se é erro de status
       if (mensagemErro.toLowerCase().includes('aprovado')) {
         alert('⚠️ O usuário precisa estar APROVADO para gerar código.\n\nVá na aba "Dados" e altere o status.');
       } else {
@@ -312,7 +347,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         pode_eliminar: false,
       };
 
-      // Se marcou "todos", marca todos os outros
       if (campo === 'pode_todos' && !permissao.pode_todos) {
         return {
           ...prev,
@@ -320,7 +354,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         };
       }
 
-      // Se desmarcou "todos", apenas desmarca ele
       if (campo === 'pode_todos' && permissao.pode_todos) {
         return {
           ...prev,
@@ -365,21 +398,18 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   const handleSalvar = async () => {
     setSaving(true);
     try {
-      // Extrair arrays únicos
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
       const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
+      const cidadesIds = [...new Set(selecoes.map((s) => s.cidade_id).filter(Boolean))];
       const rotasIds = [...new Set(selecoes.flatMap((s) => s.rotas_ids))];
 
-      // Tipo interno: SUPER_ADMIN mantém, senão é USUARIO_PADRAO ou MONITOR
       let tipoUsuario = usuario.tipo_usuario;
       if (tipoUsuario !== 'SUPER_ADMIN') {
         tipoUsuario = ehMonitor ? 'MONITOR' : 'USUARIO_PADRAO';
       }
 
-      // Montar telefone completo com DDI
       const telefoneCompleto = telefoneNumero ? `${ddi}${telefoneNumero.replace(/\D/g, '')}` : '';
 
-      // Salvar dados
       await usuariosService.atualizarUsuario(usuario.user_id, {
         nome,
         telefone: telefoneCompleto,
@@ -389,16 +419,15 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         tipo_usuario: tipoUsuario,
         empresas_ids: empresasIds,
         hierarquias_ids: hierarquiasIds,
+        cidades_ids: cidadesIds,
         rotas_ids: rotasIds,
         recebe_notificacoes_solicitacoes: recebeNotificacoes,
       } as any);
 
-      // Salvar permissões (apenas se não for monitor)
       if (!ehMonitor) {
         await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
       }
 
-      // Salvar liberações
       const liberacoesArray = Object.entries(liberacoes).map(([tipo, pode]) => ({
         tipo_solicitacao: tipo,
         pode_liberar: pode,
@@ -425,7 +454,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     { id: 'liberacoes' as TabType, label: 'Liberações', icon: Unlock },
   ];
 
-  // Monitor não vê aba de permissões (só usa app móvel)
   const tabsVisiveis = ehMonitor ? tabs.filter(t => t.id !== 'permissoes') : tabs;
 
   return (
@@ -591,6 +619,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             </p>
                             <p className="text-xs text-gray-500">
                               {getNomeHierarquia(selecao.hierarquia_id)}
+                              {selecao.cidade_id && ` > ${getNomeCidade(selecao.cidade_id)}`}
                             </p>
                             {selecao.rotas_ids.length > 0 && (
                               <p className="text-xs text-blue-600 mt-1">
@@ -621,6 +650,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                           onChange={(e) => {
                             setNovoPais(e.target.value);
                             setNovaHierarquiaId('');
+                            setNovaCidadeId('');
                             setNovaEmpresaId('');
                             setNovasRotasIds([]);
                           }}
@@ -641,6 +671,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                           value={novaHierarquiaId}
                           onChange={(e) => {
                             setNovaHierarquiaId(e.target.value);
+                            setNovaCidadeId('');
                             setNovaEmpresaId('');
                             setNovasRotasIds([]);
                           }}
@@ -657,6 +688,29 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       </div>
                     </div>
 
+                    {/* Cidade — só aparece se hierarquia tem 2+ cidades */}
+                    {novaHierarquiaId && !cidadeUnicaDaHierarquia && (
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Cidade</label>
+                        <select
+                          value={novaCidadeId}
+                          onChange={(e) => {
+                            setNovaCidadeId(e.target.value);
+                            setNovaEmpresaId('');
+                            setNovasRotasIds([]);
+                          }}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                        >
+                          <option value="">Selecione...</option>
+                          {cidadesDaHierarquia.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     <div>
                       <label className="block text-xs text-gray-500 mb-1">Empresa</label>
                       <select
@@ -665,11 +719,11 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                           setNovaEmpresaId(e.target.value);
                           setNovasRotasIds([]);
                         }}
-                        disabled={!novaHierarquiaId}
+                        disabled={!novaCidadeId}
                         className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-100"
                       >
                         <option value="">Selecione...</option>
-                        {empresasDaHierarquia.map((e) => (
+                        {empresasDaCidade.map((e) => (
                           <option key={e.id} value={e.id}>
                             {e.nome}
                           </option>
@@ -961,76 +1015,76 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             </tr>
                           ))}
 
-                        {/* LIMITES */}
-                        <tr className="bg-gray-100">
-                          <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
-                            Limites
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <button
-                              onClick={() => {
-                                const todosAtivos = TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]);
-                                marcarTodasLiberacoes('LIMITES', !todosAtivos);
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-700"
-                            >
-                              {TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
-                            </button>
-                          </td>
-                        </tr>
-                        {TIPOS_SOLICITACAO.LIMITES.map((item) => (
-                          <tr key={item.tipo} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <div>
-                                <span className="text-sm text-gray-700">{item.label}</span>
-                                <p className="text-xs text-gray-500">{item.descricao}</p>
-                              </div>
+                          {/* LIMITES */}
+                          <tr className="bg-gray-100">
+                            <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                              Limites
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              <Checkbox
-                                checked={liberacoes[item.tipo] || false}
-                                onChange={() => toggleLiberacao(item.tipo)}
-                              />
+                            <td className="px-4 py-2 text-center">
+                              <button
+                                onClick={() => {
+                                  const todosAtivos = TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]);
+                                  marcarTodasLiberacoes('LIMITES', !todosAtivos);
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                {TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
+                              </button>
                             </td>
                           </tr>
-                        ))}
+                          {TIPOS_SOLICITACAO.LIMITES.map((item) => (
+                            <tr key={item.tipo} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div>
+                                  <span className="text-sm text-gray-700">{item.label}</span>
+                                  <p className="text-xs text-gray-500">{item.descricao}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <Checkbox
+                                  checked={liberacoes[item.tipo] || false}
+                                  onChange={() => toggleLiberacao(item.tipo)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
 
-                        {/* OPERAÇÕES */}
-                        <tr className="bg-gray-100">
-                          <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
-                            Operações
-                          </td>
-                          <td className="px-4 py-2 text-center">
-                            <button
-                              onClick={() => {
-                                const todosAtivos = TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]);
-                                marcarTodasLiberacoes('OPERACOES', !todosAtivos);
-                              }}
-                              className="text-xs text-blue-600 hover:text-blue-700"
-                            >
-                              {TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
-                            </button>
-                          </td>
-                        </tr>
-                        {TIPOS_SOLICITACAO.OPERACOES.map((item) => (
-                          <tr key={item.tipo} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">
-                              <div>
-                                <span className="text-sm text-gray-700">{item.label}</span>
-                                <p className="text-xs text-gray-500">{item.descricao}</p>
-                              </div>
+                          {/* OPERAÇÕES */}
+                          <tr className="bg-gray-100">
+                            <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                              Operações
                             </td>
-                            <td className="px-4 py-3 text-center">
-                              <Checkbox
-                                checked={liberacoes[item.tipo] || false}
-                                onChange={() => toggleLiberacao(item.tipo)}
-                              />
+                            <td className="px-4 py-2 text-center">
+                              <button
+                                onClick={() => {
+                                  const todosAtivos = TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]);
+                                  marcarTodasLiberacoes('OPERACOES', !todosAtivos);
+                                }}
+                                className="text-xs text-blue-600 hover:text-blue-700"
+                              >
+                                {TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
+                              </button>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                          {TIPOS_SOLICITACAO.OPERACOES.map((item) => (
+                            <tr key={item.tipo} className="hover:bg-gray-50">
+                              <td className="px-4 py-3">
+                                <div>
+                                  <span className="text-sm text-gray-700">{item.label}</span>
+                                  <p className="text-xs text-gray-500">{item.descricao}</p>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <Checkbox
+                                  checked={liberacoes[item.tipo] || false}
+                                  onChange={() => toggleLiberacao(item.tipo)}
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
