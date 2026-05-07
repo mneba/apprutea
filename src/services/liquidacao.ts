@@ -600,32 +600,6 @@ export const liquidacaoService = {
   },
 
   // ==================================================
-  // ATUALIZAR ÚLTIMA LOCALIZAÇÃO DO USUÁRIO
-  // ==================================================
-  async atualizarUltimaLocalizacao(
-    userId: string,
-    empresaId?: string,
-    cidadeId?: string,
-    rotaId?: string
-  ): Promise<boolean> {
-    const supabase = createClient();
-    
-    const { error } = await supabase.rpc('fn_atualizar_ultima_localizacao', {
-      p_user_id: userId,
-      p_empresa_id: empresaId || null,
-      p_cidade_id: cidadeId || null,
-      p_rota_id: rotaId || null,
-    });
-    
-    if (error) {
-      console.error('Erro ao atualizar última localização:', error);
-      return false;
-    }
-    
-    return true;
-  },
-
-  // ==================================================
   // BUSCAR LIQUIDAÇÕES DO MÊS (para calendário)
   // ==================================================
   async buscarLiquidacoesMes(
