@@ -1,15 +1,14 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Mail, User, Phone, Building2, MapPin, ArrowRight, ArrowLeft, Check } from 'lucide-react';
+import { Mail, User, Phone, Building2, ArrowRight, ArrowLeft, Check } from 'lucide-react';
 import { Button, Input, Logo, LanguageSwitcher } from '@/components/ui';
 import { Link, useRouter } from '@/i18n/routing';
-import { authService, hierarquiaService } from '@/services/auth';
-import type { Hierarquia } from '@/types/database';
+import { authService } from '@/services/auth';
 
 // Schema Etapa 1
 const etapa1Schema = z.object({
@@ -22,11 +21,11 @@ const etapa1Schema = z.object({
 });
 
 // Schema Etapa 2
+// Localização (país/estado/cidade) NÃO é mais coletada — admin define
+// acesso depois via ModalGerenciarUsuario.
 const etapa2Schema = z.object({
   nome: z.string().min(3, 'nameMinLength'),
   telefone: z.string().min(10, 'phoneMinLength'),
-  pais: z.string().min(1, 'required'),
-  hierarquia_id: z.string().min(1, 'required'),
   empresa_pretendida: z.string().min(2, 'required'),
 });
 
@@ -40,9 +39,6 @@ export default function RegistroPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
-  const [paises, setPaises] = useState<string[]>([]);
-  const [cidades, setCidades] = useState<Hierarquia[]>([]);
-  const [paisSelecionado, setPaisSelecionado] = useState('');
   const router = useRouter();
 
   // Form Etapa 1
@@ -54,38 +50,8 @@ export default function RegistroPage() {
   // Form Etapa 2
   const formEtapa2 = useForm<Etapa2Form>({
     resolver: zodResolver(etapa2Schema),
-    defaultValues: { nome: '', telefone: '', pais: '', hierarquia_id: '', empresa_pretendida: '' },
+    defaultValues: { nome: '', telefone: '', empresa_pretendida: '' },
   });
-
-  // Carregar países ao montar
-  useEffect(() => {
-    async function carregarPaises() {
-      try {
-        const data = await hierarquiaService.listarPaises();
-        setPaises(data);
-      } catch (err) {
-        console.error('Erro ao carregar países:', err);
-      }
-    }
-    carregarPaises();
-  }, []);
-
-  // Carregar cidades quando país mudar
-  useEffect(() => {
-    async function carregarCidades() {
-      if (!paisSelecionado) {
-        setCidades([]);
-        return;
-      }
-      try {
-        const data = await hierarquiaService.listarCidadesPorPais(paisSelecionado);
-        setCidades(data);
-      } catch (err) {
-        console.error('Erro ao carregar cidades:', err);
-      }
-    }
-    carregarCidades();
-  }, [paisSelecionado]);
 
   // Handler Etapa 1
   const handleEtapa1 = async (data: Etapa1Form) => {
@@ -94,7 +60,7 @@ export default function RegistroPage() {
 
     try {
       const result = await authService.registrarUsuario(data.email, data.password);
-      
+
       if (result.user) {
         setUserId(result.user.id);
         setEtapa(2);
@@ -124,7 +90,6 @@ export default function RegistroPage() {
       await authService.completarPerfil(userId, {
         nome: data.nome,
         telefone: data.telefone,
-        hierarquia_id: data.hierarquia_id,
         empresa_pretendida: data.empresa_pretendida,
       });
 
@@ -266,53 +231,6 @@ export default function RegistroPage() {
                   error={formEtapa2.formState.errors.telefone?.message ? tValidation(formEtapa2.formState.errors.telefone.message as any) : undefined}
                   {...formEtapa2.register('telefone')}
                 />
-
-                {/* Seletor de País */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    {t('country')}
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <select
-                      className="w-full pl-11 pr-4 py-3 rounded-lg border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none"
-                      {...formEtapa2.register('pais')}
-                      onChange={(e) => {
-                        formEtapa2.setValue('pais', e.target.value);
-                        setPaisSelecionado(e.target.value);
-                        formEtapa2.setValue('hierarquia_id', '');
-                      }}
-                    >
-                      <option value="">{t('selectCountry')}</option>
-                      {paises.map((pais) => (
-                        <option key={pais} value={pais}>{pais}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Seletor de Cidade */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    {t('city')}
-                  </label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <select
-                      className="w-full pl-11 pr-4 py-3 rounded-lg border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all appearance-none disabled:bg-gray-100 disabled:cursor-not-allowed"
-                      disabled={!paisSelecionado}
-                      {...formEtapa2.register('hierarquia_id')}
-                    >
-                      <option value="">{t('selectCity')}</option>
-                      {cidades.map((cidade) => (
-                        <option key={cidade.id} value={cidade.id}>{cidade.estado}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {formEtapa2.formState.errors.hierarquia_id && (
-                    <p className="mt-1.5 text-sm text-red-600">{tValidation('required')}</p>
-                  )}
-                </div>
 
                 <Input
                   label={t('companyName')}
