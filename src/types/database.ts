@@ -197,8 +197,13 @@ export interface RegistroEtapa1 {
 export interface RegistroEtapa2 {
   nome: string;
   telefone: string;
-  hierarquia_id: string;
   empresa_pretendida: string;
+  /**
+   * @deprecated Cadastro não pede mais localização — admin define
+   * acesso depois via ModalGerenciarUsuario. Campo opcional só para
+   * compatibilidade com o formulário antigo enquanto não é atualizado.
+   */
+  hierarquia_id?: string;
 }
 
 export interface ValidarCodigo {

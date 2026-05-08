@@ -16,15 +16,10 @@ export const authService = {
   },
 
   // Completar perfil (Etapa 2 - user_profiles)
+  // Localização (hierarquia/cidade) NÃO é mais coletada no cadastro.
+  // Admin define acesso depois via ModalGerenciarUsuario.
   async completarPerfil(userId: string, dados: RegistroEtapa2) {
-    // Buscar hierarquia para pegar a cidade
-    const { data: hierarquia } = await supabase
-      .from('hierarquias')
-      .select('id, pais, estado')
-      .eq('id', dados.hierarquia_id)
-      .single();
-
-    // Criar perfil do usuário
+    // Criar perfil do usuário sem localização
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .insert({
@@ -34,7 +29,10 @@ export const authService = {
         empresa_pretendida: dados.empresa_pretendida,
         status: 'APROVADO',
         tipo_usuario: 'USUARIO_PADRAO',
-        hierarquias_ids: hierarquia ? [dados.hierarquia_id] : [],
+        empresas_ids: [],
+        hierarquias_ids: [],
+        cidades_ids: [],
+        rotas_ids: [],
       })
       .select()
       .single();
@@ -53,7 +51,7 @@ export const authService = {
       const mensagens = superAdmins.map((admin) => ({
         usuario_origem_id: userId,
         usuario_destino_id: admin.user_id,
-        mensagem: `🆕 Nova solicitação de acesso!\n\n👤 Nome: ${dados.nome}\n📱 Telefone: ${dados.telefone}\n🏢 Empresa Pretendida: ${dados.empresa_pretendida}\n📍 Localização: ${hierarquia?.estado}, ${hierarquia?.pais}\n\n⏳ Aguardando geração de código de acesso.`,
+        mensagem: `🆕 Nova solicitação de acesso!\n\n👤 Nome: ${dados.nome}\n📱 Telefone: ${dados.telefone}\n🏢 Empresa Pretendida: ${dados.empresa_pretendida}\n\n⏳ Aguardando configuração de acesso e geração de código.`,
         lido: false,
       }));
 
@@ -101,8 +99,8 @@ export const authService = {
     // Atualizar token_validado para true
     const { error: updateError } = await supabase
       .from('user_profiles')
-      .update({ 
-        token_validado: true
+      .update({
+        token_validado: true,
       })
       .eq('user_id', userId);
 
