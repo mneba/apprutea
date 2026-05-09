@@ -249,19 +249,28 @@ export function SeletorLocalizacao() {
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors max-w-md"
+        className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors max-w-2xl"
       >
         <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0" />
         {breadcrumb.length > 0 ? (
-          <div className="flex items-center gap-1 text-sm truncate">
-            {breadcrumb.map((item, index) => (
-              <span key={index} className="flex items-center gap-1">
-                {index > 0 && <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />}
-                <span className={`truncate ${index === breadcrumb.length - 1 ? 'text-blue-600 font-medium' : 'text-gray-600'}`}>
-                  {item}
+          <div className="flex items-center gap-1 text-sm min-w-0">
+            {breadcrumb.map((item, index) => {
+              const isLast = index === breadcrumb.length - 1;
+              return (
+                <span key={index} className="flex items-center gap-1 min-w-0">
+                  {index > 0 && <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />}
+                  <span
+                    className={
+                      isLast
+                        ? 'text-blue-600 font-medium whitespace-nowrap'
+                        : 'truncate text-gray-600'
+                    }
+                  >
+                    {item}
+                  </span>
                 </span>
-              </span>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <span className="text-sm text-gray-500">Selecione a localização</span>
@@ -318,6 +327,7 @@ export function SeletorLocalizacao() {
                     {paisSelecionado === pais && (
                       <div className="ml-4 mt-1 space-y-1">
                         {estadosDoPais.map((hierarquia) => {
+                          // Quantidade de empresas ativas deste estado
                           const totalEmpresas = (hierarquia as any).total_empresas_ativas || 0;
                           const cidadesAqui = cidadesDaHierarquia(hierarquia.id);
                           const cidadeUnica = cidadesAqui.length === 1;
@@ -478,6 +488,7 @@ export function SeletorLocalizacao() {
                 <>
                   <div className="text-xs text-gray-500 mb-2">Selecione a rota (opcional):</div>
                   <div className="flex flex-wrap gap-2">
+                    {/* Opção "Todas as rotas" */}
                     <button
                       onClick={handleLimparRota}
                       className={`
