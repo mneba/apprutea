@@ -1355,7 +1355,7 @@ export default function LiquidacaoDiariaPage() {
             {liquidacao && <BadgeStatus status={liquidacao.status} />}
 
             {/* Botão Reabrir - só para FECHADO e admin */}
-            {liquidacao?.status === 'FECHADO' && podeReabrir && !visualizandoOutroDia && (
+            {liquidacao?.status === 'FECHADO' && podeReabrir && (
               <button
                 onClick={() => setModalReabrir(true)}
                 className="flex items-center gap-2 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors"
