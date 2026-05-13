@@ -1,6 +1,6 @@
 'use client';
-
 import { AlertTriangle, Calendar, User, X } from 'lucide-react';
+import { formatarDataExtenso, formatarDataHoraCurto } from '@/utils/dateFormat';
 
 interface FaixaLiquidacaoReabertaProps {
   dataLiquidacao: string;
@@ -15,21 +15,8 @@ export function FaixaLiquidacaoReaberta({
   reabertoPor,
   onFechar,
 }: FaixaLiquidacaoReabertaProps) {
-  const dataFormatada = new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-  });
-
-  const dataReaberturaFormatada = dataReabertura 
-    ? new Date(dataReabertura).toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : null;
+  const dataFormatada = formatarDataExtenso(dataLiquidacao);
+  const dataReaberturaFormatada = formatarDataHoraCurto(dataReabertura);
 
   return (
     <div className="bg-gradient-to-r from-amber-500 to-orange-500 text-white px-4 py-3 rounded-xl shadow-lg mb-4">
@@ -85,5 +72,4 @@ export function FaixaLiquidacaoReaberta({
     </div>
   );
 }
-
 export default FaixaLiquidacaoReaberta;
