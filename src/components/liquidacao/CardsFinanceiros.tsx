@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   X,
   Loader2,
@@ -16,6 +16,7 @@ import {
   Banknote,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import type { ClienteDoDia } from '@/types/liquidacao';
 
 // =====================================================
 // TIPOS
@@ -30,9 +31,10 @@ interface MovimentacaoFinanceiro {
   data_lancamento: string;
   created_at: string;
   forma_pagamento: string | null;
-  cliente_id: string | null;
+  // Tabela financeiro usa ref_cliente_id, não cliente_id
+  ref_cliente_id: string | null;
   cliente_nome: string | null;
-  emprestimo_id: string | null;
+  ref_emprestimo_id: string | null;
   status: string;
 }
 
@@ -53,13 +55,11 @@ interface PagamentoParcela {
   id: string;
   cliente_id: string;
   cliente_nome: string;
-  cliente_consecutivo: string;
   emprestimo_id: string;
-  numero_parcela: number;
-  numero_parcelas: number;
   valor_pago: number;
   forma_pagamento: string;
   created_at: string;
+  descricao: string;
 }
 
 // =====================================================
@@ -123,16 +123,17 @@ interface ModalBaseProps {
   icon: React.ReactNode;
   iconBgColor: string;
   children: React.ReactNode;
+  maxWidth?: string;
 }
 
-function ModalBase({ isOpen, onClose, title, subtitle, icon, iconBgColor, children }: ModalBaseProps) {
+function ModalBase({ isOpen, onClose, title, subtitle, icon, iconBgColor, children, maxWidth = 'max-w-lg' }: ModalBaseProps) {
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
-      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col">
+      <div className={`relative bg-white rounded-xl shadow-xl w-full ${maxWidth} max-h-[85vh] flex flex-col`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-200">
           <div className="flex items-center gap-3">
@@ -196,7 +197,7 @@ export function ModalEmprestimos({ isOpen, onClose, liquidacaoId, totalFallback,
         .order('created_at', { ascending: false });
 
       if (!error) {
-        setRegistros(data || []);
+        setRegistros((data || []) as MovimentacaoFinanceiro[]);
       }
     } catch (error) {
       console.error('Erro:', error);
@@ -289,7 +290,7 @@ export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qt
         .order('created_at', { ascending: false });
 
       if (!error) {
-        setRegistros(data || []);
+        setRegistros((data || []) as MovimentacaoFinanceiro[]);
       }
     } catch (error) {
       console.error('Erro:', error);
@@ -467,16 +468,10 @@ export function ModalMicroseguros({ isOpen, onClose, liquidacaoId, totalFallback
 }
 
 // =====================================================
-// MODAL PAGAMENTOS (COBRANÇAS)
+// MODAL PAGAMENTOS (COBRANÇAS) — REFEITO
 // =====================================================
 
-interface ClienteAgrupado {
-  cliente_id: string;
-  cliente_nome: string;
-  cliente_consecutivo: string;
-  total_pago: number;
-  parcelas: PagamentoParcela[];
-}
+type AbaPagamentos = 'TODOS' | 'PAGOS' | 'NAO_PAGOS' | 'DINHEIRO' | 'TRANSFERENCIA';
 
 interface ModalPagamentosProps {
   isOpen: boolean;
@@ -485,6 +480,8 @@ interface ModalPagamentosProps {
   clientesPagos: number;
   clientesNaoPagos: number;
   valorRecebido: number;
+  // Lista de clientes do dia da liquidação (já carregada na page)
+  clientesDia: ClienteDoDia[];
 }
 
 export function ModalPagamentos({ 
@@ -493,15 +490,17 @@ export function ModalPagamentos({
   liquidacaoId, 
   clientesPagos,
   clientesNaoPagos,
-  valorRecebido 
+  valorRecebido,
+  clientesDia,
 }: ModalPagamentosProps) {
   const [loading, setLoading] = useState(true);
-  const [clientesAgrupados, setClientesAgrupados] = useState<ClienteAgrupado[]>([]);
-  const [expandido, setExpandido] = useState<string | null>(null);
+  const [pagamentos, setPagamentos] = useState<PagamentoParcela[]>([]);
+  const [abaAtiva, setAbaAtiva] = useState<AbaPagamentos>('TODOS');
 
   useEffect(() => {
     if (isOpen && liquidacaoId) {
       carregarDados();
+      setAbaAtiva('TODOS');
     }
   }, [isOpen, liquidacaoId]);
 
@@ -510,7 +509,7 @@ export function ModalPagamentos({
     try {
       const supabase = createClient();
       
-      // Buscar pagamentos de parcelas (da tabela pagamentos_parcelas ou financeiro)
+      // Buscar pagamentos de parcelas (cobranças)
       const { data, error } = await supabase
         .from('financeiro')
         .select('*')
@@ -521,41 +520,18 @@ export function ModalPagamentos({
         .order('created_at', { ascending: false });
 
       if (!error && data) {
-        // Agrupar por cliente
-        const mapa = new Map<string, ClienteAgrupado>();
-        
-        data.forEach((pag: MovimentacaoFinanceiro) => {
-          const clienteId = pag.cliente_id || 'desconhecido';
-          const existente = mapa.get(clienteId);
-          
-          const parcela: PagamentoParcela = {
-            id: pag.id,
-            cliente_id: clienteId,
-            cliente_nome: pag.cliente_nome || 'Cliente',
-            cliente_consecutivo: '',
-            emprestimo_id: pag.emprestimo_id || '',
-            numero_parcela: 0,
-            numero_parcelas: 0,
-            valor_pago: Number(pag.valor),
-            forma_pagamento: pag.forma_pagamento || 'DINHEIRO',
-            created_at: pag.created_at,
-          };
-
-          if (existente) {
-            existente.total_pago += Number(pag.valor);
-            existente.parcelas.push(parcela);
-          } else {
-            mapa.set(clienteId, {
-              cliente_id: clienteId,
-              cliente_nome: pag.cliente_nome || 'Cliente',
-              cliente_consecutivo: '',
-              total_pago: Number(pag.valor),
-              parcelas: [parcela],
-            });
-          }
-        });
-
-        setClientesAgrupados(Array.from(mapa.values()));
+        const lista: PagamentoParcela[] = data.map((pag: any) => ({
+          id: pag.id,
+          // CORREÇÃO: o campo correto é ref_cliente_id, não cliente_id
+          cliente_id: pag.ref_cliente_id || 'desconhecido',
+          cliente_nome: pag.cliente_nome || 'Cliente',
+          emprestimo_id: pag.ref_emprestimo_id || '',
+          valor_pago: Number(pag.valor),
+          forma_pagamento: pag.forma_pagamento || 'DINHEIRO',
+          created_at: pag.created_at,
+          descricao: pag.descricao || '',
+        }));
+        setPagamentos(lista);
       }
     } catch (error) {
       console.error('Erro:', error);
@@ -564,111 +540,254 @@ export function ModalPagamentos({
     }
   };
 
-  const totalReal = loading ? valorRecebido : clientesAgrupados.reduce((s, c) => s + c.total_pago, 0);
-  const efetividade = clientesPagos + clientesNaoPagos > 0 
-    ? Math.round((clientesPagos / (clientesPagos + clientesNaoPagos)) * 100) 
-    : 0;
+  // Clientes que NÃO pagaram (status_dia diferente de PAGO)
+  const clientesNaoPagosList = useMemo(() => {
+    return clientesDia.filter(c => c.status_dia !== 'PAGO');
+  }, [clientesDia]);
+
+  // Totais por forma de pagamento
+  const totalDinheiro = useMemo(
+    () => pagamentos.filter(p => p.forma_pagamento === 'DINHEIRO').reduce((s, p) => s + p.valor_pago, 0),
+    [pagamentos]
+  );
+  const totalTransferencia = useMemo(
+    () => pagamentos.filter(p => p.forma_pagamento !== 'DINHEIRO').reduce((s, p) => s + p.valor_pago, 0),
+    [pagamentos]
+  );
+
+  // Contadores por aba
+  const qtdPagos = pagamentos.length;
+  const qtdNaoPagos = clientesNaoPagosList.length;
+  const qtdDinheiro = pagamentos.filter(p => p.forma_pagamento === 'DINHEIRO').length;
+  const qtdTransferencia = pagamentos.filter(p => p.forma_pagamento !== 'DINHEIRO').length;
+  const qtdTodos = qtdPagos + qtdNaoPagos;
+
+  // Lista renderizada conforme aba ativa
+  const pagamentosFiltrados = useMemo(() => {
+    if (abaAtiva === 'PAGOS' || abaAtiva === 'TODOS') return pagamentos;
+    if (abaAtiva === 'DINHEIRO') return pagamentos.filter(p => p.forma_pagamento === 'DINHEIRO');
+    if (abaAtiva === 'TRANSFERENCIA') return pagamentos.filter(p => p.forma_pagamento !== 'DINHEIRO');
+    return [];
+  }, [pagamentos, abaAtiva]);
+
+  const mostrarNaoPagos = abaAtiva === 'TODOS' || abaAtiva === 'NAO_PAGOS';
+  const mostrarPagos = abaAtiva !== 'NAO_PAGOS';
 
   return (
     <ModalBase
       isOpen={isOpen}
       onClose={onClose}
-      title="Cobranças do Dia"
-      subtitle={`${clientesPagos} cliente(s) · ${formatarMoeda(totalReal)}`}
+      title="Pagamentos do Dia"
+      subtitle={`${qtdPagos} pago(s) · ${qtdNaoPagos} não pago(s) · ${formatarMoeda(valorRecebido)}`}
       icon={<Users className="w-5 h-5 text-blue-600" />}
       iconBgColor="bg-blue-100"
+      maxWidth="max-w-2xl"
     >
-      <div className="p-4">
-        {/* Resumo */}
-        <div className="grid grid-cols-3 gap-2 mb-4">
-          <div className="p-2 bg-green-50 rounded-lg text-center">
-            <p className="text-lg font-bold text-green-600">{clientesPagos}</p>
-            <p className="text-xs text-gray-500">Pagos</p>
-          </div>
-          <div className="p-2 bg-red-50 rounded-lg text-center">
-            <p className="text-lg font-bold text-red-600">{clientesNaoPagos}</p>
-            <p className="text-xs text-gray-500">Não Pagos</p>
-          </div>
-          <div className="p-2 bg-blue-50 rounded-lg text-center">
-            <p className="text-lg font-bold text-blue-600">{efetividade}%</p>
-            <p className="text-xs text-gray-500">Efetividade</p>
-          </div>
+      {/* Abas / Filtros */}
+      <div className="px-4 pt-3 pb-2 border-b border-gray-100 bg-gray-50/50">
+        <div className="flex flex-wrap gap-2">
+          <AbaButton
+            ativa={abaAtiva === 'TODOS'}
+            onClick={() => setAbaAtiva('TODOS')}
+            label="Todos"
+            contagem={qtdTodos}
+            cor="blue"
+          />
+          <AbaButton
+            ativa={abaAtiva === 'PAGOS'}
+            onClick={() => setAbaAtiva('PAGOS')}
+            label="Pagos"
+            contagem={qtdPagos}
+            cor="green"
+          />
+          <AbaButton
+            ativa={abaAtiva === 'NAO_PAGOS'}
+            onClick={() => setAbaAtiva('NAO_PAGOS')}
+            label="Não Pagos"
+            contagem={qtdNaoPagos}
+            cor="red"
+          />
+          <AbaButton
+            ativa={abaAtiva === 'DINHEIRO'}
+            onClick={() => setAbaAtiva('DINHEIRO')}
+            label="Dinheiro"
+            contagem={qtdDinheiro}
+            valor={totalDinheiro}
+            cor="emerald"
+          />
+          <AbaButton
+            ativa={abaAtiva === 'TRANSFERENCIA'}
+            onClick={() => setAbaAtiva('TRANSFERENCIA')}
+            label="Transferência"
+            contagem={qtdTransferencia}
+            valor={totalTransferencia}
+            cor="sky"
+          />
         </div>
+      </div>
 
-        {/* Lista de clientes */}
+      <div className="p-4">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
           </div>
-        ) : clientesAgrupados.length > 0 ? (
-          <div className="space-y-2">
-            {clientesAgrupados.map((cliente) => (
-              <div key={cliente.cliente_id} className="border border-gray-200 rounded-lg overflow-hidden">
-                {/* Header do cliente */}
-                <button
-                  onClick={() => setExpandido(expandido === cliente.cliente_id ? null : cliente.cliente_id)}
-                  className="w-full p-3 bg-gray-50 flex items-center justify-between hover:bg-gray-100 transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center text-sm font-medium text-blue-700">
-                      {cliente.cliente_nome.charAt(0)}
-                    </div>
-                    <div className="text-left">
-                      <p className="font-medium text-gray-900">{cliente.cliente_nome}</p>
-                      <p className="text-xs text-gray-500">{cliente.parcelas.length} parcela(s)</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-green-600">{formatarMoeda(cliente.total_pago)}</span>
-                    {expandido === cliente.cliente_id ? (
-                      <ChevronUp className="w-4 h-4 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
-                    )}
-                  </div>
-                </button>
-
-                {/* Detalhes das parcelas */}
-                {expandido === cliente.cliente_id && (
-                  <div className="p-3 bg-white border-t border-gray-100 space-y-2">
-                    {cliente.parcelas.map((parcela) => (
-                      <div key={parcela.id} className="flex justify-between items-center text-sm">
-                        <div className="flex items-center gap-2">
-                          {parcela.forma_pagamento === 'DINHEIRO' ? (
-                            <Banknote className="w-4 h-4 text-green-500" />
-                          ) : (
-                            <CreditCard className="w-4 h-4 text-blue-500" />
-                          )}
-                          <span className="text-gray-600">{formatarHora(parcela.created_at)}</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">
-                            {formatarFormaPagamento(parcela.forma_pagamento)}
-                          </span>
-                          <span className="font-medium text-green-600">
-                            {formatarMoeda(parcela.valor_pago)}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
         ) : (
-          <div className="text-center py-8 text-gray-500">
-            Nenhuma cobrança registrada hoje
+          <div className="space-y-4">
+            {/* Lista de Pagos / Filtrados */}
+            {mostrarPagos && pagamentosFiltrados.length > 0 && (
+              <div>
+                {abaAtiva === 'TODOS' && (
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1">
+                    Pagamentos Recebidos
+                  </h3>
+                )}
+                <div className="space-y-2">
+                  {pagamentosFiltrados.map((pag) => (
+                    <div key={pag.id} className="p-3 bg-green-50 border border-green-100 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-start gap-2 flex-1">
+                          <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center text-sm font-medium text-green-700 flex-shrink-0">
+                            {pag.cliente_nome.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{pag.cliente_nome}</p>
+                            {pag.descricao && (
+                              <p className="text-xs text-gray-500 truncate">{pag.descricao}</p>
+                            )}
+                            <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1.5">
+                              {pag.forma_pagamento === 'DINHEIRO' ? (
+                                <Banknote className="w-3 h-3 text-emerald-500" />
+                              ) : (
+                                <CreditCard className="w-3 h-3 text-sky-500" />
+                              )}
+                              {formatarFormaPagamento(pag.forma_pagamento)} · {formatarHora(pag.created_at)}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="font-bold text-green-600 ml-2 whitespace-nowrap">
+                          {formatarMoeda(pag.valor_pago)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Lista de Não Pagos */}
+            {mostrarNaoPagos && clientesNaoPagosList.length > 0 && (
+              <div>
+                {abaAtiva === 'TODOS' && (
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase mb-2 px-1 mt-4">
+                    Clientes Não Pagos
+                  </h3>
+                )}
+                <div className="space-y-2">
+                  {clientesNaoPagosList.map((cliente) => (
+                    <div key={cliente.parcela_id} className="p-3 bg-red-50 border border-red-100 rounded-lg">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-start gap-2 flex-1">
+                          <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center text-sm font-medium text-red-700 flex-shrink-0">
+                            {cliente.nome.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{cliente.nome}</p>
+                            <p className="text-xs text-gray-500">
+                              Parcela {cliente.numero_parcela}/{cliente.numero_parcelas}
+                              {cliente.tem_parcelas_vencidas && (
+                                <span className="ml-1 text-red-600">
+                                  · {cliente.total_parcelas_vencidas} vencida(s)
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              Status: {cliente.status_dia === 'EM_ATRASO' ? 'Em atraso' : cliente.status_dia}
+                            </p>
+                          </div>
+                        </div>
+                        <p className="font-bold text-red-600 ml-2 whitespace-nowrap">
+                          {formatarMoeda(cliente.valor_parcela)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {!loading && pagamentosFiltrados.length === 0 && (!mostrarNaoPagos || clientesNaoPagosList.length === 0) && (
+              <div className="text-center py-8 text-gray-500">
+                Nenhum registro nesta categoria
+              </div>
+            )}
           </div>
         )}
+      </div>
 
-        {/* Total */}
-        <div className="mt-4 p-3 bg-blue-100 rounded-lg flex justify-between items-center">
-          <span className="font-medium text-blue-800">TOTAL RECEBIDO</span>
-          <span className="font-bold text-blue-800">{formatarMoeda(totalReal)}</span>
+      {/* Rodapé com totais */}
+      <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="flex justify-between items-center">
+            <span className="text-gray-600">Total Recebido:</span>
+            <span className="font-bold text-green-700">{formatarMoeda(valorRecebido)}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <span className="text-gray-600">Efetividade:</span>
+            <span className="font-bold text-blue-700">
+              {qtdTodos > 0 ? Math.round((qtdPagos / qtdTodos) * 100) : 0}%
+            </span>
+          </div>
         </div>
       </div>
     </ModalBase>
+  );
+}
+
+// =====================================================
+// COMPONENTE: BOTÃO DE ABA / FILTRO
+// =====================================================
+
+interface AbaButtonProps {
+  ativa: boolean;
+  onClick: () => void;
+  label: string;
+  contagem: number;
+  valor?: number;
+  cor: 'blue' | 'green' | 'red' | 'emerald' | 'sky';
+}
+
+function AbaButton({ ativa, onClick, label, contagem, valor, cor }: AbaButtonProps) {
+  const coresAtivas: Record<string, string> = {
+    blue: 'bg-blue-600 text-white border-blue-600',
+    green: 'bg-green-600 text-white border-green-600',
+    red: 'bg-red-600 text-white border-red-600',
+    emerald: 'bg-emerald-600 text-white border-emerald-600',
+    sky: 'bg-sky-600 text-white border-sky-600',
+  };
+  const coresInativas: Record<string, string> = {
+    blue: 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50',
+    green: 'bg-white text-green-700 border-green-200 hover:bg-green-50',
+    red: 'bg-white text-red-700 border-red-200 hover:bg-red-50',
+    emerald: 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50',
+    sky: 'bg-white text-sky-700 border-sky-200 hover:bg-sky-50',
+  };
+
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1.5
+        ${ativa ? coresAtivas[cor] : coresInativas[cor]}
+      `}
+    >
+      <span>{label}</span>
+      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+        ativa ? 'bg-white/20' : 'bg-gray-100'
+      }`}>
+        {valor !== undefined ? formatarMoeda(valor) : contagem}
+      </span>
+    </button>
   );
 }
 
@@ -708,7 +827,7 @@ export function ModalReceitas({ isOpen, onClose, liquidacaoId }: ModalReceitasPr
         .order('created_at', { ascending: false });
 
       if (!error) {
-        setRegistros(data || []);
+        setRegistros((data || []) as MovimentacaoFinanceiro[]);
       }
     } catch (error) {
       console.error('Erro:', error);

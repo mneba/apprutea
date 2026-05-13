@@ -1450,38 +1450,55 @@ export default function LiquidacaoDiariaPage() {
                 {/* Coluna 2 */}
                 <div className="space-y-4">
                   {/* Card Pagamentos do Dia - Compacto e Clicável */}
-                  <button
-                    onClick={() => setModalPagamentos(true)}
-                    className="w-full bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group text-left"
-                  >
-                    <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-green-700">
-                      <CheckCircle className="w-4 h-4 text-green-600 transition-transform duration-300 group-hover:scale-110" />
-                      Pagamentos do Dia
-                    </h3>
-                    
-                    <div className="grid grid-cols-4 gap-2">
-                      <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
-                        <p className="text-xl font-bold text-green-600">{liquidacao.pagamentos_pagos}</p>
-                        <p className="text-xs text-gray-500">Pagos</p>
+                  {/* Cards Pagamentos do Dia - Separados: Status + Valores */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Card Status (Pagos / Não Pagos) */}
+                    <button
+                      onClick={() => setModalPagamentos(true)}
+                      className="w-full bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group text-left"
+                    >
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-green-700">
+                        <CheckCircle className="w-3.5 h-3.5 text-green-600 transition-transform duration-300 group-hover:scale-110" />
+                        Status
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
+                          <p className="text-xl font-bold text-green-600">{liquidacao.pagamentos_pagos}</p>
+                          <p className="text-xs text-gray-500">Pagos</p>
+                        </div>
+                        <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
+                          <p className="text-xl font-bold text-red-600">{liquidacao.pagamentos_nao_pagos}</p>
+                          <p className="text-xs text-gray-500">Não Pagos</p>
+                        </div>
                       </div>
-                      <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
-                        <p className="text-xl font-bold text-red-600">{liquidacao.pagamentos_nao_pagos}</p>
-                        <p className="text-xs text-gray-500">Não Pagos</p>
+                    </button>
+
+                    {/* Card Valores (Dinheiro / Transferência) */}
+                    <button
+                      onClick={() => setModalPagamentos(true)}
+                      className="w-full bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-emerald-100/50 hover:-translate-y-1 hover:border-emerald-200 group text-left"
+                    >
+                      <h3 className="text-xs font-semibold text-gray-900 mb-2 flex items-center gap-1.5 transition-colors duration-300 group-hover:text-emerald-700">
+                        <Wallet className="w-3.5 h-3.5 text-emerald-600 transition-transform duration-300 group-hover:scale-110" />
+                        Valores Recebidos
+                      </h3>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="text-center p-2 bg-emerald-50 rounded-lg transition-all duration-300 group-hover:bg-emerald-100">
+                          <p className="text-sm font-bold text-emerald-600">{formatarMoeda(liquidacao.valor_dinheiro)}</p>
+                          <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                            <Banknote className="w-3 h-3" /> Dinheiro
+                          </p>
+                        </div>
+                        <div className="text-center p-2 bg-sky-50 rounded-lg transition-all duration-300 group-hover:bg-sky-100">
+                          <p className="text-sm font-bold text-sky-600">{formatarMoeda(liquidacao.valor_transferencia)}</p>
+                          <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
+                            <CreditCard className="w-3 h-3" /> Transf.
+                          </p>
+                        </div>
                       </div>
-                      <div className="text-center p-2 bg-emerald-50 rounded-lg transition-all duration-300 group-hover:bg-emerald-100">
-                        <p className="text-sm font-bold text-emerald-600">{formatarMoeda(liquidacao.valor_dinheiro)}</p>
-                        <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
-                          <Banknote className="w-3 h-3" /> Dinheiro
-                        </p>
-                      </div>
-                      <div className="text-center p-2 bg-sky-50 rounded-lg transition-all duration-300 group-hover:bg-sky-100">
-                        <p className="text-sm font-bold text-sky-600">{formatarMoeda(liquidacao.valor_transferencia)}</p>
-                        <p className="text-xs text-gray-500 flex items-center justify-center gap-1">
-                          <CreditCard className="w-3 h-3" /> Transf.
-                        </p>
-                      </div>
-                    </div>
-                  </button>
+                    </button>
+                  </div>
+
 
                   {/* Grid de 3 cards financeiros */}
                   <div className="grid grid-cols-3 gap-3">
@@ -1813,13 +1830,14 @@ export default function LiquidacaoDiariaPage() {
             qtdFallback={liquidacao.qtd_microseguros_dia}
           />
 
-          <ModalPagamentos
+<ModalPagamentos
             isOpen={modalPagamentos}
             onClose={() => setModalPagamentos(false)}
             liquidacaoId={liquidacao.id}
             clientesPagos={liquidacao.pagamentos_pagos}
             clientesNaoPagos={liquidacao.pagamentos_nao_pagos}
             valorRecebido={liquidacao.valor_recebido_dia}
+            clientesDia={clientesDia}
           />
 
           <ModalReceitas
