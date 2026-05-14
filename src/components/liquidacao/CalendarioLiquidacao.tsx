@@ -421,17 +421,17 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
         <LinhaTotal label="Saldo final" valor={formatarMoeda(caixaFinal)} />
       </SecaoBalanco>
 
-      {/* CARTEIRA */}
-      <SecaoBalanco titulo="Carteira (Emprestado)">
+      {/* CARTEIRA — A RECEBER */}
+      <SecaoBalanco titulo="Carteira (A Receber)">
         <Linha label="Saldo inicial" valor={formatarMoeda(carteiraInicial)} />
         {emprestimos > 0 && (
-          <Linha label="(+) Empréstimos do dia" valor={`+ ${formatarMoeda(emprestimos)}`} cor="text-green-600" />
+          <Linha label="(+) Vendas do dia" valor={`+ ${formatarMoeda(emprestimos)}`} cor="text-green-600" />
         )}
         {jurosDia > 0 && (
-          <Linha label="(+) Juros do dia" valor={`+ ${formatarMoeda(jurosDia)}`} cor="text-green-600" />
+          <Linha label="(+) Juros das vendas" valor={`+ ${formatarMoeda(jurosDia)}`} cor="text-green-600" />
         )}
         {recebido > 0 && (
-          <Linha label="(−) Recebido (parcelas)" valor={`− ${formatarMoeda(recebido)}`} cor="text-red-600" />
+          <Linha label="(−) Recaudo do dia" valor={`− ${formatarMoeda(recebido)}`} cor="text-red-600" />
         )}
         <LinhaTotal label="Saldo final" valor={formatarMoeda(carteiraFinal)} />
       </SecaoBalanco>
