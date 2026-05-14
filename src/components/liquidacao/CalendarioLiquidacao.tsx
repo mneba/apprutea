@@ -5,13 +5,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar as CalendarIcon,
-  Users,
-  DollarSign,
-  AlertTriangle,
-  CheckCircle,
   Clock,
   Lock,
-  Eye,
+  RotateCcw,
 } from 'lucide-react';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
 
@@ -24,19 +20,12 @@ interface DiaCalendario {
   diaDoMes: number;
   isHoje: boolean;
   isMesAtual: boolean;
-  isPassado: boolean;
-  isFuturo: boolean;
   liquidacao?: LiquidacaoDiaria;
-  previsao?: {
-    quantidade: number;
-    valor: number;
-  };
 }
 
 interface CalendarioLiquidacaoProps {
   rotaId: string;
   liquidacoesMes: LiquidacaoDiaria[];
-  resumoParcelas: Map<string, { quantidade: number; valor: number }>;
   dataSelecionada: Date;
   onSelecionarData: (data: Date) => void;
   onMesChange: (ano: number, mes: number) => void;
@@ -53,8 +42,11 @@ const MESES = [
   'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
 ];
 
-function formatarData(data: Date): string {
-  return data.toISOString().split('T')[0];
+function formatarDataYmd(data: Date): string {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
 }
 
 function formatarMoeda(valor: number): string {
@@ -68,27 +60,27 @@ function gerarDiasDoMes(ano: number, mes: number): Date[] {
   const dias: Date[] = [];
   const primeiroDia = new Date(ano, mes - 1, 1);
   const ultimoDia = new Date(ano, mes, 0);
-  
-  // Adicionar dias do mês anterior para completar a primeira semana
+
+  // Dias do mês anterior para completar a primeira semana
   const diaSemanaInicio = primeiroDia.getDay();
   for (let i = diaSemanaInicio - 1; i >= 0; i--) {
     const d = new Date(ano, mes - 1, -i);
     dias.push(d);
   }
-  
-  // Adicionar dias do mês atual
+
+  // Dias do mês atual
   for (let dia = 1; dia <= ultimoDia.getDate(); dia++) {
     dias.push(new Date(ano, mes - 1, dia));
   }
-  
-  // Adicionar dias do próximo mês para completar a última semana
+
+  // Dias do próximo mês para completar a última semana
   const diasRestantes = 7 - (dias.length % 7);
   if (diasRestantes < 7) {
     for (let i = 1; i <= diasRestantes; i++) {
       dias.push(new Date(ano, mes, i));
     }
   }
-  
+
   return dias;
 }
 
@@ -99,7 +91,6 @@ function gerarDiasDoMes(ano: number, mes: number): Date[] {
 export function CalendarioLiquidacao({
   rotaId,
   liquidacoesMes,
-  resumoParcelas,
   dataSelecionada,
   onSelecionarData,
   onMesChange,
@@ -107,37 +98,49 @@ export function CalendarioLiquidacao({
 }: CalendarioLiquidacaoProps) {
   const [anoAtual, setAnoAtual] = useState(dataSelecionada.getFullYear());
   const [mesAtual, setMesAtual] = useState(dataSelecionada.getMonth() + 1);
-  
+
   const hoje = useMemo(() => new Date(), []);
-  const hojeStr = formatarData(hoje);
+  const hojeStr = formatarDataYmd(hoje);
+
+  // Atualiza a tela do calendário quando a data selecionada externa muda de mês
+  useEffect(() => {
+    const novoAno = dataSelecionada.getFullYear();
+    const novoMes = dataSelecionada.getMonth() + 1;
+    if (novoAno !== anoAtual || novoMes !== mesAtual) {
+      setAnoAtual(novoAno);
+      setMesAtual(novoMes);
+    }
+  }, [dataSelecionada]);
 
   // Gerar dias do calendário
   const diasCalendario = useMemo(() => {
     const dias = gerarDiasDoMes(anoAtual, mesAtual);
-    
-    // Criar mapa de liquidações por data
+
+    // Mapear liquidações por data_liquidacao (que é DATE no banco)
     const liquidacoesPorData = new Map<string, LiquidacaoDiaria>();
-    liquidacoesMes.forEach(liq => {
-      const dataStr = liq.data_abertura.split('T')[0];
-      liquidacoesPorData.set(dataStr, liq);
+    liquidacoesMes.forEach((liq) => {
+      // Tenta primeiro data_liquidacao (DATE), depois data_abertura (timestamp)
+      const dataStr =
+        (liq as any).data_liquidacao?.split('T')[0] ||
+        liq.data_abertura?.split('T')[0];
+      if (dataStr) {
+        liquidacoesPorData.set(dataStr, liq);
+      }
     });
-    
+
     return dias.map((data): DiaCalendario => {
-      const dataStr = formatarData(data);
+      const dataStr = formatarDataYmd(data);
       const isMesAtual = data.getMonth() + 1 === mesAtual;
-      
+
       return {
         data,
         diaDoMes: data.getDate(),
         isHoje: dataStr === hojeStr,
         isMesAtual,
-        isPassado: data < hoje && dataStr !== hojeStr,
-        isFuturo: data > hoje,
         liquidacao: liquidacoesPorData.get(dataStr),
-        previsao: resumoParcelas.get(dataStr),
       };
     });
-  }, [anoAtual, mesAtual, liquidacoesMes, resumoParcelas, hoje, hojeStr]);
+  }, [anoAtual, mesAtual, liquidacoesMes, hojeStr]);
 
   // Navegar entre meses
   const irParaMesAnterior = () => {
@@ -173,73 +176,58 @@ export function CalendarioLiquidacao({
     onSelecionarData(hoje);
   };
 
-  // Verificar se a data está selecionada
   const isDataSelecionada = (data: Date) => {
-    return formatarData(data) === formatarData(dataSelecionada);
+    return formatarDataYmd(data) === formatarDataYmd(dataSelecionada);
   };
 
-  // Obter classe de cor do dia
+  // Classes de cor por status (apenas 4 estados + neutro)
   const getClasseDia = (dia: DiaCalendario) => {
     if (!dia.isMesAtual) {
-      return 'text-gray-300 bg-gray-50';
+      return 'text-gray-300';
     }
-    
+
     if (dia.liquidacao) {
       switch (dia.liquidacao.status) {
         case 'ABERTO':
           return 'bg-green-100 text-green-800 hover:bg-green-200';
         case 'FECHADO':
-          return 'bg-blue-100 text-blue-800 hover:bg-blue-200';
         case 'APROVADO':
-          return 'bg-purple-100 text-purple-800 hover:bg-purple-200';
+          // APROVADO é tratado visualmente como FECHADO (mesma legenda)
+          return 'bg-blue-100 text-blue-800 hover:bg-blue-200';
         case 'REABERTO':
           return 'bg-amber-100 text-amber-800 hover:bg-amber-200';
         default:
-          return 'bg-gray-100 text-gray-800 hover:bg-gray-200';
+          return 'bg-gray-100 text-gray-700 hover:bg-gray-200';
       }
     }
-    
-    if (dia.previsao && dia.previsao.quantidade > 0) {
-      if (dia.isPassado) {
-        // Parcelas que deveriam ter sido cobradas
-        return 'bg-red-50 text-red-700 hover:bg-red-100';
-      }
-      // Parcelas futuras
-      return 'bg-yellow-50 text-yellow-700 hover:bg-yellow-100';
-    }
-    
+
+    // Sem registro
     if (dia.isHoje) {
       return 'bg-blue-600 text-white hover:bg-blue-700';
     }
-    
     return 'text-gray-700 hover:bg-gray-100';
   };
 
-  // Obter ícone do dia
   const getIconeDia = (dia: DiaCalendario) => {
-    if (dia.liquidacao) {
-      switch (dia.liquidacao.status) {
-        case 'ABERTO':
-          return <Clock className="w-2.5 h-2.5 text-green-600" />;
-        case 'FECHADO':
-          return <Lock className="w-2.5 h-2.5 text-blue-600" />;
-        case 'APROVADO':
-          return <CheckCircle className="w-2.5 h-2.5 text-purple-600" />;
-        case 'REABERTO':
-          return <Eye className="w-2.5 h-2.5 text-amber-600" />;
-      }
+    if (!dia.liquidacao) return null;
+    switch (dia.liquidacao.status) {
+      case 'ABERTO':
+        return <Clock className="w-2.5 h-2.5 text-green-600" />;
+      case 'FECHADO':
+      case 'APROVADO':
+        return <Lock className="w-2.5 h-2.5 text-blue-600" />;
+      case 'REABERTO':
+        return <RotateCcw className="w-2.5 h-2.5 text-amber-600" />;
+      default:
+        return null;
     }
-    
-    if (dia.previsao && dia.previsao.quantidade > 0 && dia.isPassado) {
-      return <AlertTriangle className="w-2.5 h-2.5 text-red-500" />;
-    }
-    
-    return null;
   };
+
+  const diaSelecionado = diasCalendario.find((d) => isDataSelecionada(d.data));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Header do Calendário */}
+      {/* Header */}
       <div className="px-4 py-3 border-b border-gray-200">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -255,7 +243,7 @@ export function CalendarioLiquidacao({
         </div>
       </div>
 
-      {/* Navegação do Mês */}
+      {/* Navegação do mês */}
       <div className="px-4 py-2 flex items-center justify-between border-b border-gray-100">
         <button
           onClick={irParaMesAnterior}
@@ -274,9 +262,9 @@ export function CalendarioLiquidacao({
         </button>
       </div>
 
-      {/* Grade do Calendário */}
+      {/* Grade */}
       <div className="p-2">
-        {/* Cabeçalho dos dias da semana */}
+        {/* Cabeçalho dias da semana */}
         <div className="grid grid-cols-7 mb-1">
           {DIAS_SEMANA.map((dia) => (
             <div
@@ -288,7 +276,7 @@ export function CalendarioLiquidacao({
           ))}
         </div>
 
-        {/* Dias do mês */}
+        {/* Dias */}
         <div className="grid grid-cols-7 gap-1">
           {diasCalendario.map((dia, index) => (
             <button
@@ -304,50 +292,37 @@ export function CalendarioLiquidacao({
               `}
             >
               <span>{dia.diaDoMes}</span>
-              
-              {/* Indicadores */}
-              <div className="absolute bottom-0.5 flex gap-0.5">
-                {getIconeDia(dia)}
-                {dia.previsao && dia.previsao.quantidade > 0 && !dia.liquidacao && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
-                )}
-              </div>
+              <div className="absolute bottom-0.5">{getIconeDia(dia)}</div>
             </button>
           ))}
         </div>
       </div>
 
-      {/* Legenda */}
+      {/* Legenda — apenas 4 estados */}
       <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+        <p className="text-xs text-gray-500 mb-2">Legenda:</p>
         <div className="flex flex-wrap gap-3 text-xs">
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-green-100 border border-green-300" />
+            <div className="w-3 h-3 rounded-full border-2 border-green-500" />
             <span className="text-gray-600">Aberto</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-blue-100 border border-blue-300" />
+            <div className="w-3 h-3 rounded-full border-2 border-blue-500" />
             <span className="text-gray-600">Fechado</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-purple-100 border border-purple-300" />
-            <span className="text-gray-600">Aprovado</span>
+            <div className="w-3 h-3 rounded-full border-2 border-amber-500" />
+            <span className="text-gray-600">Reaberto</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-yellow-50 border border-yellow-300" />
-            <span className="text-gray-600">Parcelas</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-red-50 border border-red-300" />
-            <span className="text-gray-600">Vencido</span>
+            <div className="w-3 h-3 rounded-full border-2 border-gray-300" />
+            <span className="text-gray-600">Sem registro</span>
           </div>
         </div>
       </div>
 
-      {/* Resumo do Dia Selecionado */}
-      <ResumoDiaSelecionado
-        dia={diasCalendario.find(d => isDataSelecionada(d.data))}
-        loading={loading}
-      />
+      {/* Resumo do dia selecionado */}
+      <ResumoDiaSelecionado dia={diaSelecionado} loading={loading} />
     </div>
   );
 }
@@ -371,77 +346,85 @@ function ResumoDiaSelecionado({
     month: 'long',
   });
 
+  const liq = dia.liquidacao;
+
   return (
-    <div className="px-4 py-3 border-t border-gray-200">
-      <p className="text-xs text-gray-500 capitalize mb-2">{dataFormatada}</p>
-      
+    <div className="px-4 py-3 border-t border-gray-200 bg-white">
+      <p className="text-xs text-gray-500 capitalize mb-3">{dataFormatada}</p>
+
       {loading ? (
         <div className="flex items-center justify-center py-4">
           <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : dia.liquidacao ? (
-        // Dia com liquidação
+      ) : liq ? (
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Status:</span>
-            <span className={`text-sm font-medium ${
-              dia.liquidacao.status === 'ABERTO' ? 'text-green-600' :
-              dia.liquidacao.status === 'FECHADO' ? 'text-blue-600' :
-              dia.liquidacao.status === 'APROVADO' ? 'text-purple-600' :
-              'text-amber-600'
-            }`}>
-              {dia.liquidacao.status}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Recebido:</span>
-            <span className="text-sm font-semibold text-green-600">
-              {formatarMoeda(dia.liquidacao.valor_recebido_dia || 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Esperado:</span>
-            <span className="text-sm font-medium text-gray-900">
-              {formatarMoeda(dia.liquidacao.valor_esperado_dia || 0)}
-            </span>
-          </div>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">Pagamentos:</span>
-            <span className="text-sm text-gray-900">
-              <span className="text-green-600">{dia.liquidacao.pagamentos_pagos}</span>
-              {' / '}
-              <span className="text-red-600">{dia.liquidacao.pagamentos_nao_pagos}</span>
-            </span>
-          </div>
-        </div>
-      ) : dia.previsao && dia.previsao.quantidade > 0 ? (
-        // Dia com parcelas previstas
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 text-sm">
-            <Users className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-600">Parcelas:</span>
-            <span className="font-semibold text-gray-900">{dia.previsao.quantidade}</span>
-          </div>
-          <div className="flex items-center gap-2 text-sm">
-            <DollarSign className="w-4 h-4 text-gray-400" />
-            <span className="text-gray-600">A receber:</span>
-            <span className="font-semibold text-green-600">
-              {formatarMoeda(dia.previsao.valor)}
-            </span>
-          </div>
-          {dia.isPassado && (
-            <div className="flex items-center gap-2 text-sm text-red-600">
-              <AlertTriangle className="w-4 h-4" />
-              <span>Parcelas não cobradas</span>
-            </div>
+          <Linha
+            label="Status"
+            valor={liq.status}
+            corValor={
+              liq.status === 'ABERTO'
+                ? 'text-green-600'
+                : liq.status === 'REABERTO'
+                ? 'text-amber-600'
+                : 'text-blue-600'
+            }
+          />
+          <Linha
+            label="Recebido"
+            valor={formatarMoeda(liq.valor_recebido_dia || 0)}
+            corValor="text-green-600"
+            bold
+          />
+          <Linha
+            label="Esperado"
+            valor={formatarMoeda(liq.valor_esperado_dia || 0)}
+          />
+          <Linha
+            label="Pagamentos"
+            valor={
+              <span>
+                <span className="text-green-600">{liq.pagamentos_pagos || 0}</span>
+                {' / '}
+                <span className="text-red-600">{liq.pagamentos_nao_pagos || 0}</span>
+              </span>
+            }
+          />
+          {((liq as any).total_microseguro_dia || 0) > 0 && (
+            <Linha
+              label="Microseguro"
+              valor={formatarMoeda((liq as any).total_microseguro_dia || 0)}
+              corValor="text-purple-600"
+            />
           )}
         </div>
       ) : (
-        // Dia sem dados
-        <p className="text-sm text-gray-400 text-center py-2">
-          {dia.isFuturo ? 'Sem parcelas previstas' : 'Sem liquidação'}
-        </p>
+        <div className="text-center py-3 text-sm text-gray-400">Sem registro</div>
       )}
+    </div>
+  );
+}
+
+function Linha({
+  label,
+  valor,
+  corValor,
+  bold,
+}: {
+  label: string;
+  valor: React.ReactNode;
+  corValor?: string;
+  bold?: boolean;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-gray-600">{label}:</span>
+      <span
+        className={`text-sm ${bold ? 'font-semibold' : 'font-medium'} ${
+          corValor || 'text-gray-900'
+        }`}
+      >
+        {valor}
+      </span>
     </div>
   );
 }

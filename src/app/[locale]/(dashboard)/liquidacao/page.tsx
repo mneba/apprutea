@@ -7,7 +7,6 @@ import {
   Clock,
   Users,
   CheckCircle,
-  XCircle,
   AlertCircle,
   Loader2,
   Shield,
@@ -26,24 +25,23 @@ import {
   FileText,
   RotateCcw,
   AlertTriangle,
-  User,
   Search,
   MessageSquare,
   X,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
-import { CalendarioLiquidacao } from '@/components/liquidacao/CalendarioLiquidacao';
+import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendarioLiquidacao';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
 import { FaixaLiquidacaoReaberta } from '@/components/liquidacao/FaixaLiquidacaoReaberta';
 import { NotasLiquidacaoCard, ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
-import { 
-  ModalEmprestimos, 
-  ModalDespesas, 
-  ModalMicroseguros, 
+import {
+  ModalEmprestimos,
+  ModalDespesas,
+  ModalMicroseguros,
   ModalPagamentos,
-  ModalReceitas 
+  ModalReceitas,
 } from '@/components/liquidacao/CardsFinanceiros';
 import type {
   LiquidacaoDiaria,
@@ -88,25 +86,25 @@ function validarPermissaoRota(
   userProfile: any
 ): boolean {
   if (!tipoUsuario || !rotaId) return false;
-  
+
   if (tipoUsuario === 'SUPER_ADMIN') {
     return true;
   }
-  
+
   if (tipoUsuario === 'ADMIN') {
     const empresasPermitidas = userProfile?.empresas_ids || [];
     return empresasPermitidas.length > 0;
   }
-  
+
   if (tipoUsuario === 'MONITOR' || tipoUsuario === 'USUARIO_PADRAO') {
     const rotasPermitidas = userProfile?.rotas_ids || [];
     return rotasPermitidas.includes(rotaId);
   }
-  
+
   if (tipoUsuario === 'VENDEDOR') {
     return true;
   }
-  
+
   return false;
 }
 
@@ -122,7 +120,7 @@ function BadgeStatus({ status }: { status: string }) {
     REABERTO: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Reaberto' },
   };
   const cfg = config[status] || config.ABERTO;
-  
+
   return (
     <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
       {cfg.label}
@@ -180,13 +178,92 @@ function ItemInfo({
 
 function ProgressBar({ percentual, cor }: { percentual: number; cor?: string }) {
   const corBarra = cor || (percentual >= 100 ? 'bg-green-500' : percentual >= 70 ? 'bg-blue-500' : percentual >= 50 ? 'bg-amber-500' : 'bg-red-500');
-  
+
   return (
     <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-      <div 
+      <div
         className={`h-full ${corBarra} transition-all duration-500`}
         style={{ width: `${Math.min(100, percentual)}%` }}
       />
+    </div>
+  );
+}
+
+// =====================================================
+// SKELETONS (placeholders para evitar tela branca)
+// =====================================================
+
+function SkeletonBlock({ className = '' }: { className?: string }) {
+  return <div className={`bg-gray-200 rounded animate-pulse ${className}`} />;
+}
+
+function SkeletonCardResumo() {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-4">
+      <div className="flex items-center gap-3">
+        <SkeletonBlock className="w-10 h-10 rounded-lg" />
+        <div className="flex-1 space-y-2">
+          <SkeletonBlock className="h-3 w-20" />
+          <SkeletonBlock className="h-5 w-28" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TelaSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="space-y-2">
+          <SkeletonBlock className="h-8 w-64" />
+          <SkeletonBlock className="h-4 w-80" />
+        </div>
+        <div className="flex gap-2">
+          <SkeletonBlock className="h-9 w-24 rounded-lg" />
+          <SkeletonBlock className="h-9 w-28 rounded-lg" />
+        </div>
+      </div>
+
+      {/* Cards de resumo */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <SkeletonCardResumo />
+        <SkeletonCardResumo />
+        <SkeletonCardResumo />
+        <SkeletonCardResumo />
+      </div>
+
+      {/* Grid 2 colunas */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+          <SkeletonBlock className="h-4 w-32" />
+          <SkeletonBlock className="h-10 w-full" />
+          <SkeletonBlock className="h-2 w-full" />
+        </div>
+        <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+          <SkeletonBlock className="h-4 w-40" />
+          <div className="grid grid-cols-4 gap-2">
+            <SkeletonBlock className="h-16" />
+            <SkeletonBlock className="h-16" />
+            <SkeletonBlock className="h-16" />
+            <SkeletonBlock className="h-16" />
+          </div>
+        </div>
+      </div>
+
+      {/* Lista de clientes */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+        <SkeletonBlock className="h-5 w-32" />
+        <SkeletonBlock className="h-10 w-full rounded-lg" />
+        {[...Array(4)].map((_, i) => (
+          <div key={i} className="flex items-center gap-3 py-2">
+            <SkeletonBlock className="h-7 w-7 rounded-full" />
+            <SkeletonBlock className="h-4 flex-1" />
+            <SkeletonBlock className="h-4 w-20" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -219,7 +296,7 @@ function ModalAbrirLiquidacao({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      
+
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
@@ -295,7 +372,7 @@ function ModalFecharLiquidacao({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      
+
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className={`w-10 h-10 ${isReaberta ? 'bg-amber-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center`}>
@@ -386,7 +463,7 @@ function ModalReabrirLiquidacao({
       setErro('O motivo da reabertura é obrigatório');
       return;
     }
-    
+
     if (motivo.trim().length < 10) {
       setErro('O motivo deve ter pelo menos 10 caracteres');
       return;
@@ -405,7 +482,7 @@ function ModalReabrirLiquidacao({
 
   if (!isOpen) return null;
 
-  const dataFormatada = dataLiquidacao 
+  const dataFormatada = dataLiquidacao
     ? new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', {
         weekday: 'long',
         day: '2-digit',
@@ -417,7 +494,7 @@ function ModalReabrirLiquidacao({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
-      
+
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
@@ -520,25 +597,14 @@ function TelaIniciarDia({
   saldoConta,
   onAbrir,
   loading,
-  mostrarCalendario,
-  onToggleCalendario,
-  calendarioProps,
+  onAbrirCalendario,
 }: {
   vendedor: VendedorLiquidacao | null;
   rota: RotaLiquidacao;
   saldoConta: number;
   onAbrir: () => void;
   loading: boolean;
-  mostrarCalendario: boolean;
-  onToggleCalendario: () => void;
-  calendarioProps: {
-    liquidacoesMes: LiquidacaoDiaria[];
-    resumoParcelas: Map<string, { quantidade: number; valor: number }>;
-    dataSelecionada: Date;
-    onSelecionarData: (data: Date) => void;
-    onMesChange: (ano: number, mes: number) => void;
-    loadingCalendario: boolean;
-  };
+  onAbrirCalendario: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -557,40 +623,22 @@ function TelaIniciarDia({
           </p>
         </div>
         <button
-          onClick={onToggleCalendario}
-          className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-            mostrarCalendario 
-              ? 'bg-blue-100 text-blue-700' 
-              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-          }`}
+          onClick={onAbrirCalendario}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
         >
           <CalendarDays className="w-4 h-4" />
           Calendário
         </button>
       </div>
 
-      <div className={`grid gap-6 ${mostrarCalendario ? 'lg:grid-cols-3' : ''}`}>
-        {mostrarCalendario && (
-          <div className="lg:col-span-1">
-            <CalendarioLiquidacao
-              rotaId={rota.id}
-              liquidacoesMes={calendarioProps.liquidacoesMes}
-              resumoParcelas={calendarioProps.resumoParcelas}
-              dataSelecionada={calendarioProps.dataSelecionada}
-              onSelecionarData={calendarioProps.onSelecionarData}
-              onMesChange={calendarioProps.onMesChange}
-              loading={calendarioProps.loadingCalendario}
-            />
-          </div>
-        )}
-
-        <div className={mostrarCalendario ? 'lg:col-span-2' : ''}>
+      <div>
+        <div>
           <div className="flex items-center justify-center min-h-[50vh]">
             <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
               <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
                 <Play className="w-8 h-8 text-white" />
               </div>
-              
+
               <h2 className="text-xl font-bold text-gray-900 mb-2">Iniciar o Dia</h2>
               <p className="text-gray-500 text-sm mb-6">
                 Nenhuma liquidação aberta. Inicie sua sessão de trabalho.
@@ -656,15 +704,14 @@ export default function LiquidacaoDiariaPage() {
   const [clientesDia, setClientesDia] = useState<ClienteDoDia[]>([]);
   const [estatisticas, setEstatisticas] = useState<EstatisticasClientesDia | null>(null);
   const [semRotaSelecionada, setSemRotaSelecionada] = useState(false);
-  
+
   // States de operações
   const [emprestimos, setEmprestimos] = useState({ total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 });
   const [metaDia, setMetaDia] = useState(0);
-  
+
   // States do calendário
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
   const [liquidacoesMes, setLiquidacoesMes] = useState<LiquidacaoDiaria[]>([]);
-  const [resumoParcelas, setResumoParcelas] = useState<Map<string, { quantidade: number; valor: number }>>(new Map());
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [visualizandoOutroDia, setVisualizandoOutroDia] = useState(false);
   const [previsaoDia, setPrevisaoDia] = useState<{
@@ -674,7 +721,7 @@ export default function LiquidacaoDiariaPage() {
     parcelasVencidas: number;
     valorVencido: number;
   } | null>(null);
-  
+
   // States de UI
   const [loading, setLoading] = useState(true);
   const [loadingCalendario, setLoadingCalendario] = useState(false);
@@ -683,7 +730,7 @@ export default function LiquidacaoDiariaPage() {
   const [modalFechar, setModalFechar] = useState(false);
   const [modalExtrato, setModalExtrato] = useState(false);
   const [modalReabrir, setModalReabrir] = useState(false);
-  
+
   // State do Modal de Detalhes do Cliente
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
   const [modalClienteAberto, setModalClienteAberto] = useState(false);
@@ -715,10 +762,10 @@ export default function LiquidacaoDiariaPage() {
   const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
     try {
       const dataVencimento = liq.data_abertura.split('T')[0];
-      
+
       const clientes = await liquidacaoService.buscarClientesDoDia(rotaId, dataVencimento);
       setClientesDia(clientes);
-      
+
       const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
       setEstatisticas(stats);
 
@@ -729,8 +776,7 @@ export default function LiquidacaoDiariaPage() {
       if (clientes.length > 0) {
         const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
         const supabase = (await import('@/lib/supabase/client')).createClient();
-        
-        // Buscar notas da liquidação atual
+
         const { data: notasLiq } = await supabase
           .from('notas')
           .select('cliente_id')
@@ -738,7 +784,6 @@ export default function LiquidacaoDiariaPage() {
           .eq('status', 'ATIVA')
           .in('cliente_id', clienteIds);
 
-        // Buscar notas de outras liquidações
         const { data: notasOutras } = await supabase
           .from('notas')
           .select('cliente_id')
@@ -747,14 +792,12 @@ export default function LiquidacaoDiariaPage() {
           .in('cliente_id', clienteIds);
 
         const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
-        
-        // Contar notas da liquidação atual por cliente
+
         (notasLiq || []).forEach((n: { cliente_id: string }) => {
           const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
           mapaNotas.set(n.cliente_id, { ...atual, liquidacao: atual.liquidacao + 1 });
         });
 
-        // Marcar clientes com notas em outras liquidações
         (notasOutras || []).forEach((n: { cliente_id: string }) => {
           const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
           mapaNotas.set(n.cliente_id, { ...atual, outras: true });
@@ -763,7 +806,6 @@ export default function LiquidacaoDiariaPage() {
         setNotasClientes(mapaNotas);
       }
 
-      // Resetar busca e paginação
       setBuscaCliente('');
       setClientesVisiveis(20);
 
@@ -775,12 +817,12 @@ export default function LiquidacaoDiariaPage() {
   // Carregar dados iniciais
   const carregarDados = useCallback(async () => {
     if (!userId) return;
-    
+
     setLoading(true);
     setSemRotaSelecionada(false);
-    
+
     const tipoUsuario = profile?.tipo_usuario;
-    
+
     try {
       let rotaId: string | null = null;
       let vendedorData: VendedorLiquidacao | null = null;
@@ -793,33 +835,33 @@ export default function LiquidacaoDiariaPage() {
           rotaId = rotaData?.id || null;
         }
       }
-      
+
       if (!rotaId && rotaIdContexto) {
         const temPermissao = validarPermissaoRota(tipoUsuario, rotaIdContexto, profile);
-        
+
         if (!temPermissao) {
           console.warn('Usuário não tem permissão para acessar esta rota');
           setSemRotaSelecionada(true);
           setLoading(false);
           return;
         }
-        
+
         rotaId = rotaIdContexto;
         rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto, empresaId || undefined);
-        
+
         if (rotaData) {
           vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
         }
       }
-      
+
       if (!rotaId && profile?.ultima_rota_id) {
         const ultimaRotaId = profile.ultima_rota_id;
         const temPermissao = validarPermissaoRota(tipoUsuario, ultimaRotaId, profile);
-        
+
         if (temPermissao) {
           rotaId = ultimaRotaId;
           rotaData = await liquidacaoService.buscarRotaPorId(ultimaRotaId, empresaId || undefined);
-          
+
           if (rotaData) {
             vendedorData = await liquidacaoService.buscarVendedorDaRota(ultimaRotaId);
           }
@@ -835,7 +877,6 @@ export default function LiquidacaoDiariaPage() {
       setVendedor(vendedorData);
       setRota(rotaData);
 
-      // Buscar nome da empresa
       if (rotaData?.empresa_id) {
         const supabase = (await import('@/lib/supabase/client')).createClient();
         const { data: empresaData } = await supabase
@@ -855,7 +896,6 @@ export default function LiquidacaoDiariaPage() {
 
       if (liquidacaoData) {
         await carregarDadosLiquidacao(liquidacaoData, rotaId);
-        // Atualizar data selecionada para a data da liquidação ativa
         const dataLiq = new Date(liquidacaoData.data_abertura);
         setDataSelecionada(dataLiq);
       }
@@ -874,13 +914,8 @@ export default function LiquidacaoDiariaPage() {
   const carregarDadosCalendario = useCallback(async (rotaId: string, ano: number, mes: number) => {
     setLoadingCalendario(true);
     try {
-      const [liquidacoes, resumo] = await Promise.all([
-        liquidacaoService.buscarLiquidacoesMes(rotaId, ano, mes),
-        liquidacaoService.buscarResumoParcelasMes(rotaId, ano, mes),
-      ]);
-      
+      const liquidacoes = await liquidacaoService.buscarLiquidacoesMes(rotaId, ano, mes);
       setLiquidacoesMes(liquidacoes);
-      setResumoParcelas(resumo);
     } catch (error) {
       console.error('Erro ao carregar dados do calendário:', error);
     } finally {
@@ -895,18 +930,18 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [rota, carregarDadosCalendario]);
 
-  // Quando uma data é selecionada no calendário
+  // Quando uma data é selecionada no calendário (apenas marcação visual no modal)
+  // A busca dos dados acontece só no onConfirmar
   const handleSelecionarData = useCallback(async (data: Date) => {
     if (!rota) return;
-    
+
     setDataSelecionada(data);
     setLoadingCalendario(true);
-    
-    const dataStr = data.toISOString().split('T')[0];
+
+    const dataStr = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
     const dataLiquidacaoAtiva = liquidacaoAtiva?.data_abertura?.split('T')[0];
-    
+
     try {
-      // Verificar se é a mesma data da liquidação ativa
       if (dataLiquidacaoAtiva && dataStr === dataLiquidacaoAtiva) {
         setLiquidacao(liquidacaoAtiva);
         setVisualizandoOutroDia(false);
@@ -914,14 +949,12 @@ export default function LiquidacaoDiariaPage() {
         if (liquidacaoAtiva) {
           await carregarDadosLiquidacao(liquidacaoAtiva, rota.id);
         }
-        setMostrarCalendario(false);
         setLoadingCalendario(false);
         return;
       }
-      
-      // Buscar liquidação para esta data
+
       const liqData = await liquidacaoService.buscarLiquidacaoPorData(rota.id, dataStr);
-      
+
       if (liqData) {
         setLiquidacao(liqData);
         setVisualizandoOutroDia(true);
@@ -930,21 +963,25 @@ export default function LiquidacaoDiariaPage() {
       } else {
         setLiquidacao(null);
         setVisualizandoOutroDia(true);
-        
+
         const previsao = await liquidacaoService.buscarPrevisaoDia(rota.id, dataStr);
         setPrevisaoDia(previsao);
-        
+
         const clientes = await liquidacaoService.buscarClientesDoDia(rota.id, dataStr);
         setClientesDia(clientes);
       }
-      
-      setMostrarCalendario(false);
     } catch (error) {
       console.error('Erro ao selecionar data:', error);
     } finally {
       setLoadingCalendario(false);
     }
   }, [rota, liquidacaoAtiva, carregarDadosLiquidacao]);
+
+  // Quando usuário clica em "Selecionar" no modal calendário
+  const handleConfirmarDataCalendario = useCallback(async (data: Date) => {
+    if (!rota) return;
+    await handleSelecionarData(data);
+  }, [rota, handleSelecionarData]);
 
   // Voltar para liquidação ativa
   const voltarParaLiquidacaoAtiva = useCallback(async () => {
@@ -977,7 +1014,7 @@ export default function LiquidacaoDiariaPage() {
   // Handlers
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
     if (!rota || !userId) return;
-    
+
     setLoadingAcao(true);
     try {
       const resultado = await liquidacaoService.abrirLiquidacao({
@@ -1003,10 +1040,9 @@ export default function LiquidacaoDiariaPage() {
 
   const handleFecharLiquidacao = async (observacoes: string) => {
     if (!liquidacao || !userId) return;
-    
+
     setLoadingAcao(true);
     try {
-      // Se for REABERTO, usar função específica
       if (liquidacao.status === 'REABERTO') {
         const resultado = await liquidacaoService.fecharLiquidacaoReaberta({
           liquidacao_id: liquidacao.id,
@@ -1021,7 +1057,6 @@ export default function LiquidacaoDiariaPage() {
           alert(resultado.mensagem);
         }
       } else {
-        // Fluxo normal para ABERTO
         const resultado = await liquidacaoService.fecharLiquidacao({
           liquidacao_id: liquidacao.id,
           user_id: userId,
@@ -1045,7 +1080,7 @@ export default function LiquidacaoDiariaPage() {
 
   const handleReabrirLiquidacao = async (motivo: string) => {
     if (!liquidacao || !userId) return;
-    
+
     setLoadingAcao(true);
     try {
       const resultado = await liquidacaoService.reabrirLiquidacao({
@@ -1095,7 +1130,7 @@ export default function LiquidacaoDiariaPage() {
       rotas_ids: [cliente.rota_id],
       permite_emprestimo_adicional: cliente.permite_emprestimo_adicional ?? false,
     };
-    
+
     setClienteSelecionado(clienteParaModal);
     setModalClienteAberto(true);
   };
@@ -1103,13 +1138,9 @@ export default function LiquidacaoDiariaPage() {
   // Cálculos
   const percentualMeta = liquidacao ? calcularPercentual(liquidacao.valor_recebido_dia || 0, liquidacao.valor_esperado_dia || metaDia) : 0;
 
-  // Loading
+  // Loading - usa skeleton em vez de tela branca
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-      </div>
-    );
+    return <TelaSkeleton />;
   }
 
   // Sem rota
@@ -1144,16 +1175,7 @@ export default function LiquidacaoDiariaPage() {
           saldoConta={saldoConta}
           onAbrir={() => setModalAbrir(true)}
           loading={loadingAcao}
-          mostrarCalendario={mostrarCalendario}
-          onToggleCalendario={() => setMostrarCalendario(!mostrarCalendario)}
-          calendarioProps={{
-            liquidacoesMes,
-            resumoParcelas,
-            dataSelecionada,
-            onSelecionarData: handleSelecionarData,
-            onMesChange: handleMesChange,
-            loadingCalendario,
-          }}
+          onAbrirCalendario={() => setMostrarCalendario(true)}
         />
         <ModalAbrirLiquidacao
           isOpen={modalAbrir}
@@ -1161,6 +1183,17 @@ export default function LiquidacaoDiariaPage() {
           onConfirmar={handleAbrirLiquidacao}
           loading={loadingAcao}
           saldoSugerido={saldoConta}
+        />
+        <ModalCalendarioLiquidacao
+          isOpen={mostrarCalendario}
+          onClose={() => setMostrarCalendario(false)}
+          rotaId={rota.id}
+          liquidacoesMes={liquidacoesMes}
+          dataSelecionada={dataSelecionada}
+          onSelecionarData={(data) => setDataSelecionada(data)}
+          onMesChange={handleMesChange}
+          onConfirmar={handleConfirmarDataCalendario}
+          loading={loadingCalendario}
         />
       </>
     );
@@ -1188,9 +1221,9 @@ export default function LiquidacaoDiariaPage() {
             <CalendarDays className="w-5 h-5 text-amber-600" />
             <div>
               <p className="text-sm font-medium text-amber-800">
-                Visualizando {dataSelecionada.toLocaleDateString('pt-BR', { 
-                  weekday: 'long', 
-                  day: 'numeric', 
+                Visualizando {dataSelecionada.toLocaleDateString('pt-BR', {
+                  weekday: 'long',
+                  day: 'numeric',
                   month: 'long',
                   year: 'numeric'
                 })}
@@ -1212,7 +1245,7 @@ export default function LiquidacaoDiariaPage() {
         </div>
       )}
 
-      {/* Header com Informações da Sessão integradas */}
+      {/* Header com Informações da Sessão */}
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
@@ -1255,7 +1288,6 @@ export default function LiquidacaoDiariaPage() {
             )}
           </div>
           <div className="flex items-center gap-3">
-            {/* Botão Extrato */}
             {liquidacao && (
               <button
                 onClick={() => setModalExtrato(true)}
@@ -1266,22 +1298,16 @@ export default function LiquidacaoDiariaPage() {
               </button>
             )}
 
-            {/* Toggle Calendário */}
             <button
-              onClick={() => setMostrarCalendario(!mostrarCalendario)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                mostrarCalendario 
-                  ? 'bg-blue-100 text-blue-700' 
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
+              onClick={() => setMostrarCalendario(true)}
+              className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
             >
               <CalendarDays className="w-4 h-4" />
               Calendário
             </button>
-            
+
             {liquidacao && <BadgeStatus status={liquidacao.status} />}
 
-            {/* Botão Reabrir - só para FECHADO e admin */}
             {liquidacao?.status === 'FECHADO' && podeReabrir && (
               <button
                 onClick={() => setModalReabrir(true)}
@@ -1291,14 +1317,13 @@ export default function LiquidacaoDiariaPage() {
                 Reabrir
               </button>
             )}
-            
-            {/* Botão Fechar - para ABERTO ou REABERTO */}
+
             {(liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO') && !visualizandoOutroDia && (
               <button
                 onClick={() => setModalFechar(true)}
                 className={`flex items-center gap-2 px-4 py-2 ${
-                  liquidacao?.status === 'REABERTO' 
-                    ? 'bg-amber-600 hover:bg-amber-700' 
+                  liquidacao?.status === 'REABERTO'
+                    ? 'bg-amber-600 hover:bg-amber-700'
                     : 'bg-blue-600 hover:bg-blue-700'
                 } text-white rounded-lg text-sm font-medium transition-colors`}
               >
@@ -1342,26 +1367,9 @@ export default function LiquidacaoDiariaPage() {
         />
       </div>
 
-      {/* Layout com Calendário */}
-      <div className={`grid gap-6 ${mostrarCalendario ? 'lg:grid-cols-4' : ''}`}>
-        {/* Calendário */}
-        {mostrarCalendario && rota && (
-          <div className="lg:col-span-1">
-            <CalendarioLiquidacao
-              rotaId={rota.id}
-              liquidacoesMes={liquidacoesMes}
-              resumoParcelas={resumoParcelas}
-              dataSelecionada={dataSelecionada}
-              onSelecionarData={handleSelecionarData}
-              onMesChange={handleMesChange}
-              loading={loadingCalendario}
-            />
-          </div>
-        )}
-
-        {/* Conteúdo Principal */}
-        <div className={mostrarCalendario ? 'lg:col-span-3' : ''}>
-          {/* Previsão do Dia (quando não tem liquidação) */}
+      {/* Conteúdo Principal */}
+      <div>
+        <div>
           {!liquidacao && previsaoDia && (
             <div className="bg-gradient-to-r from-indigo-50 to-blue-50 rounded-xl border border-indigo-200 p-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">Previsão do Dia</h3>
@@ -1388,40 +1396,36 @@ export default function LiquidacaoDiariaPage() {
             </div>
           )}
 
-          {/* Grid Principal - só mostra se tem liquidação */}
           {liquidacao && (
             <>
-              {/* Grid de 2 colunas balanceadas */}
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
                 {/* Coluna 1 */}
                 <div className="space-y-4">
-                  {/* Card Meta/Recaudo */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
                     <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
                       <Target className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:scale-110" />
                       Meta do Dia
                     </h3>
-                    
+
                     <div className="text-center mb-3">
                       <p className="text-3xl font-bold text-gray-900 transition-all duration-300 group-hover:scale-105">{percentualMeta}%</p>
                       <p className="text-xs text-gray-500">de {formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</p>
                     </div>
-                    
+
                     <ProgressBar percentual={percentualMeta} />
-                    
+
                     <div className="mt-3 pt-3 border-t space-y-1.5">
                       <ItemInfo label="Valor Esperado" valor={formatarMoeda(liquidacao.valor_esperado_dia || metaDia)} />
                       <ItemInfo label="Valor Recebido" valor={formatarMoeda(liquidacao.valor_recebido_dia)} corValor="text-green-600" />
                     </div>
                   </div>
 
-                  {/* Card Clientes */}
                   <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-blue-100/50 hover:-translate-y-1 hover:border-blue-200 group">
                     <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2 transition-colors duration-300 group-hover:text-blue-700">
                       <Users className="w-4 h-4 text-blue-600 transition-transform duration-300 group-hover:scale-110" />
                       Clientes
                     </h3>
-                    
+
                     <div className="grid grid-cols-5 gap-2">
                       <div className="text-center p-2 bg-gray-50 rounded-lg transition-all duration-300 group-hover:bg-gray-100">
                         <p className="text-xl font-bold text-gray-900">{liquidacao.clientes_iniciais}</p>
@@ -1449,7 +1453,6 @@ export default function LiquidacaoDiariaPage() {
 
                 {/* Coluna 2 */}
                 <div className="space-y-4">
-                  {/* Card Pagamentos do Dia - Compacto e Clicável */}
                   {/* Cards Pagamentos do Dia - Separados: Status + Valores */}
                   <div className="grid grid-cols-2 gap-3">
                     {/* Card Status (Pagos / Não Pagos) */}
@@ -1499,10 +1502,8 @@ export default function LiquidacaoDiariaPage() {
                     </button>
                   </div>
 
-
                   {/* Grid de 3 cards financeiros */}
                   <div className="grid grid-cols-3 gap-3">
-                    {/* Card Empréstimos */}
                     <button
                       onClick={() => setModalEmprestimos(true)}
                       className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-green-100/50 hover:-translate-y-1 hover:border-green-200 group text-left"
@@ -1524,7 +1525,6 @@ export default function LiquidacaoDiariaPage() {
                       </div>
                     </button>
 
-                    {/* Card Despesas */}
                     <button
                       onClick={() => setModalDespesas(true)}
                       className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-red-100/50 hover:-translate-y-1 hover:border-red-200 group text-left"
@@ -1539,7 +1539,6 @@ export default function LiquidacaoDiariaPage() {
                       </div>
                     </button>
 
-                    {/* Card Microseguro */}
                     <button
                       onClick={() => setModalMicroseguros(true)}
                       className="bg-white rounded-xl border border-gray-200 p-3 transition-all duration-300 ease-out hover:shadow-lg hover:shadow-teal-100/50 hover:-translate-y-1 hover:border-teal-200 group text-left"
@@ -1576,7 +1575,6 @@ export default function LiquidacaoDiariaPage() {
 
       {/* Lista de Clientes do Dia */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        {/* Header com busca */}
         <div className="px-4 py-3 border-b border-gray-200">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
@@ -1584,7 +1582,6 @@ export default function LiquidacaoDiariaPage() {
               {clientesDia.length}
             </span>
           </div>
-          {/* Campo de busca */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -1607,17 +1604,15 @@ export default function LiquidacaoDiariaPage() {
             )}
           </div>
         </div>
-        
+
         {(() => {
-          // Filtrar clientes pela busca
           const clientesFiltrados = buscaCliente
-            ? clientesDia.filter(c => 
+            ? clientesDia.filter(c =>
                 c.nome.toLowerCase().includes(buscaCliente.toLowerCase()) ||
                 c.consecutivo?.includes(buscaCliente)
               )
             : clientesDia;
 
-          // Clientes visíveis (com paginação)
           const clientesParaMostrar = clientesFiltrados.slice(0, clientesVisiveis);
           const temMais = clientesFiltrados.length > clientesVisiveis;
 
@@ -1642,15 +1637,15 @@ export default function LiquidacaoDiariaPage() {
                       const temNotasOutras = notasInfo?.outras || false;
 
                       return (
-                        <tr 
-                          key={cliente.parcela_id} 
+                        <tr
+                          key={cliente.parcela_id}
                           className="hover:bg-blue-50/50 transition-colors duration-200 cursor-pointer"
                           onClick={() => handleAbrirModalCliente(cliente)}
                         >
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-medium ${
-                                cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
+                                cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' :
                                 cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
                               }`}>
                                 {cliente.nome?.charAt(0)}
@@ -1674,8 +1669,8 @@ export default function LiquidacaoDiariaPage() {
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                              cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' : 
-                              cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' : 
+                              cliente.status_dia === 'PAGO' ? 'bg-green-100 text-green-700' :
+                              cliente.status_dia === 'EM_ATRASO' ? 'bg-red-100 text-red-700' :
                               cliente.status_dia === 'PARCIAL' ? 'bg-amber-100 text-amber-700' :
                               'bg-yellow-100 text-yellow-700'
                             }`}>
@@ -1711,8 +1706,7 @@ export default function LiquidacaoDiariaPage() {
                   </tbody>
                 </table>
               </div>
-              
-              {/* Botão carregar mais */}
+
               {temMais && (
                 <div className="px-4 py-3 bg-gray-50 border-t">
                   <button
@@ -1724,7 +1718,6 @@ export default function LiquidacaoDiariaPage() {
                 </div>
               )}
 
-              {/* Info de total */}
               {buscaCliente && (
                 <div className="px-4 py-2 bg-gray-50 border-t text-xs text-gray-500 text-center">
                   {clientesFiltrados.length} de {clientesDia.length} clientes
@@ -1733,7 +1726,7 @@ export default function LiquidacaoDiariaPage() {
             </>
           ) : (
             <div className="p-8 text-center text-gray-500 text-sm">
-              {buscaCliente 
+              {buscaCliente
                 ? `Nenhum cliente encontrado para "${buscaCliente}"`
                 : 'Nenhum cliente com parcela vencendo hoje'
               }
@@ -1776,7 +1769,6 @@ export default function LiquidacaoDiariaPage() {
         empresaNome={empresaNome}
       />
 
-      {/* Modal de Detalhes do Cliente */}
       <ModalDetalhesCliente
         isOpen={modalClienteAberto}
         onClose={() => {
@@ -1786,7 +1778,6 @@ export default function LiquidacaoDiariaPage() {
         cliente={clienteSelecionado}
       />
 
-      {/* Modal de Notas do Cliente */}
       {liquidacao && rota && vendedor && (
         <ModalNotasCliente
           isOpen={modalNotasCliente.aberto}
@@ -1803,7 +1794,6 @@ export default function LiquidacaoDiariaPage() {
         />
       )}
 
-      {/* Modais Financeiros */}
       {liquidacao && (
         <>
           <ModalEmprestimos
@@ -1830,7 +1820,7 @@ export default function LiquidacaoDiariaPage() {
             qtdFallback={liquidacao.qtd_microseguros_dia}
           />
 
-<ModalPagamentos
+          <ModalPagamentos
             isOpen={modalPagamentos}
             onClose={() => setModalPagamentos(false)}
             liquidacaoId={liquidacao.id}
@@ -1846,6 +1836,21 @@ export default function LiquidacaoDiariaPage() {
             liquidacaoId={liquidacao.id}
           />
         </>
+      )}
+
+      {/* Modal Calendário */}
+      {rota && (
+        <ModalCalendarioLiquidacao
+          isOpen={mostrarCalendario}
+          onClose={() => setMostrarCalendario(false)}
+          rotaId={rota.id}
+          liquidacoesMes={liquidacoesMes}
+          dataSelecionada={dataSelecionada}
+          onSelecionarData={(data) => setDataSelecionada(data)}
+          onMesChange={handleMesChange}
+          onConfirmar={handleConfirmarDataCalendario}
+          loading={loadingCalendario}
+        />
       )}
     </div>
   );
