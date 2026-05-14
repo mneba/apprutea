@@ -367,7 +367,8 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
   const caixaInicial = Number(liquidacao.caixa_inicial || 0);
   const caixaFinal = Number(liquidacao.caixa_final || 0);
   const recebido = Number(liquidacao.valor_recebido_dia || 0);
-  const outrasReceitas = Number(liquidacao.total_receitas_dia || 0) - recebido;
+  //const outrasReceitas = Number(liquidacao.total_receitas_dia || 0) - recebido;
+  const outrasReceitas = Number((liquidacao as any).total_receitas_dia || 0) - recebido;
   // total_receitas_dia já inclui cobranças (valor_recebido_dia). Subtraio pra
   // separar "Recebido" (cobranças) de "Outras receitas".
   const outrasReceitasSafe = outrasReceitas > 0 ? outrasReceitas : 0;
