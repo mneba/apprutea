@@ -37,6 +37,12 @@ import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiqu
 import { FaixaLiquidacaoReaberta } from '@/components/liquidacao/FaixaLiquidacaoReaberta';
 import { NotasLiquidacaoCard, ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
 import {
+  ModalClientesNovos,
+  ModalClientesRenovados,
+  ModalClientesRenegociados,
+  ModalClientesQuitados,
+} from '@/components/liquidacao/ModaisClientesCategoria';
+import {
   ModalEmprestimos,
   ModalDespesas,
   ModalMicroseguros,
@@ -753,6 +759,10 @@ export default function LiquidacaoDiariaPage() {
   const [modalMicroseguros, setModalMicroseguros] = useState(false);
   const [modalPagamentos, setModalPagamentos] = useState(false);
   const [modalReceitas, setModalReceitas] = useState(false);
+  const [modalClientesNovos, setModalClientesNovos] = useState(false);
+  const [modalClientesRenovados, setModalClientesRenovados] = useState(false);
+  const [modalClientesRenegociados, setModalClientesRenegociados] = useState(false);
+  const [modalClientesQuitados, setModalClientesQuitados] = useState(false);
 
   // Permissões
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
@@ -1430,27 +1440,40 @@ export default function LiquidacaoDiariaPage() {
                     </h3>
 
                     <div className="grid grid-cols-5 gap-2">
-                      <div className="text-center p-2 bg-gray-50 rounded-lg transition-all duration-300 group-hover:bg-gray-100">
+                      <div className="text-center p-2 bg-gray-50 rounded-lg">
                         <p className="text-xl font-bold text-gray-900">{liquidacao.clientes_iniciais}</p>
                         <p className="text-xs text-gray-500">Iniciais</p>
                       </div>
-                      <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
+                      <button
+                        onClick={() => setModalClientesNovos(true)}
+                        className="text-center p-2 bg-green-50 rounded-lg transition-all hover:bg-green-100 hover:-translate-y-0.5"
+                      >
                         <p className="text-xl font-bold text-green-600">{liquidacao.clientes_novos}</p>
                         <p className="text-xs text-gray-500">Novos</p>
-                      </div>
-                      <div className="text-center p-2 bg-blue-50 rounded-lg transition-all duration-300 group-hover:bg-blue-100">
+                      </button>
+                      <button
+                        onClick={() => setModalClientesRenovados(true)}
+                        className="text-center p-2 bg-blue-50 rounded-lg transition-all hover:bg-blue-100 hover:-translate-y-0.5"
+                      >
                         <p className="text-xl font-bold text-blue-600">{liquidacao.clientes_renovados}</p>
                         <p className="text-xs text-gray-500">Renov.</p>
-                      </div>
-                      <div className="text-center p-2 bg-purple-50 rounded-lg transition-all duration-300 group-hover:bg-purple-100">
+                      </button>
+                      <button
+                        onClick={() => setModalClientesRenegociados(true)}
+                        className="text-center p-2 bg-purple-50 rounded-lg transition-all hover:bg-purple-100 hover:-translate-y-0.5"
+                      >
                         <p className="text-xl font-bold text-purple-600">{liquidacao.clientes_renegociados}</p>
                         <p className="text-xs text-gray-500">Reneg.</p>
-                      </div>
-                      <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
-                        <p className="text-xl font-bold text-red-600">{liquidacao.clientes_cancelados}</p>
-                        <p className="text-xs text-gray-500">Canc.</p>
-                      </div>
+                      </button>
+                      <button
+                        onClick={() => setModalClientesQuitados(true)}
+                        className="text-center p-2 bg-emerald-50 rounded-lg transition-all hover:bg-emerald-100 hover:-translate-y-0.5"
+                      >
+                        <p className="text-xl font-bold text-emerald-600">{(liquidacao as any).clientes_quitados ?? 0}</p>
+                        <p className="text-xs text-gray-500">Quitados</p>
+                      </button>
                     </div>
+                    
                   </div>
                 </div>
 
@@ -1467,13 +1490,13 @@ export default function LiquidacaoDiariaPage() {
                         <CheckCircle className="w-3.5 h-3.5 text-green-600 transition-transform duration-300 group-hover:scale-110" />
                         Status
                       </h3>
-                      <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-2 gap-2">
                         <div className="text-center p-2 bg-green-50 rounded-lg transition-all duration-300 group-hover:bg-green-100">
-                          <p className="text-xl font-bold text-green-600">{liquidacao.pagamentos_pagos}</p>
+                          <p className="text-xl font-bold text-green-600">{(liquidacao as any).clientes_pagos ?? liquidacao.pagamentos_pagos}</p>
                           <p className="text-xs text-gray-500">Pagos</p>
                         </div>
                         <div className="text-center p-2 bg-red-50 rounded-lg transition-all duration-300 group-hover:bg-red-100">
-                          <p className="text-xl font-bold text-red-600">{liquidacao.pagamentos_nao_pagos}</p>
+                          <p className="text-xl font-bold text-red-600">{(liquidacao as any).clientes_nao_pagos ?? liquidacao.pagamentos_nao_pagos}</p>
                           <p className="text-xs text-gray-500">Não Pagos</p>
                         </div>
                       </div>
@@ -1838,6 +1861,33 @@ export default function LiquidacaoDiariaPage() {
             onClose={() => setModalReceitas(false)}
             liquidacaoId={liquidacao.id}
           />
+
+          <ModalClientesNovos
+            isOpen={modalClientesNovos}
+            onClose={() => setModalClientesNovos(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={liquidacao.clientes_novos}
+          />
+          <ModalClientesRenovados
+            isOpen={modalClientesRenovados}
+            onClose={() => setModalClientesRenovados(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={liquidacao.clientes_renovados}
+          />
+          <ModalClientesRenegociados
+            isOpen={modalClientesRenegociados}
+            onClose={() => setModalClientesRenegociados(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={liquidacao.clientes_renegociados}
+          />
+          <ModalClientesQuitados
+            isOpen={modalClientesQuitados}
+            onClose={() => setModalClientesQuitados(false)}
+            liquidacaoId={liquidacao.id}
+            totalFallback={(liquidacao as any).clientes_quitados ?? 0}
+          />
+
+
         </>
       )}
 
