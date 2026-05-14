@@ -49,6 +49,13 @@ function formatarDataYmd(data: Date): string {
   return `${ano}-${mes}-${dia}`;
 }
 
+function formatarMoeda(valor: number | null | undefined): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(valor || 0);
+}
+
 function gerarDiasDoMes(ano: number, mes: number): Date[] {
   const dias: Date[] = [];
   const primeiroDia = new Date(ano, mes - 1, 1);
@@ -75,7 +82,7 @@ function gerarDiasDoMes(ano: number, mes: number): Date[] {
 }
 
 // =====================================================
-// COMPONENTE PRINCIPAL — Apenas o calendário
+// COMPONENTE PRINCIPAL — Calendário
 // =====================================================
 
 export function CalendarioLiquidacao({
@@ -303,20 +310,13 @@ export function CalendarioLiquidacao({
 }
 
 // =====================================================
-// RESUMO DO DIA — componente exportado separado
+// RESUMO DO DIA — Balanço didático com somas explícitas
 // =====================================================
 
 interface ResumoDiaCalendarioProps {
   liquidacao?: LiquidacaoDiaria;
   data: Date;
   loading?: boolean;
-}
-
-function formatarMoeda(valor: number | null | undefined): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
 }
 
 export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCalendarioProps) {
@@ -359,16 +359,42 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
   };
   const status = statusConfig[liquidacao.status] || statusConfig.ABERTO;
 
-  const microInicial = (liquidacao as any).microseguro_inicial || 0;
-  const microFinal = (liquidacao as any).microseguro_final || 0;
-  const temMicroseguro = microInicial > 0 || microFinal > 0;
+  // ============================================================
+  // CÁLCULOS DO BALANÇO
+  // ============================================================
+
+  // CAIXA
+  const caixaInicial = Number(liquidacao.caixa_inicial || 0);
+  const caixaFinal = Number(liquidacao.caixa_final || 0);
+  const recebido = Number(liquidacao.valor_recebido_dia || 0);
+  const outrasReceitas = Number(liquidacao.total_receitas_dia || 0) - recebido;
+  // total_receitas_dia já inclui cobranças (valor_recebido_dia). Subtraio pra
+  // separar "Recebido" (cobranças) de "Outras receitas".
+  const outrasReceitasSafe = outrasReceitas > 0 ? outrasReceitas : 0;
+  const despesas = Number(liquidacao.total_despesas_dia || 0);
+  const emprestimos = Number(liquidacao.total_emprestado_dia || 0);
+
+  // CARTEIRA
+  const carteiraInicial = Number(liquidacao.carteira_inicial || 0);
+  const carteiraFinal = Number(liquidacao.carteira_final || 0);
+  const jurosDia = Number(liquidacao.total_juros_dia || 0);
+
+  // MICROSEGURO
+  const microInicial = Number((liquidacao as any).microseguro_inicial || 0);
+  const microFinal = Number((liquidacao as any).microseguro_final || 0);
+  const microseguroDia = Number(liquidacao.total_microseguro_dia || 0);
+  const temMicroseguro = microInicial > 0 || microFinal > 0 || microseguroDia > 0;
+
+  // PAGAMENTOS
+  const pagos = liquidacao.pagamentos_pagos || 0;
+  const naoPagos = liquidacao.pagamentos_nao_pagos || 0;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
-      {/* Cabeçalho do resumo */}
-      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+    <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
+      {/* Cabeçalho */}
+      <div className="flex items-center justify-between pb-3 border-b border-gray-100">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Resumo do Dia</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-0.5">Resumo do Dia</p>
           <p className="text-sm font-medium text-gray-700 capitalize">{dataFormatada}</p>
         </div>
         <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
@@ -376,76 +402,137 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
         </span>
       </div>
 
-      {/* Caixa */}
-      <div className="mb-4">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Caixa</p>
-        <div className="space-y-1.5 text-sm">
-          <LinhaResumo label="Inicial" valor={formatarMoeda(liquidacao.caixa_inicial)} />
-          <LinhaResumo label="Final" valor={formatarMoeda(liquidacao.caixa_final)} bold />
-        </div>
-      </div>
+      {/* CAIXA */}
+      <SecaoBalanco titulo="Caixa">
+        <Linha label="Saldo inicial" valor={formatarMoeda(caixaInicial)} />
+        {recebido > 0 && (
+          <Linha label="(+) Recebido" valor={`+ ${formatarMoeda(recebido)}`} cor="text-green-600" />
+        )}
+        {outrasReceitasSafe > 0 && (
+          <Linha label="(+) Outras receitas" valor={`+ ${formatarMoeda(outrasReceitasSafe)}`} cor="text-green-600" />
+        )}
+        {despesas > 0 && (
+          <Linha label="(−) Despesas" valor={`− ${formatarMoeda(despesas)}`} cor="text-red-600" />
+        )}
+        {emprestimos > 0 && (
+          <Linha label="(−) Empréstimos" valor={`− ${formatarMoeda(emprestimos)}`} cor="text-red-600" />
+        )}
+        <LinhaTotal label="Saldo final" valor={formatarMoeda(caixaFinal)} />
+      </SecaoBalanco>
 
-      {/* Carteira */}
-      <div className="mb-4 pt-3 border-t border-gray-100">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Carteira</p>
-        <div className="space-y-1.5 text-sm">
-          <LinhaResumo label="Inicial" valor={formatarMoeda(liquidacao.carteira_inicial)} />
-          <LinhaResumo label="Final" valor={formatarMoeda(liquidacao.carteira_final)} bold />
-        </div>
-      </div>
+      {/* CARTEIRA */}
+      <SecaoBalanco titulo="Carteira (Emprestado)">
+        <Linha label="Saldo inicial" valor={formatarMoeda(carteiraInicial)} />
+        {emprestimos > 0 && (
+          <Linha label="(+) Empréstimos do dia" valor={`+ ${formatarMoeda(emprestimos)}`} cor="text-green-600" />
+        )}
+        {jurosDia > 0 && (
+          <Linha label="(+) Juros do dia" valor={`+ ${formatarMoeda(jurosDia)}`} cor="text-green-600" />
+        )}
+        {recebido > 0 && (
+          <Linha label="(−) Recebido (parcelas)" valor={`− ${formatarMoeda(recebido)}`} cor="text-red-600" />
+        )}
+        <LinhaTotal label="Saldo final" valor={formatarMoeda(carteiraFinal)} />
+      </SecaoBalanco>
 
-      {/* Microseguro (só se tiver) */}
+      {/* MICROSEGURO (se houver) */}
       {temMicroseguro && (
-        <div className="mb-4 pt-3 border-t border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Microseguro</p>
-          <div className="space-y-1.5 text-sm">
-            <LinhaResumo label="Inicial" valor={formatarMoeda(microInicial)} corValor="text-purple-600" />
-            <LinhaResumo label="Final" valor={formatarMoeda(microFinal)} bold corValor="text-purple-600" />
-          </div>
-        </div>
+        <SecaoBalanco titulo="Microseguro" cor="purple">
+          <Linha label="Saldo inicial" valor={formatarMoeda(microInicial)} />
+          {microseguroDia > 0 && (
+            <Linha
+              label="(+) Vendas do dia"
+              valor={`+ ${formatarMoeda(microseguroDia)}`}
+              cor="text-purple-600"
+            />
+          )}
+          {microseguroDia === 0 && (
+            <Linha label="(=) Sem movimentação" valor="—" cor="text-gray-400" />
+          )}
+          <LinhaTotal label="Saldo final" valor={formatarMoeda(microFinal)} cor="text-purple-700" />
+        </SecaoBalanco>
       )}
 
-      {/* Recebido + Pagamentos */}
-      <div className="pt-3 border-t border-gray-100">
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Movimentação</p>
-        <div className="space-y-1.5 text-sm">
-          <LinhaResumo
-            label="Recebido"
-            valor={formatarMoeda(liquidacao.valor_recebido_dia)}
-            corValor="text-green-600"
-            bold
-          />
-          <div className="flex items-center justify-between py-1">
-            <span className="text-gray-600">Pagamentos</span>
-            <span className="text-sm font-medium">
-              <span className="text-green-600">{liquidacao.pagamentos_pagos || 0}</span>
-              <span className="text-gray-400 mx-1">/</span>
-              <span className="text-red-600">{liquidacao.pagamentos_nao_pagos || 0}</span>
+      {/* PAGAMENTOS DO DIA */}
+      <SecaoBalanco titulo="Pagamentos do Dia">
+        <Linha
+          label="✅ Pagos"
+          valor={
+            <span>
+              <span className="text-green-600 font-bold">{pagos}</span>
+              <span className="text-gray-400 mx-1">·</span>
+              <span className="text-green-600 font-semibold">{formatarMoeda(recebido)}</span>
             </span>
-          </div>
-        </div>
-      </div>
+          }
+        />
+        <Linha
+          label="❌ Não pagos"
+          valor={
+            <span>
+              <span className="text-red-600 font-bold">{naoPagos}</span>
+              <span className="text-gray-400 ml-1 text-xs">cliente(s)</span>
+            </span>
+          }
+        />
+      </SecaoBalanco>
     </div>
   );
 }
 
-function LinhaResumo({
+// =====================================================
+// COMPONENTES AUXILIARES DO RESUMO
+// =====================================================
+
+function SecaoBalanco({
+  titulo,
+  cor = 'gray',
+  children,
+}: {
+  titulo: string;
+  cor?: 'gray' | 'purple';
+  children: React.ReactNode;
+}) {
+  const corClasse = cor === 'purple' ? 'text-purple-700' : 'text-gray-700';
+  return (
+    <div>
+      <p className={`text-xs font-bold uppercase tracking-wide mb-2 ${corClasse}`}>
+        {titulo}
+      </p>
+      <div className="space-y-1">{children}</div>
+    </div>
+  );
+}
+
+function Linha({
   label,
   valor,
-  corValor,
-  bold,
+  cor,
+}: {
+  label: string;
+  valor: React.ReactNode;
+  cor?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between text-sm py-0.5">
+      <span className={cor || 'text-gray-600'}>{label}</span>
+      <span className={`font-medium tabular-nums ${cor || 'text-gray-900'}`}>{valor}</span>
+    </div>
+  );
+}
+
+function LinhaTotal({
+  label,
+  valor,
+  cor,
 }: {
   label: string;
   valor: string;
-  corValor?: string;
-  bold?: boolean;
+  cor?: string;
 }) {
   return (
-    <div className="flex items-center justify-between py-0.5">
-      <span className="text-gray-600">{label}:</span>
-      <span className={`${bold ? 'font-semibold' : 'font-medium'} ${corValor || 'text-gray-900'}`}>
-        {valor}
-      </span>
+    <div className="flex items-center justify-between text-sm pt-2 mt-1 border-t border-gray-200">
+      <span className={`font-bold ${cor || 'text-gray-900'}`}>{label}</span>
+      <span className={`font-bold tabular-nums ${cor || 'text-gray-900'}`}>{valor}</span>
     </div>
   );
 }
