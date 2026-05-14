@@ -1249,7 +1249,10 @@ export default function LiquidacaoDiariaPage() {
       <div className="flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
+            <div className="flex items-center gap-3 flex-wrap">
+              <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
+              {liquidacao && <BadgeStatus status={liquidacao.status} />}
+            </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
               <span className="flex items-center gap-1">
                 <MapPin className="w-4 h-4" />
@@ -1306,7 +1309,7 @@ export default function LiquidacaoDiariaPage() {
               Calendário
             </button>
 
-            {liquidacao && <BadgeStatus status={liquidacao.status} />}
+            {/* badge movido para o header, junto do título */}
 
             {liquidacao?.status === 'FECHADO' && podeReabrir && (
               <button

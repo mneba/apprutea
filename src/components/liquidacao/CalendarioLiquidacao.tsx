@@ -15,7 +15,7 @@ import type { LiquidacaoDiaria } from '@/types/liquidacao';
 // TIPOS
 // =====================================================
 
-interface DiaCalendario {
+export interface DiaCalendario {
   data: Date;
   diaDoMes: number;
   isHoje: boolean;
@@ -49,31 +49,21 @@ function formatarDataYmd(data: Date): string {
   return `${ano}-${mes}-${dia}`;
 }
 
-function formatarMoeda(valor: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor);
-}
-
 function gerarDiasDoMes(ano: number, mes: number): Date[] {
   const dias: Date[] = [];
   const primeiroDia = new Date(ano, mes - 1, 1);
   const ultimoDia = new Date(ano, mes, 0);
 
-  // Dias do mês anterior para completar a primeira semana
   const diaSemanaInicio = primeiroDia.getDay();
   for (let i = diaSemanaInicio - 1; i >= 0; i--) {
     const d = new Date(ano, mes - 1, -i);
     dias.push(d);
   }
 
-  // Dias do mês atual
   for (let dia = 1; dia <= ultimoDia.getDate(); dia++) {
     dias.push(new Date(ano, mes - 1, dia));
   }
 
-  // Dias do próximo mês para completar a última semana
   const diasRestantes = 7 - (dias.length % 7);
   if (diasRestantes < 7) {
     for (let i = 1; i <= diasRestantes; i++) {
@@ -85,7 +75,7 @@ function gerarDiasDoMes(ano: number, mes: number): Date[] {
 }
 
 // =====================================================
-// COMPONENTE PRINCIPAL
+// COMPONENTE PRINCIPAL — Apenas o calendário
 // =====================================================
 
 export function CalendarioLiquidacao({
@@ -102,7 +92,6 @@ export function CalendarioLiquidacao({
   const hoje = useMemo(() => new Date(), []);
   const hojeStr = formatarDataYmd(hoje);
 
-  // Atualiza a tela do calendário quando a data selecionada externa muda de mês
   useEffect(() => {
     const novoAno = dataSelecionada.getFullYear();
     const novoMes = dataSelecionada.getMonth() + 1;
@@ -112,14 +101,11 @@ export function CalendarioLiquidacao({
     }
   }, [dataSelecionada]);
 
-  // Gerar dias do calendário
   const diasCalendario = useMemo(() => {
     const dias = gerarDiasDoMes(anoAtual, mesAtual);
 
-    // Mapear liquidações por data_liquidacao (que é DATE no banco)
     const liquidacoesPorData = new Map<string, LiquidacaoDiaria>();
     liquidacoesMes.forEach((liq) => {
-      // Tenta primeiro data_liquidacao (DATE), depois data_abertura (timestamp)
       const dataStr =
         (liq as any).data_liquidacao?.split('T')[0] ||
         liq.data_abertura?.split('T')[0];
@@ -142,7 +128,6 @@ export function CalendarioLiquidacao({
     });
   }, [anoAtual, mesAtual, liquidacoesMes, hojeStr]);
 
-  // Navegar entre meses
   const irParaMesAnterior = () => {
     let novoMes = mesAtual - 1;
     let novoAno = anoAtual;
@@ -180,7 +165,6 @@ export function CalendarioLiquidacao({
     return formatarDataYmd(data) === formatarDataYmd(dataSelecionada);
   };
 
-  // Classes de cor por status (apenas 4 estados + neutro)
   const getClasseDia = (dia: DiaCalendario) => {
     if (!dia.isMesAtual) {
       return 'text-gray-300';
@@ -192,7 +176,6 @@ export function CalendarioLiquidacao({
           return 'bg-green-100 text-green-800 hover:bg-green-200';
         case 'FECHADO':
         case 'APROVADO':
-          // APROVADO é tratado visualmente como FECHADO (mesma legenda)
           return 'bg-blue-100 text-blue-800 hover:bg-blue-200';
         case 'REABERTO':
           return 'bg-amber-100 text-amber-800 hover:bg-amber-200';
@@ -201,7 +184,6 @@ export function CalendarioLiquidacao({
       }
     }
 
-    // Sem registro
     if (dia.isHoje) {
       return 'bg-blue-600 text-white hover:bg-blue-700';
     }
@@ -222,8 +204,6 @@ export function CalendarioLiquidacao({
         return null;
     }
   };
-
-  const diaSelecionado = diasCalendario.find((d) => isDataSelecionada(d.data));
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -263,8 +243,7 @@ export function CalendarioLiquidacao({
       </div>
 
       {/* Grade */}
-      <div className="p-2">
-        {/* Cabeçalho dias da semana */}
+      <div className="p-3">
         <div className="grid grid-cols-7 mb-1">
           {DIAS_SEMANA.map((dia) => (
             <div
@@ -276,8 +255,7 @@ export function CalendarioLiquidacao({
           ))}
         </div>
 
-        {/* Dias */}
-        <div className="grid grid-cols-7 gap-1">
+        <div className="grid grid-cols-7 gap-1.5">
           {diasCalendario.map((dia, index) => (
             <button
               key={index}
@@ -298,7 +276,7 @@ export function CalendarioLiquidacao({
         </div>
       </div>
 
-      {/* Legenda — apenas 4 estados */}
+      {/* Legenda */}
       <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
         <p className="text-xs text-gray-500 mb-2">Legenda:</p>
         <div className="flex flex-wrap gap-3 text-xs">
@@ -320,109 +298,152 @@ export function CalendarioLiquidacao({
           </div>
         </div>
       </div>
-
-      {/* Resumo do dia selecionado */}
-      <ResumoDiaSelecionado dia={diaSelecionado} loading={loading} />
     </div>
   );
 }
 
 // =====================================================
-// COMPONENTE DE RESUMO DO DIA
+// RESUMO DO DIA — componente exportado separado
 // =====================================================
 
-function ResumoDiaSelecionado({
-  dia,
-  loading,
-}: {
-  dia?: DiaCalendario;
+interface ResumoDiaCalendarioProps {
+  liquidacao?: LiquidacaoDiaria;
+  data: Date;
   loading?: boolean;
-}) {
-  if (!dia || !dia.isMesAtual) return null;
+}
 
-  const dataFormatada = dia.data.toLocaleDateString('pt-BR', {
+function formatarMoeda(valor: number | null | undefined): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(valor || 0);
+}
+
+export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCalendarioProps) {
+  const dataFormatada = data.toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
+    year: 'numeric',
   });
 
-  const liq = dia.liquidacao;
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex items-center justify-center py-12">
+          <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </div>
+    );
+  }
+
+  if (!liquidacao) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-200 p-6">
+        <p className="text-sm text-gray-500 capitalize mb-4">{dataFormatada}</p>
+        <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+          <div className="w-12 h-12 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center mb-3">
+            <span className="text-2xl">–</span>
+          </div>
+          <p className="text-sm">Sem registro neste dia</p>
+        </div>
+      </div>
+    );
+  }
+
+  const statusConfig: Record<string, { bg: string; text: string; label: string }> = {
+    ABERTO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Aberto' },
+    FECHADO: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Fechado' },
+    APROVADO: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Aprovado' },
+    REABERTO: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Reaberto' },
+  };
+  const status = statusConfig[liquidacao.status] || statusConfig.ABERTO;
+
+  const microInicial = (liquidacao as any).microseguro_inicial || 0;
+  const microFinal = (liquidacao as any).microseguro_final || 0;
+  const temMicroseguro = microInicial > 0 || microFinal > 0;
 
   return (
-    <div className="px-4 py-3 border-t border-gray-200 bg-white">
-      <p className="text-xs text-gray-500 capitalize mb-3">{dataFormatada}</p>
-
-      {loading ? (
-        <div className="flex items-center justify-center py-4">
-          <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
+    <div className="bg-white rounded-xl border border-gray-200 p-6">
+      {/* Cabeçalho do resumo */}
+      <div className="flex items-center justify-between mb-4 pb-3 border-b border-gray-100">
+        <div>
+          <p className="text-xs text-gray-500 uppercase tracking-wide mb-1">Resumo do Dia</p>
+          <p className="text-sm font-medium text-gray-700 capitalize">{dataFormatada}</p>
         </div>
-      ) : liq ? (
-        <div className="space-y-2">
-          <Linha
-            label="Status"
-            valor={liq.status}
-            corValor={
-              liq.status === 'ABERTO'
-                ? 'text-green-600'
-                : liq.status === 'REABERTO'
-                ? 'text-amber-600'
-                : 'text-blue-600'
-            }
-          />
-          <Linha
+        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${status.bg} ${status.text}`}>
+          {status.label}
+        </span>
+      </div>
+
+      {/* Caixa */}
+      <div className="mb-4">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Caixa</p>
+        <div className="space-y-1.5 text-sm">
+          <LinhaResumo label="Inicial" valor={formatarMoeda(liquidacao.caixa_inicial)} />
+          <LinhaResumo label="Final" valor={formatarMoeda(liquidacao.caixa_final)} bold />
+        </div>
+      </div>
+
+      {/* Carteira */}
+      <div className="mb-4 pt-3 border-t border-gray-100">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Carteira</p>
+        <div className="space-y-1.5 text-sm">
+          <LinhaResumo label="Inicial" valor={formatarMoeda(liquidacao.carteira_inicial)} />
+          <LinhaResumo label="Final" valor={formatarMoeda(liquidacao.carteira_final)} bold />
+        </div>
+      </div>
+
+      {/* Microseguro (só se tiver) */}
+      {temMicroseguro && (
+        <div className="mb-4 pt-3 border-t border-gray-100">
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Microseguro</p>
+          <div className="space-y-1.5 text-sm">
+            <LinhaResumo label="Inicial" valor={formatarMoeda(microInicial)} corValor="text-purple-600" />
+            <LinhaResumo label="Final" valor={formatarMoeda(microFinal)} bold corValor="text-purple-600" />
+          </div>
+        </div>
+      )}
+
+      {/* Recebido + Pagamentos */}
+      <div className="pt-3 border-t border-gray-100">
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Movimentação</p>
+        <div className="space-y-1.5 text-sm">
+          <LinhaResumo
             label="Recebido"
-            valor={formatarMoeda(liq.valor_recebido_dia || 0)}
+            valor={formatarMoeda(liquidacao.valor_recebido_dia)}
             corValor="text-green-600"
             bold
           />
-          <Linha
-            label="Esperado"
-            valor={formatarMoeda(liq.valor_esperado_dia || 0)}
-          />
-          <Linha
-            label="Pagamentos"
-            valor={
-              <span>
-                <span className="text-green-600">{liq.pagamentos_pagos || 0}</span>
-                {' / '}
-                <span className="text-red-600">{liq.pagamentos_nao_pagos || 0}</span>
-              </span>
-            }
-          />
-          {((liq as any).total_microseguro_dia || 0) > 0 && (
-            <Linha
-              label="Microseguro"
-              valor={formatarMoeda((liq as any).total_microseguro_dia || 0)}
-              corValor="text-purple-600"
-            />
-          )}
+          <div className="flex items-center justify-between py-1">
+            <span className="text-gray-600">Pagamentos</span>
+            <span className="text-sm font-medium">
+              <span className="text-green-600">{liquidacao.pagamentos_pagos || 0}</span>
+              <span className="text-gray-400 mx-1">/</span>
+              <span className="text-red-600">{liquidacao.pagamentos_nao_pagos || 0}</span>
+            </span>
+          </div>
         </div>
-      ) : (
-        <div className="text-center py-3 text-sm text-gray-400">Sem registro</div>
-      )}
+      </div>
     </div>
   );
 }
 
-function Linha({
+function LinhaResumo({
   label,
   valor,
   corValor,
   bold,
 }: {
   label: string;
-  valor: React.ReactNode;
+  valor: string;
   corValor?: string;
   bold?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-gray-600">{label}:</span>
-      <span
-        className={`text-sm ${bold ? 'font-semibold' : 'font-medium'} ${
-          corValor || 'text-gray-900'
-        }`}
-      >
+    <div className="flex items-center justify-between py-0.5">
+      <span className="text-gray-600">{label}:</span>
+      <span className={`${bold ? 'font-semibold' : 'font-medium'} ${corValor || 'text-gray-900'}`}>
         {valor}
       </span>
     </div>
