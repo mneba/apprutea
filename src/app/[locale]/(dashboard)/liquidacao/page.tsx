@@ -1009,12 +1009,12 @@ export default function LiquidacaoDiariaPage() {
             </div>
 
             {/* Card Movimentos (Empréstimos + Despesas + Microseguro) */}
-            <div className="bg-white rounded-lg border border-gray-200 flex flex-col flex-1 min-h-0">
-              <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
+            <div className="bg-white rounded-lg border border-gray-200">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
                 <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Movimentos do Dia</h3>
               </div>
-              <div className="flex-1 divide-y divide-gray-100 overflow-hidden flex flex-col">
-                <button onClick={() => setModalEmprestimos(true)} className="flex-1 w-full px-3 py-2 hover:bg-green-50/50 transition-colors flex items-center gap-2 text-left">
+              <div className="divide-y divide-gray-100">
+                <button onClick={() => setModalEmprestimos(true)} className="w-full px-3 py-2.5 hover:bg-green-50/50 transition-colors flex items-center gap-2 text-left">
                   <div className="w-7 h-7 bg-green-50 rounded-md flex items-center justify-center flex-shrink-0">
                     <DollarSign className="w-3.5 h-3.5 text-green-600" />
                   </div>
@@ -1025,7 +1025,7 @@ export default function LiquidacaoDiariaPage() {
                   <span className="text-sm font-bold text-green-700 tabular-nums">{formatarMoeda(liquidacao.total_emprestado_dia)}</span>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
-                <button onClick={() => setModalDespesas(true)} className="flex-1 w-full px-3 py-2 hover:bg-red-50/50 transition-colors flex items-center gap-2 text-left">
+                <button onClick={() => setModalDespesas(true)} className="w-full px-3 py-2.5 hover:bg-red-50/50 transition-colors flex items-center gap-2 text-left">
                   <div className="w-7 h-7 bg-red-50 rounded-md flex items-center justify-center flex-shrink-0">
                     <Receipt className="w-3.5 h-3.5 text-red-600" />
                   </div>
@@ -1036,7 +1036,7 @@ export default function LiquidacaoDiariaPage() {
                   <span className="text-sm font-bold text-red-700 tabular-nums">{formatarMoeda(liquidacao.total_despesas_dia)}</span>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
-                <button onClick={() => setModalMicroseguros(true)} className="flex-1 w-full px-3 py-2 hover:bg-teal-50/50 transition-colors flex items-center gap-2 text-left">
+                <button onClick={() => setModalMicroseguros(true)} className="w-full px-3 py-2.5 hover:bg-teal-50/50 transition-colors flex items-center gap-2 text-left">
                   <div className="w-7 h-7 bg-teal-50 rounded-md flex items-center justify-center flex-shrink-0">
                     <Shield className="w-3.5 h-3.5 text-teal-600" />
                   </div>
