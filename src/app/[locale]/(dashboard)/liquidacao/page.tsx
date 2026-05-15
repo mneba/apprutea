@@ -14,13 +14,13 @@ import {
   Calendar,
   Banknote,
   CreditCard,
-  RefreshCw,
   Target,
   Receipt,
   DollarSign,
   MapPin,
   CalendarDays,
   ChevronLeft,
+  ChevronRight,
   FileText,
   RotateCcw,
   AlertTriangle,
@@ -37,7 +37,7 @@ import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendar
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
 import { FaixaLiquidacaoReaberta } from '@/components/liquidacao/FaixaLiquidacaoReaberta';
-import { NotasLiquidacaoCard, ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
+import { ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
 import {
   ModalEmprestimos,
   ModalDespesas,
@@ -109,13 +109,13 @@ function BadgeStatus({ status }: { status: string }) {
   const cfg = config[status] || config.ABERTO;
 
   return (
-    <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
       {cfg.label}
     </span>
   );
 }
 
-// Card consolidado Caixa ou Carteira: inicial, final, delta + %
+// Card compacto Caixa ou Carteira
 function CardSaldo({
   titulo,
   inicial,
@@ -140,32 +140,28 @@ function CardSaldo({
   const corIcone = corBase === 'blue' ? 'text-blue-600' : 'text-purple-600';
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-4 transition-all duration-300 hover:shadow-md hover:border-gray-300">
-      <div className="flex items-start gap-3">
-        <div className={`w-10 h-10 ${corBgIcone} rounded-lg flex items-center justify-center flex-shrink-0`}>
-          <Icone className={`w-5 h-5 ${corIcone}`} />
+    <div className="bg-white rounded-lg border border-gray-200 p-3 flex-1 flex flex-col">
+      <div className="flex items-start gap-2.5 flex-1">
+        <div className={`w-8 h-8 ${corBgIcone} rounded-md flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`w-4 h-4 ${corIcone}`} />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-500 uppercase tracking-wide font-medium mb-1.5">{titulo}</p>
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-1">{titulo}</p>
           <div className="space-y-0.5">
             <div className="flex items-baseline justify-between">
-              <span className="text-xs text-gray-500">Inicial</span>
-              <span className="text-sm font-medium text-gray-700 tabular-nums">{formatarMoeda(inicial)}</span>
+              <span className="text-[11px] text-gray-500">Inicial</span>
+              <span className="text-xs font-medium text-gray-700 tabular-nums">{formatarMoeda(inicial)}</span>
             </div>
             <div className="flex items-baseline justify-between">
-              <span className="text-xs text-gray-500">Final</span>
-              <span className="text-sm font-semibold text-gray-900 tabular-nums">{formatarMoeda(final)}</span>
+              <span className="text-[11px] text-gray-500">Final</span>
+              <span className="text-sm font-bold text-gray-900 tabular-nums">{formatarMoeda(final)}</span>
             </div>
           </div>
-          <div className={`flex items-center gap-1 mt-2 pt-2 border-t border-gray-100 text-xs font-medium ${corDelta}`}>
-            <IconDelta className="w-3.5 h-3.5" />
-            <span className="tabular-nums">
-              {subiu && '+'}{formatarMoeda(delta)}
-            </span>
+          <div className={`flex items-center gap-1 mt-1.5 pt-1.5 border-t border-gray-100 text-[11px] font-medium ${corDelta}`}>
+            <IconDelta className="w-3 h-3" />
+            <span className="tabular-nums">{subiu && '+'}{formatarMoeda(delta)}</span>
             <span className="text-gray-400">·</span>
-            <span className="tabular-nums">
-              {subiu && '+'}{percent.toFixed(2)}%
-            </span>
+            <span className="tabular-nums">{subiu && '+'}{percent.toFixed(2)}%</span>
           </div>
         </div>
       </div>
@@ -175,13 +171,9 @@ function CardSaldo({
 
 function ProgressBar({ percentual, cor }: { percentual: number; cor?: string }) {
   const corBarra = cor || (percentual >= 100 ? 'bg-green-500' : percentual >= 70 ? 'bg-blue-500' : percentual >= 50 ? 'bg-amber-500' : 'bg-red-500');
-
   return (
-    <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-      <div
-        className={`h-full ${corBarra} transition-all duration-500`}
-        style={{ width: `${Math.min(100, percentual)}%` }}
-      />
+    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+      <div className={`h-full ${corBarra} transition-all duration-500`} style={{ width: `${Math.min(100, percentual)}%` }} />
     </div>
   );
 }
@@ -196,24 +188,17 @@ function SkeletonBlock({ className = '' }: { className?: string }) {
 
 function TelaSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="space-y-2">
-          <SkeletonBlock className="h-8 w-64" />
-          <SkeletonBlock className="h-4 w-80" />
+    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 p-1">
+      <SkeletonBlock className="h-12 w-full" />
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[35%_65%] gap-4">
+        <div className="space-y-3">
+          <SkeletonBlock className="h-24 rounded-lg" />
+          <SkeletonBlock className="h-24 rounded-lg" />
+          <SkeletonBlock className="h-32 rounded-lg" />
+          <SkeletonBlock className="h-32 rounded-lg" />
         </div>
-        <div className="flex gap-2">
-          <SkeletonBlock className="h-9 w-24 rounded-lg" />
-          <SkeletonBlock className="h-9 w-28 rounded-lg" />
-        </div>
+        <SkeletonBlock className="rounded-lg" />
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        <SkeletonBlock className="h-28 rounded-xl" />
-        <SkeletonBlock className="h-28 rounded-xl" />
-        <SkeletonBlock className="h-28 rounded-xl" />
-      </div>
-      <SkeletonBlock className="h-32 rounded-xl" />
-      <SkeletonBlock className="h-96 rounded-xl" />
     </div>
   );
 }
@@ -223,24 +208,12 @@ function TelaSkeleton() {
 // =====================================================
 
 function ModalAbrirLiquidacao({
-  isOpen,
-  onClose,
-  onConfirmar,
-  loading,
-  saldoSugerido,
+  isOpen, onClose, onConfirmar, loading, saldoSugerido,
 }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirmar: (caixaInicial: number) => void;
-  loading: boolean;
-  saldoSugerido: number;
+  isOpen: boolean; onClose: () => void; onConfirmar: (caixaInicial: number) => void; loading: boolean; saldoSugerido: number;
 }) {
   const [caixaInicial, setCaixaInicial] = useState(saldoSugerido.toString());
-
-  useEffect(() => {
-    setCaixaInicial(saldoSugerido.toString());
-  }, [saldoSugerido]);
-
+  useEffect(() => { setCaixaInicial(saldoSugerido.toString()); }, [saldoSugerido]);
   if (!isOpen) return null;
 
   return (
@@ -248,30 +221,18 @@ function ModalAbrirLiquidacao({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center">
-            <Play className="w-5 h-5 text-green-600" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Abrir Liquidação</h2>
-            <p className="text-sm text-gray-500">Iniciar sessão de trabalho</p>
-          </div>
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center"><Play className="w-5 h-5 text-green-600" /></div>
+          <div><h2 className="text-lg font-bold text-gray-900">Abrir Liquidação</h2><p className="text-sm text-gray-500">Iniciar sessão de trabalho</p></div>
         </div>
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Caixa Inicial</label>
-          <input
-            type="number"
-            value={caixaInicial}
-            onChange={(e) => setCaixaInicial(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-semibold"
-            placeholder="0,00"
-          />
+          <input type="number" value={caixaInicial} onChange={(e) => setCaixaInicial(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-semibold" placeholder="0,00" />
           <p className="mt-2 text-xs text-gray-500">Saldo sugerido: {formatarMoeda(saldoSugerido)}</p>
         </div>
         <div className="flex gap-3">
           <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
           <button onClick={() => onConfirmar(parseFloat(caixaInicial) || 0)} disabled={loading} className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            Abrir
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}Abrir
           </button>
         </div>
       </div>
@@ -284,17 +245,9 @@ function ModalAbrirLiquidacao({
 // =====================================================
 
 function ModalFecharLiquidacao({
-  isOpen,
-  onClose,
-  onConfirmar,
-  loading,
-  liquidacao,
+  isOpen, onClose, onConfirmar, loading, liquidacao,
 }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirmar: (observacoes: string) => void;
-  loading: boolean;
-  liquidacao: LiquidacaoDiaria | null;
+  isOpen: boolean; onClose: () => void; onConfirmar: (observacoes: string) => void; loading: boolean; liquidacao: LiquidacaoDiaria | null;
 }) {
   const [observacoes, setObservacoes] = useState('');
   if (!isOpen || !liquidacao) return null;
@@ -325,8 +278,7 @@ function ModalFecharLiquidacao({
         <div className="flex gap-3">
           <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
           <button onClick={() => onConfirmar(observacoes)} disabled={loading} className={`flex-1 px-4 py-2.5 ${isReaberta ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}>
-            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}
-            Fechar
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}Fechar
           </button>
         </div>
       </div>
@@ -339,17 +291,9 @@ function ModalFecharLiquidacao({
 // =====================================================
 
 function ModalReabrirLiquidacao({
-  isOpen,
-  onClose,
-  onConfirmar,
-  loading,
-  dataLiquidacao,
+  isOpen, onClose, onConfirmar, loading, dataLiquidacao,
 }: {
-  isOpen: boolean;
-  onClose: () => void;
-  onConfirmar: (motivo: string) => Promise<void>;
-  loading: boolean;
-  dataLiquidacao: string;
+  isOpen: boolean; onClose: () => void; onConfirmar: (motivo: string) => Promise<void>; loading: boolean; dataLiquidacao: string;
 }) {
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
@@ -374,13 +318,8 @@ function ModalReabrirLiquidacao({
       <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
       <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
         <div className="flex items-center gap-3 mb-4">
-          <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
-            <RotateCcw className="w-6 h-6 text-amber-600" />
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">Reabrir Liquidação</h2>
-            <p className="text-sm text-gray-500">Permitir edições nesta liquidação</p>
-          </div>
+          <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center"><RotateCcw className="w-6 h-6 text-amber-600" /></div>
+          <div><h2 className="text-lg font-bold text-gray-900">Reabrir Liquidação</h2><p className="text-sm text-gray-500">Permitir edições nesta liquidação</p></div>
         </div>
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
           <div className="flex items-start gap-3">
@@ -439,16 +378,12 @@ function TelaIniciarDia({
       </div>
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Play className="w-8 h-8 text-white" />
-          </div>
+          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><Play className="w-8 h-8 text-white" /></div>
           <h2 className="text-xl font-bold text-gray-900 mb-2">Iniciar o Dia</h2>
           <p className="text-gray-500 text-sm mb-6">Nenhuma liquidação aberta. Inicie sua sessão de trabalho.</p>
           <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
             <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                <span className="text-sm font-bold text-blue-600">{vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}</span>
-              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-sm font-bold text-blue-600">{vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}</span></div>
               <div>
                 <p className="font-medium text-gray-900 text-sm">{vendedor?.nome || 'Vendedor não vinculado'}</p>
                 <p className="text-xs text-gray-500">{rota.nome}</p>
@@ -472,17 +407,14 @@ function TelaIniciarDia({
 // PÁGINA PRINCIPAL
 // =====================================================
 
-// Tipos de filtro pra lista de clientes
 type FiltroLista = 'TODOS' | 'PAGOS' | 'NAO_PAGOS' | 'NOVOS' | 'RENOVADOS' | 'RENEGOCIADOS' | 'QUITADOS';
 
 interface EventoCliente {
   tipo: 'PAGOU' | 'NAO_PAGOU' | 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO' | 'QUITADO';
-  // Pagamento
   parcelasPagas?: number;
   totalParcelas?: number;
   numeroParcelaPaga?: number;
   valorPago?: number;
-  // Empréstimo do dia
   valorEmprestimo?: number;
   numeroParcelasEmprestimo?: number;
 }
@@ -506,27 +438,15 @@ export default function LiquidacaoDiariaPage() {
   const [emprestimos, setEmprestimos] = useState({ total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 });
   const [metaDia, setMetaDia] = useState(0);
 
-  // Empréstimos do dia (cruzar com lista)
   const [emprestimosDoDia, setEmprestimosDoDia] = useState<Array<{
-    id: string;
-    cliente_id: string;
-    valor_principal: number;
-    numero_parcelas: number;
-    tipo_emprestimo: string;
-    status: string;
+    id: string; cliente_id: string; valor_principal: number; numero_parcelas: number; tipo_emprestimo: string; status: string;
   }>>([]);
 
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
   const [liquidacoesMes, setLiquidacoesMes] = useState<LiquidacaoDiaria[]>([]);
   const [mostrarCalendario, setMostrarCalendario] = useState(false);
   const [visualizandoOutroDia, setVisualizandoOutroDia] = useState(false);
-  const [previsaoDia, setPrevisaoDia] = useState<{
-    totalClientes: number;
-    totalParcelas: number;
-    valorEsperado: number;
-    parcelasVencidas: number;
-    valorVencido: number;
-  } | null>(null);
+  const [previsaoDia, setPrevisaoDia] = useState<any>(null);
 
   const [loading, setLoading] = useState(true);
   const [loadingCalendario, setLoadingCalendario] = useState(false);
@@ -539,11 +459,11 @@ export default function LiquidacaoDiariaPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
   const [modalClienteAberto, setModalClienteAberto] = useState(false);
 
-  // Filtro e busca
   const [filtroLista, setFiltroLista] = useState<FiltroLista>('TODOS');
   const [buscaCliente, setBuscaCliente] = useState('');
-  const [clientesVisiveis, setClientesVisiveis] = useState(50);
 
+  // Contagem de notas
+  const [qtdNotasLiquidacao, setQtdNotasLiquidacao] = useState(0);
   const [notasClientes, setNotasClientes] = useState<Map<string, { liquidacao: number; outras: boolean }>>(new Map());
   const [modalNotasCliente, setModalNotasCliente] = useState<{ aberto: boolean; clienteId: string; clienteNome: string }>({
     aberto: false, clienteId: '', clienteNome: '',
@@ -559,43 +479,35 @@ export default function LiquidacaoDiariaPage() {
   const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
     try {
       const dataVencimento = liq.data_abertura.split('T')[0];
-
       const clientes = await liquidacaoService.buscarClientesDoDia(rotaId, dataVencimento);
       setClientesDia(clientes);
-
       const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
       setEstatisticas(stats);
-
       const emps = await liquidacaoService.buscarEmprestimosDoDia(liq.id);
       setEmprestimos(emps);
 
-      // Query nova: empréstimos do dia por liquidacao_id (pra cruzar com clientes)
       const supabase = (await import('@/lib/supabase/client')).createClient();
       const { data: empsLista } = await supabase
         .from('emprestimos')
         .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
         .eq('liquidacao_id', liq.id);
-
       setEmprestimosDoDia((empsLista || []) as any);
 
-      // Notas
+      // Contagem total de notas da liquidação
+      const { count: countNotasLiq } = await supabase
+        .from('notas')
+        .select('id', { count: 'exact', head: true })
+        .eq('liquidacao_id', liq.id)
+        .eq('status', 'ATIVA');
+      setQtdNotasLiquidacao(countNotasLiq || 0);
+
+      // Notas por cliente
       if (clientes.length > 0) {
         const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
-
         const { data: notasLiq } = await supabase
-          .from('notas')
-          .select('cliente_id')
-          .eq('liquidacao_id', liq.id)
-          .eq('status', 'ATIVA')
-          .in('cliente_id', clienteIds);
-
+          .from('notas').select('cliente_id').eq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
         const { data: notasOutras } = await supabase
-          .from('notas')
-          .select('cliente_id')
-          .neq('liquidacao_id', liq.id)
-          .eq('status', 'ATIVA')
-          .in('cliente_id', clienteIds);
-
+          .from('notas').select('cliente_id').neq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
         const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
         (notasLiq || []).forEach((n: any) => {
           const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
@@ -605,12 +517,10 @@ export default function LiquidacaoDiariaPage() {
           const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
           mapaNotas.set(n.cliente_id, { ...atual, outras: true });
         });
-
         setNotasClientes(mapaNotas);
       }
 
       setBuscaCliente('');
-      setClientesVisiveis(50);
       setFiltroLista('TODOS');
     } catch (error) {
       console.error('Erro ao carregar dados da liquidação:', error);
@@ -622,7 +532,6 @@ export default function LiquidacaoDiariaPage() {
     setLoading(true);
     setSemRotaSelecionada(false);
     const tipoUsuario = profile?.tipo_usuario;
-
     try {
       let rotaId: string | null = null;
       let vendedorData: VendedorLiquidacao | null = null;
@@ -638,16 +547,10 @@ export default function LiquidacaoDiariaPage() {
 
       if (!rotaId && rotaIdContexto) {
         const temPermissao = validarPermissaoRota(tipoUsuario, rotaIdContexto, profile);
-        if (!temPermissao) {
-          setSemRotaSelecionada(true);
-          setLoading(false);
-          return;
-        }
+        if (!temPermissao) { setSemRotaSelecionada(true); setLoading(false); return; }
         rotaId = rotaIdContexto;
         rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto, empresaId || undefined);
-        if (rotaData) {
-          vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
-        }
+        if (rotaData) vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
       }
 
       if (!rotaId && profile?.ultima_rota_id) {
@@ -656,17 +559,11 @@ export default function LiquidacaoDiariaPage() {
         if (temPermissao) {
           rotaId = ultimaRotaId;
           rotaData = await liquidacaoService.buscarRotaPorId(ultimaRotaId, empresaId || undefined);
-          if (rotaData) {
-            vendedorData = await liquidacaoService.buscarVendedorDaRota(ultimaRotaId);
-          }
+          if (rotaData) vendedorData = await liquidacaoService.buscarVendedorDaRota(ultimaRotaId);
         }
       }
 
-      if (!rotaId || !rotaData) {
-        setSemRotaSelecionada(true);
-        setLoading(false);
-        return;
-      }
+      if (!rotaId || !rotaData) { setSemRotaSelecionada(true); setLoading(false); return; }
 
       setVendedor(vendedorData);
       setRota(rotaData);
@@ -780,22 +677,15 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [rota, carregarDadosCalendario]);
 
-  // Handlers
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
     if (!rota || !userId) return;
     setLoadingAcao(true);
     try {
-      const resultado = await liquidacaoService.abrirLiquidacao({
-        vendedor_id: vendedor?.id || '', rota_id: rota.id, caixa_inicial: caixaInicial, user_id: userId,
-      });
-      if (resultado.sucesso && resultado.liquidacao_id) {
-        await carregarDados();
-        setModalAbrir(false);
-      } else { alert(resultado.mensagem); }
-    } catch (error) {
-      console.error('Erro ao abrir liquidação:', error);
-      alert('Erro ao abrir liquidação');
-    } finally { setLoadingAcao(false); }
+      const resultado = await liquidacaoService.abrirLiquidacao({ vendedor_id: vendedor?.id || '', rota_id: rota.id, caixa_inicial: caixaInicial, user_id: userId });
+      if (resultado.sucesso && resultado.liquidacao_id) { await carregarDados(); setModalAbrir(false); }
+      else alert(resultado.mensagem);
+    } catch (error) { console.error('Erro ao abrir liquidação:', error); alert('Erro ao abrir liquidação'); }
+    finally { setLoadingAcao(false); }
   };
 
   const handleFecharLiquidacao = async (observacoes: string) => {
@@ -805,14 +695,10 @@ export default function LiquidacaoDiariaPage() {
       const resultado = liquidacao.status === 'REABERTO'
         ? await liquidacaoService.fecharLiquidacaoReaberta({ liquidacao_id: liquidacao.id, user_id: userId, observacoes })
         : await liquidacaoService.fecharLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, observacoes });
-      if (resultado.sucesso) {
-        await carregarDados();
-        setModalFechar(false);
-      } else { alert(resultado.mensagem); }
-    } catch (error) {
-      console.error('Erro ao fechar liquidação:', error);
-      alert('Erro ao fechar liquidação');
-    } finally { setLoadingAcao(false); }
+      if (resultado.sucesso) { await carregarDados(); setModalFechar(false); }
+      else alert(resultado.mensagem);
+    } catch (error) { console.error('Erro ao fechar liquidação:', error); alert('Erro ao fechar liquidação'); }
+    finally { setLoadingAcao(false); }
   };
 
   const handleReabrirLiquidacao = async (motivo: string) => {
@@ -820,14 +706,10 @@ export default function LiquidacaoDiariaPage() {
     setLoadingAcao(true);
     try {
       const resultado = await liquidacaoService.reabrirLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, motivo });
-      if (resultado.sucesso) {
-        await carregarDados();
-        setModalReabrir(false);
-      } else { alert(resultado.mensagem); }
-    } catch (error) {
-      console.error('Erro ao reabrir liquidação:', error);
-      alert('Erro ao reabrir liquidação');
-    } finally { setLoadingAcao(false); }
+      if (resultado.sucesso) { await carregarDados(); setModalReabrir(false); }
+      else alert(resultado.mensagem);
+    } catch (error) { console.error('Erro ao reabrir liquidação:', error); alert('Erro ao reabrir liquidação'); }
+    finally { setLoadingAcao(false); }
   };
 
   const handleAbrirModalCliente = (cliente: ClienteDoDia) => {
@@ -849,27 +731,24 @@ export default function LiquidacaoDiariaPage() {
     setModalClienteAberto(true);
   };
 
-  // =====================================================
-  // MÁSCARA DE EVENTO POR CLIENTE
-  // =====================================================
+  const handleAbrirNotas = () => {
+    console.log('TODO: abrir modal de notas da liquidação', { liquidacaoId: liquidacao?.id, qtdNotasLiquidacao });
+  };
+
+  // Máscara de evento por cliente
   const eventosPorCliente = useMemo(() => {
     const mapa = new Map<string, EventoCliente>();
-    if (!clientesDia.length) return mapa;
+    if (!clientesDia.length && !emprestimosDoDia.length) return mapa;
 
-    // 1) Indexar empréstimos do dia por cliente_id (prioridade alta)
     const empPorCliente = new Map<string, typeof emprestimosDoDia[number]>();
     for (const emp of emprestimosDoDia) {
-      // Prioriza Quitado > Novo > Renovacao > Renegociacao
       const existente = empPorCliente.get(emp.cliente_id);
       const prioridade: Record<string, number> = { QUITADO: 4, NOVO: 3, RENOVACAO: 2, RENEGOCIACAO: 1 };
       const pAtual = prioridade[existente?.tipo_emprestimo || ''] || 0;
       const pNovo = emp.status === 'QUITADO' ? 4 : (prioridade[emp.tipo_emprestimo] || 0);
-      if (!existente || pNovo > pAtual) {
-        empPorCliente.set(emp.cliente_id, emp);
-      }
+      if (!existente || pNovo > pAtual) empPorCliente.set(emp.cliente_id, emp);
     }
 
-    // 2) Agregar pagamentos por cliente
     const pagosPorCliente = new Map<string, { somaValor: number; parcelas: number[]; totalParcelas: number }>();
     const naoPagosPorCliente = new Map<string, { numero: number; total: number }>();
 
@@ -881,14 +760,12 @@ export default function LiquidacaoDiariaPage() {
         atual.totalParcelas = c.numero_parcelas;
         pagosPorCliente.set(c.cliente_id, atual);
       } else {
-        // Pega o primeiro não-pago do cliente
         if (!naoPagosPorCliente.has(c.cliente_id)) {
           naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela, total: c.numero_parcelas });
         }
       }
     }
 
-    // 3) Decidir evento mais relevante por cliente (prioridade: Quitado/Novo/Renov/Reneg > Pagou > NãoPagou)
     const todosClienteIds = new Set([
       ...clientesDia.map(c => c.cliente_id),
       ...emprestimosDoDia.map(e => e.cliente_id),
@@ -896,68 +773,19 @@ export default function LiquidacaoDiariaPage() {
 
     for (const cid of todosClienteIds) {
       const emp = empPorCliente.get(cid);
-
-      // Quitado / Novo / Renovação / Renegociação têm prioridade
-      if (emp?.status === 'QUITADO') {
-        mapa.set(cid, {
-          tipo: 'QUITADO',
-          valorEmprestimo: Number(emp.valor_principal || 0),
-        });
-        continue;
-      }
-      if (emp?.tipo_emprestimo === 'NOVO') {
-        mapa.set(cid, {
-          tipo: 'NOVO',
-          valorEmprestimo: Number(emp.valor_principal || 0),
-          numeroParcelasEmprestimo: emp.numero_parcelas,
-        });
-        continue;
-      }
-      if (emp?.tipo_emprestimo === 'RENOVACAO') {
-        mapa.set(cid, {
-          tipo: 'RENOVACAO',
-          valorEmprestimo: Number(emp.valor_principal || 0),
-          numeroParcelasEmprestimo: emp.numero_parcelas,
-        });
-        continue;
-      }
-      if (emp?.tipo_emprestimo === 'RENEGOCIACAO') {
-        mapa.set(cid, {
-          tipo: 'RENEGOCIACAO',
-          valorEmprestimo: Number(emp.valor_principal || 0),
-          numeroParcelasEmprestimo: emp.numero_parcelas,
-        });
-        continue;
-      }
-
-      // Pagou
+      if (emp?.status === 'QUITADO') { mapa.set(cid, { tipo: 'QUITADO', valorEmprestimo: Number(emp.valor_principal || 0) }); continue; }
+      if (emp?.tipo_emprestimo === 'NOVO') { mapa.set(cid, { tipo: 'NOVO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
+      if (emp?.tipo_emprestimo === 'RENOVACAO') { mapa.set(cid, { tipo: 'RENOVACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
+      if (emp?.tipo_emprestimo === 'RENEGOCIACAO') { mapa.set(cid, { tipo: 'RENEGOCIACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
       const pag = pagosPorCliente.get(cid);
-      if (pag && pag.somaValor > 0) {
-        mapa.set(cid, {
-          tipo: 'PAGOU',
-          parcelasPagas: pag.parcelas.length,
-          totalParcelas: pag.totalParcelas,
-          numeroParcelaPaga: pag.parcelas[0],
-          valorPago: pag.somaValor,
-        });
-        continue;
-      }
-
-      // Não pagou
+      if (pag && pag.somaValor > 0) { mapa.set(cid, { tipo: 'PAGOU', parcelasPagas: pag.parcelas.length, totalParcelas: pag.totalParcelas, numeroParcelaPaga: pag.parcelas[0], valorPago: pag.somaValor }); continue; }
       const np = naoPagosPorCliente.get(cid);
-      if (np) {
-        mapa.set(cid, {
-          tipo: 'NAO_PAGOU',
-          numeroParcelaPaga: np.numero,
-          totalParcelas: np.total,
-        });
-      }
+      if (np) mapa.set(cid, { tipo: 'NAO_PAGOU', numeroParcelaPaga: np.numero, totalParcelas: np.total });
     }
 
     return mapa;
   }, [clientesDia, emprestimosDoDia]);
 
-  // Contagem por filtro
   const contagens = useMemo(() => {
     let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0;
     for (const ev of eventosPorCliente.values()) {
@@ -971,7 +799,6 @@ export default function LiquidacaoDiariaPage() {
     return { todos: eventosPorCliente.size, pagos, naoPagos, novos, renovados, renegociados, quitados };
   }, [eventosPorCliente]);
 
-  // Lista de clientes (deduplicada por cliente_id) com evento
   const clientesComEvento = useMemo(() => {
     const seen = new Set<string>();
     const items: Array<{ cliente: ClienteDoDia; evento?: EventoCliente }> = [];
@@ -980,29 +807,16 @@ export default function LiquidacaoDiariaPage() {
       seen.add(c.cliente_id);
       items.push({ cliente: c, evento: eventosPorCliente.get(c.cliente_id) });
     }
-    // Adicionar clientes que só apareceram nos empréstimos do dia (Novos sem parcela vencendo hoje)
     for (const emp of emprestimosDoDia) {
       if (seen.has(emp.cliente_id)) continue;
       const ev = eventosPorCliente.get(emp.cliente_id);
       if (!ev) continue;
-      // Cria um ClienteDoDia "fake" só com o nome
-      const fake: ClienteDoDia = {
-        cliente_id: emp.cliente_id,
-        nome: '(cliente do empréstimo)',
-        consecutivo: '',
-        telefone_celular: '',
-        endereco: '',
-        rota_id: rota?.id || '',
-        parcela_id: emp.id,
-        numero_parcela: 0,
-        numero_parcelas: emp.numero_parcelas,
-        valor_parcela: 0,
-        valor_pago_parcela: 0,
-        valor_principal: emp.valor_principal,
-        saldo_emprestimo: 0,
-        status_dia: 'PENDENTE',
-        tem_parcelas_vencidas: false,
-        total_parcelas_vencidas: 0,
+      const fake = {
+        cliente_id: emp.cliente_id, nome: '(cliente do empréstimo)', consecutivo: '',
+        telefone_celular: '', endereco: '', rota_id: rota?.id || '', parcela_id: emp.id,
+        numero_parcela: 0, numero_parcelas: emp.numero_parcelas, valor_parcela: 0,
+        valor_pago_parcela: 0, valor_principal: emp.valor_principal, saldo_emprestimo: 0,
+        status_dia: 'PENDENTE', tem_parcelas_vencidas: false, total_parcelas_vencidas: 0,
         permite_emprestimo_adicional: false,
       } as any;
       seen.add(emp.cliente_id);
@@ -1011,10 +825,8 @@ export default function LiquidacaoDiariaPage() {
     return items;
   }, [clientesDia, emprestimosDoDia, eventosPorCliente, rota]);
 
-  // Aplicar filtro + busca
   const clientesFiltrados = useMemo(() => {
     return clientesComEvento.filter(({ cliente, evento }) => {
-      // Filtro por categoria
       if (filtroLista !== 'TODOS') {
         if (!evento) return false;
         if (filtroLista === 'PAGOS' && evento.tipo !== 'PAGOU') return false;
@@ -1024,7 +836,6 @@ export default function LiquidacaoDiariaPage() {
         if (filtroLista === 'RENEGOCIADOS' && evento.tipo !== 'RENEGOCIACAO') return false;
         if (filtroLista === 'QUITADOS' && evento.tipo !== 'QUITADO') return false;
       }
-      // Filtro por busca
       if (buscaCliente) {
         const busca = buscaCliente.toLowerCase();
         const bateNome = cliente.nome?.toLowerCase().includes(busca);
@@ -1065,11 +876,15 @@ export default function LiquidacaoDiariaPage() {
   }
 
   // =====================================================
-  // RENDER PRINCIPAL
+  // RENDER PRINCIPAL — Layout 2 colunas
   // =====================================================
+  // Container principal: ocupa toda a viewport menos espaço do shell/header global (estimado ~7rem)
+  // page-content já tem padding do layout pai. Aqui criamos altura calculada e overflow-hidden.
 
   return (
-    <div className="space-y-4">
+    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 overflow-hidden">
+
+      {/* Faixa de reabertura */}
       {isLiquidacaoReaberta && liquidacao && (
         <FaixaLiquidacaoReaberta
           dataLiquidacao={liquidacao.data_abertura.split('T')[0]}
@@ -1078,256 +893,249 @@ export default function LiquidacaoDiariaPage() {
         />
       )}
 
+      {/* Banner visualizando outro dia */}
       {visualizandoOutroDia && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CalendarDays className="w-5 h-5 text-amber-600" />
-            <div>
-              <p className="text-sm font-medium text-amber-800">
-                Visualizando {dataSelecionada.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
-              <p className="text-xs text-amber-600">{liquidacao ? `Liquidação ${liquidacao.status}` : 'Sem liquidação neste dia'}</p>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-amber-600" />
+            <div className="text-xs">
+              <span className="font-medium text-amber-800">
+                Visualizando {dataSelecionada.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </span>
+              <span className="text-amber-600 ml-2">· {liquidacao ? `Liquidação ${liquidacao.status}` : 'Sem liquidação'}</span>
             </div>
           </div>
           {liquidacaoAtiva && (
-            <button onClick={voltarParaLiquidacaoAtiva} className="flex items-center gap-1 px-3 py-1.5 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded-lg text-sm font-medium transition-colors">
-              <ChevronLeft className="w-4 h-4" />Voltar para Liquidação Ativa
+            <button onClick={voltarParaLiquidacaoAtiva} className="flex items-center gap-1 px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded text-xs font-medium">
+              <ChevronLeft className="w-3 h-3" />Voltar
             </button>
           )}
         </div>
       )}
 
-      {/* HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
+      {/* HEADER COMPACTO */}
+      <div className="flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg font-bold text-gray-900">Liquidação Diária</h1>
             {liquidacao && <BadgeStatus status={liquidacao.status} />}
           </div>
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-500 mt-1">
-            <span className="flex items-center gap-1"><MapPin className="w-4 h-4" />{rota.nome}</span>
-            {vendedor && (
-              <span className="flex items-center gap-1">
-                <Users className="w-4 h-4" />{vendedor.nome}
-                {vendedor.codigo_vendedor && ` (${vendedor.codigo_vendedor})`}
-              </span>
-            )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-0.5">
+            <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{rota.nome}</span>
+            {vendedor && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{vendedor.nome}{vendedor.codigo_vendedor && ` (${vendedor.codigo_vendedor})`}</span>}
             {liquidacao && (
               <>
-                <span className="flex items-center gap-1"><Calendar className="w-4 h-4 text-green-600" />Abertura: {formatarDataHora(liquidacao.data_abertura)}</span>
-                {liquidacao.data_fechamento && <span className="flex items-center gap-1"><Clock className="w-4 h-4 text-blue-600" />Fechamento: {formatarDataHora(liquidacao.data_fechamento)}</span>}
+                <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-green-600" />Abertura: {formatarDataHora(liquidacao.data_abertura)}</span>
+                {liquidacao.data_fechamento && <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-600" />Fechamento: {formatarDataHora(liquidacao.data_fechamento)}</span>}
               </>
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {liquidacao && (
-            <button onClick={() => setModalExtrato(true)} className="flex items-center gap-2 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors">
-              <FileText className="w-4 h-4" />Extrato
+            <button onClick={() => setModalExtrato(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors">
+              <FileText className="w-3.5 h-3.5" />Extrato
             </button>
           )}
-          <button onClick={() => setMostrarCalendario(true)} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-            <CalendarDays className="w-4 h-4" />Calendário
+          <button onClick={() => setMostrarCalendario(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+            <CalendarDays className="w-3.5 h-3.5" />Calendário
+          </button>
+          <button onClick={handleAbrirNotas} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">
+            <MessageSquare className="w-3.5 h-3.5" />Notas
+            {qtdNotasLiquidacao > 0 && (
+              <span className="bg-yellow-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                {qtdNotasLiquidacao > 99 ? '99+' : qtdNotasLiquidacao}
+              </span>
+            )}
           </button>
           {liquidacao?.status === 'FECHADO' && podeReabrir && (
-            <button onClick={() => setModalReabrir(true)} className="flex items-center gap-2 px-3 py-2 bg-amber-100 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-200 transition-colors">
-              <RotateCcw className="w-4 h-4" />Reabrir
+            <button onClick={() => setModalReabrir(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors">
+              <RotateCcw className="w-3.5 h-3.5" />Reabrir
             </button>
           )}
           {(liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO') && !visualizandoOutroDia && (
-            <button onClick={() => setModalFechar(true)} className={`flex items-center gap-2 px-4 py-2 ${liquidacao?.status === 'REABERTO' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg text-sm font-medium transition-colors`}>
-              <Square className="w-4 h-4" />Fechar Dia
+            <button onClick={() => setModalFechar(true)} className={`flex items-center gap-1.5 px-3 py-1.5 ${liquidacao?.status === 'REABERTO' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg text-xs font-medium transition-colors`}>
+              <Square className="w-3.5 h-3.5" />Fechar Dia
             </button>
           )}
         </div>
       </div>
 
+      {/* LAYOUT 2 COLUNAS: 35% / 65% */}
       {liquidacao && (
-        <>
-          {/* CARDS COMPACTOS: CAIXA + CARTEIRA + EMPRÉSTIMOS/DESPESAS/MICROSEGURO */}
-          <div className="grid grid-cols-1 lg:grid-cols-6 gap-3">
-            {/* Caixa e Carteira (2 colunas cada) */}
-            <div className="lg:col-span-2">
-              <CardSaldo titulo="Caixa" inicial={liquidacao.caixa_inicial} final={liquidacao.caixa_final} icone={Wallet} corBase="blue" />
-            </div>
-            <div className="lg:col-span-2">
-              <CardSaldo titulo="Carteira (A Receber)" inicial={liquidacao.carteira_inicial} final={liquidacao.carteira_final} icone={TrendingUp} corBase="purple" />
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[35%_1fr] gap-3 min-h-0">
+
+          {/* COLUNA ESQUERDA — 4 cards distribuídos */}
+          <div className="flex flex-col gap-3 min-h-0">
+
+            {/* Caixa */}
+            <CardSaldo titulo="Caixa" inicial={liquidacao.caixa_inicial} final={liquidacao.caixa_final} icone={Wallet} corBase="blue" />
+
+            {/* Carteira */}
+            <CardSaldo titulo="Carteira (A Receber)" inicial={liquidacao.carteira_inicial} final={liquidacao.carteira_final} icone={TrendingUp} corBase="purple" />
+
+            {/* Meta do dia */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3 flex-1 flex flex-col min-h-0">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
+                  <Target className="w-3.5 h-3.5 text-blue-600" />
+                </div>
+                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Meta do Dia</h3>
+                <span className="ml-auto text-lg font-bold text-gray-900 tabular-nums">{percentualMeta}%</span>
+              </div>
+              <ProgressBar percentual={percentualMeta} />
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 pt-2 border-t border-gray-100 text-xs flex-1 content-center">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Esperado</span>
+                  <span className="font-semibold tabular-nums">{formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Recebido</span>
+                  <span className="font-semibold text-green-600 tabular-nums">{formatarMoeda(liquidacao.valor_recebido_dia)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Parcelas</span>
+                  <span className="font-semibold">
+                    <span className="text-green-600">{liquidacao.pagamentos_pagos}</span>
+                    <span className="text-gray-400">/</span>
+                    <span className="text-red-600">{liquidacao.pagamentos_nao_pagos}</span>
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 flex items-center gap-1"><Banknote className="w-3 h-3" /></span>
+                  <span className="font-semibold text-emerald-600 tabular-nums">{formatarMoeda(liquidacao.valor_dinheiro)}</span>
+                </div>
+                <div className="flex justify-between col-span-2">
+                  <span className="text-gray-500 flex items-center gap-1"><CreditCard className="w-3 h-3" />Transf.</span>
+                  <span className="font-semibold text-sky-600 tabular-nums">{formatarMoeda(liquidacao.valor_transferencia)}</span>
+                </div>
+              </div>
             </div>
 
-            {/* Stack vertical de Empréstimos / Despesas / Microseguro */}
-            <div className="lg:col-span-2 grid grid-cols-3 lg:grid-cols-1 gap-2">
-              <button onClick={() => setModalEmprestimos(true)} className="bg-white rounded-lg border border-gray-200 p-2.5 transition-all hover:shadow-md hover:border-green-200 text-left group">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-green-50 rounded-md flex items-center justify-center flex-shrink-0">
-                    <DollarSign className="w-4 h-4 text-green-600" />
+            {/* Card Movimentos (Empréstimos + Despesas + Microseguro) */}
+            <div className="bg-white rounded-lg border border-gray-200 flex-1 flex flex-col min-h-0">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Movimentos do Dia</h3>
+              </div>
+              <div className="flex-1 divide-y divide-gray-100 overflow-hidden">
+                <button onClick={() => setModalEmprestimos(true)} className="w-full px-3 py-2 hover:bg-green-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-green-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <DollarSign className="w-3.5 h-3.5 text-green-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-gray-500 uppercase font-medium">Empréstimos</p>
-                    <p className="text-sm font-bold text-green-700 tabular-nums truncate">{formatarMoeda(liquidacao.total_emprestado_dia)}</p>
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Empréstimos</p>
                     <p className="text-[10px] text-gray-400">{liquidacao.qtd_emprestimos_dia} emp.{(liquidacao.total_juros_dia ?? 0) > 0 && ` · juros ${formatarMoeda(liquidacao.total_juros_dia)}`}</p>
                   </div>
-                </div>
-              </button>
-              <button onClick={() => setModalDespesas(true)} className="bg-white rounded-lg border border-gray-200 p-2.5 transition-all hover:shadow-md hover:border-red-200 text-left">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-red-50 rounded-md flex items-center justify-center flex-shrink-0">
-                    <Receipt className="w-4 h-4 text-red-600" />
+                  <span className="text-sm font-bold text-green-700 tabular-nums">{formatarMoeda(liquidacao.total_emprestado_dia)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+                <button onClick={() => setModalDespesas(true)} className="w-full px-3 py-2 hover:bg-red-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-red-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <Receipt className="w-3.5 h-3.5 text-red-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-gray-500 uppercase font-medium">Despesas</p>
-                    <p className="text-sm font-bold text-red-700 tabular-nums truncate">{formatarMoeda(liquidacao.total_despesas_dia)}</p>
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Despesas</p>
                     <p className="text-[10px] text-gray-400">{liquidacao.qtd_despesas_dia} lanç.</p>
                   </div>
-                </div>
-              </button>
-              <button onClick={() => setModalMicroseguros(true)} className="bg-white rounded-lg border border-gray-200 p-2.5 transition-all hover:shadow-md hover:border-teal-200 text-left">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-teal-50 rounded-md flex items-center justify-center flex-shrink-0">
-                    <Shield className="w-4 h-4 text-teal-600" />
+                  <span className="text-sm font-bold text-red-700 tabular-nums">{formatarMoeda(liquidacao.total_despesas_dia)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+                <button onClick={() => setModalMicroseguros(true)} className="w-full px-3 py-2 hover:bg-teal-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-teal-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-3.5 h-3.5 text-teal-600" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-[10px] text-gray-500 uppercase font-medium">Microseguro</p>
-                    <p className="text-sm font-bold text-teal-700 tabular-nums truncate">{formatarMoeda(liquidacao.total_microseguro_dia)}</p>
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Microseguro</p>
                     <p className="text-[10px] text-gray-400">{liquidacao.qtd_microseguros_dia} cont.</p>
                   </div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* CARD META DO DIA EXPANDIDO */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex items-center gap-2 mb-3">
-              <Target className="w-4 h-4 text-blue-600" />
-              <h3 className="text-sm font-semibold text-gray-900">Meta do Dia</h3>
-              <span className="ml-auto text-2xl font-bold text-gray-900 tabular-nums">{percentualMeta}%</span>
-            </div>
-            <ProgressBar percentual={percentualMeta} />
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3 pt-3 border-t border-gray-100">
-              <div>
-                <p className="text-xs text-gray-500">Esperado</p>
-                <p className="text-sm font-semibold text-gray-900 tabular-nums">{formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Recebido</p>
-                <p className="text-sm font-semibold text-green-600 tabular-nums">{formatarMoeda(liquidacao.valor_recebido_dia)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500">Parcelas</p>
-                <p className="text-sm font-semibold">
-                  <span className="text-green-600">{liquidacao.pagamentos_pagos}</span>
-                  <span className="text-gray-400 mx-1">/</span>
-                  <span className="text-red-600">{liquidacao.pagamentos_nao_pagos}</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-xs text-gray-500 flex items-center gap-1"><Banknote className="w-3 h-3" />Dinheiro <span className="text-gray-300">·</span> <CreditCard className="w-3 h-3" />Transf.</p>
-                <p className="text-sm font-semibold tabular-nums">
-                  <span className="text-emerald-600">{formatarMoeda(liquidacao.valor_dinheiro)}</span>
-                  <span className="text-gray-400 mx-1">/</span>
-                  <span className="text-sky-600">{formatarMoeda(liquidacao.valor_transferencia)}</span>
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* NOTAS COMPACTAS */}
-          {rota && vendedor && (
-            <NotasLiquidacaoCard
-              liquidacaoId={liquidacao.id}
-              rotaId={rota.id}
-              empresaId={rota.empresa_id}
-              vendedorId={vendedor.id}
-              autorId={userId || ''}
-              autorNome={profile?.nome || 'Administrador'}
-              dataReferencia={liquidacao.data_abertura.split('T')[0]}
-            />
-          )}
-        </>
-      )}
-
-      {/* LISTA DE CLIENTES COM FILTROS */}
-      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="px-4 py-3 border-b border-gray-200">
-          {/* Filtros */}
-          <div className="flex flex-wrap gap-1.5 mb-3">
-            <ChipFiltro label="Todos" qtd={contagens.todos} ativo={filtroLista === 'TODOS'} onClick={() => setFiltroLista('TODOS')} cor="blue" />
-            <ChipFiltro label="Pagos" qtd={contagens.pagos} ativo={filtroLista === 'PAGOS'} onClick={() => setFiltroLista('PAGOS')} cor="green" />
-            <ChipFiltro label="Não Pagos" qtd={contagens.naoPagos} ativo={filtroLista === 'NAO_PAGOS'} onClick={() => setFiltroLista('NAO_PAGOS')} cor="red" />
-            <ChipFiltro label="Novos" qtd={contagens.novos} ativo={filtroLista === 'NOVOS'} onClick={() => setFiltroLista('NOVOS')} cor="emerald" />
-            <ChipFiltro label="Renov." qtd={contagens.renovados} ativo={filtroLista === 'RENOVADOS'} onClick={() => setFiltroLista('RENOVADOS')} cor="blue2" />
-            <ChipFiltro label="Reneg." qtd={contagens.renegociados} ativo={filtroLista === 'RENEGOCIADOS'} onClick={() => setFiltroLista('RENEGOCIADOS')} cor="purple" />
-            <ChipFiltro label="Quitados" qtd={contagens.quitados} ativo={filtroLista === 'QUITADOS'} onClick={() => setFiltroLista('QUITADOS')} cor="teal" />
-          </div>
-          {/* Busca */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Buscar cliente..."
-              value={buscaCliente}
-              onChange={(e) => { setBuscaCliente(e.target.value); setClientesVisiveis(50); }}
-              className="w-full pl-9 pr-4 py-2 text-sm border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            />
-            {buscaCliente && (
-              <button onClick={() => setBuscaCliente('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-
-        {clientesFiltrados.length > 0 ? (
-          <>
-            <div className="divide-y divide-gray-100">
-              {clientesFiltrados.slice(0, clientesVisiveis).map(({ cliente, evento }) => {
-                const notasInfo = notasClientes.get(cliente.cliente_id);
-                const temNotasLiquidacao = (notasInfo?.liquidacao || 0) > 0;
-                return (
-                  <div
-                    key={cliente.cliente_id}
-                    className="px-4 py-3 hover:bg-blue-50/50 transition-colors cursor-pointer"
-                    onClick={() => handleAbrirModalCliente(cliente)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-medium flex-shrink-0 ${getCorAvatar(evento)}`}>
-                        {cliente.nome?.charAt(0) || '?'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-baseline justify-between gap-2">
-                          <span className="font-medium text-gray-900 truncate">{cliente.nome}</span>
-                          {temNotasLiquidacao && (
-                            <button onClick={(e) => { e.stopPropagation(); setModalNotasCliente({ aberto: true, clienteId: cliente.cliente_id, clienteNome: cliente.nome }); }} className="text-xs flex items-center gap-0.5 text-amber-600 hover:text-amber-700 flex-shrink-0">
-                              <MessageSquare className="w-3.5 h-3.5" />
-                              {notasInfo?.liquidacao}
-                            </button>
-                          )}
-                        </div>
-                        <div className="text-xs mt-0.5">
-                          <MascaraEvento evento={evento} cliente={cliente} />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {clientesFiltrados.length > clientesVisiveis && (
-              <div className="px-4 py-3 bg-gray-50 border-t">
-                <button onClick={() => setClientesVisiveis(prev => prev + 50)} className="w-full py-2 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors">
-                  Carregar mais ({clientesFiltrados.length - clientesVisiveis} restantes)
+                  <span className="text-sm font-bold text-teal-700 tabular-nums">{formatarMoeda(liquidacao.total_microseguro_dia)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
               </div>
-            )}
-          </>
-        ) : (
-          <div className="p-8 text-center text-gray-500 text-sm">
-            {buscaCliente ? `Nenhum cliente encontrado para "${buscaCliente}"` : 'Nenhum cliente nesta categoria'}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Modais */}
+          {/* COLUNA DIREITA — CLIENTES */}
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+            {/* Cabeçalho com filtros + busca */}
+            <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
+                <span className="text-xs text-gray-500">{clientesFiltrados.length} de {contagens.todos}</span>
+              </div>
+              <div className="flex flex-wrap gap-1 mb-2">
+                <ChipFiltro label="Todos" qtd={contagens.todos} ativo={filtroLista === 'TODOS'} onClick={() => setFiltroLista('TODOS')} cor="blue" />
+                <ChipFiltro label="Pagos" qtd={contagens.pagos} ativo={filtroLista === 'PAGOS'} onClick={() => setFiltroLista('PAGOS')} cor="green" />
+                <ChipFiltro label="Não Pagos" qtd={contagens.naoPagos} ativo={filtroLista === 'NAO_PAGOS'} onClick={() => setFiltroLista('NAO_PAGOS')} cor="red" />
+                <ChipFiltro label="Novos" qtd={contagens.novos} ativo={filtroLista === 'NOVOS'} onClick={() => setFiltroLista('NOVOS')} cor="emerald" />
+                <ChipFiltro label="Renov." qtd={contagens.renovados} ativo={filtroLista === 'RENOVADOS'} onClick={() => setFiltroLista('RENOVADOS')} cor="blue2" />
+                <ChipFiltro label="Reneg." qtd={contagens.renegociados} ativo={filtroLista === 'RENEGOCIADOS'} onClick={() => setFiltroLista('RENEGOCIADOS')} cor="purple" />
+                <ChipFiltro label="Quitados" qtd={contagens.quitados} ativo={filtroLista === 'QUITADOS'} onClick={() => setFiltroLista('QUITADOS')} cor="teal" />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  value={buscaCliente}
+                  onChange={(e) => setBuscaCliente(e.target.value)}
+                  className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {buscaCliente && (
+                  <button onClick={() => setBuscaCliente('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Lista scrollável */}
+            <div className="flex-1 overflow-y-auto">
+              {clientesFiltrados.length > 0 ? (
+                <div className="divide-y divide-gray-100">
+                  {clientesFiltrados.map(({ cliente, evento }) => {
+                    const notasInfo = notasClientes.get(cliente.cliente_id);
+                    const temNotasLiquidacao = (notasInfo?.liquidacao || 0) > 0;
+                    return (
+                      <div
+                        key={cliente.cliente_id}
+                        className="px-3 py-2 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                        onClick={() => handleAbrirModalCliente(cliente)}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${getCorAvatar(evento)}`}>
+                            {cliente.nome?.charAt(0) || '?'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className="text-sm font-medium text-gray-900 truncate">{cliente.nome}</span>
+                              {temNotasLiquidacao && (
+                                <button onClick={(e) => { e.stopPropagation(); setModalNotasCliente({ aberto: true, clienteId: cliente.cliente_id, clienteNome: cliente.nome }); }} className="text-[10px] flex items-center gap-0.5 text-amber-600 hover:text-amber-700 flex-shrink-0">
+                                  <MessageSquare className="w-3 h-3" />
+                                  {notasInfo?.liquidacao}
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[11px] mt-0.5">
+                              <MascaraEvento evento={evento} cliente={cliente} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-gray-500 text-sm">
+                  {buscaCliente ? `Nenhum cliente encontrado para "${buscaCliente}"` : 'Nenhum cliente nesta categoria'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAIS */}
       <ModalAbrirLiquidacao isOpen={modalAbrir} onClose={() => setModalAbrir(false)} onConfirmar={handleAbrirLiquidacao} loading={loadingAcao} saldoSugerido={saldoConta} />
       <ModalFecharLiquidacao isOpen={modalFechar} onClose={() => setModalFechar(false)} onConfirmar={handleFecharLiquidacao} loading={loadingAcao} liquidacao={liquidacao} />
       <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={liquidacao?.data_abertura?.split('T')[0] || ''} />
@@ -1411,7 +1219,7 @@ function ChipFiltro({
     <button
       onClick={onClick}
       disabled={desabilitado}
-      className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors flex items-center gap-1.5 ${
+      className={`px-2 py-0.5 rounded-md border text-[10px] font-medium transition-colors flex items-center gap-1 ${
         desabilitado
           ? 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
           : ativo
@@ -1420,7 +1228,7 @@ function ChipFiltro({
       }`}
     >
       <span>{label}</span>
-      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+      <span className={`px-1 rounded-full text-[9px] font-bold ${
         desabilitado ? 'bg-gray-100' : ativo ? 'bg-white/20' : 'bg-gray-100'
       }`}>
         {qtd}
@@ -1437,35 +1245,10 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
       </span>
     );
   }
-
-  if (evento.tipo === 'QUITADO') {
-    return (
-      <span className="text-emerald-700 font-medium">
-        ✅ Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}
-      </span>
-    );
-  }
-  if (evento.tipo === 'NOVO') {
-    return (
-      <span className="text-green-700 font-medium">
-        🆕 Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x
-      </span>
-    );
-  }
-  if (evento.tipo === 'RENOVACAO') {
-    return (
-      <span className="text-blue-700 font-medium">
-        🔄 Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x
-      </span>
-    );
-  }
-  if (evento.tipo === 'RENEGOCIACAO') {
-    return (
-      <span className="text-purple-700 font-medium">
-        ↩ Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x
-      </span>
-    );
-  }
+  if (evento.tipo === 'QUITADO') return <span className="text-emerald-700 font-medium">✅ Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
+  if (evento.tipo === 'NOVO') return <span className="text-green-700 font-medium">🆕 Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'RENOVACAO') return <span className="text-blue-700 font-medium">🔄 Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium">↩ Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'PAGOU') {
     const qtdParc = evento.parcelasPagas || 1;
     const txt = qtdParc > 1
@@ -1473,13 +1256,7 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
       : `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
     return <span className="text-green-700 font-medium">💚 {txt}</span>;
   }
-  if (evento.tipo === 'NAO_PAGOU') {
-    return (
-      <span className="text-red-600 font-medium">
-        ❌ Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}
-      </span>
-    );
-  }
+  if (evento.tipo === 'NAO_PAGOU') return <span className="text-red-600 font-medium">❌ Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}</span>;
   return null;
 }
 
