@@ -914,7 +914,6 @@ export default function LiquidacaoDiariaPage() {
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-lg font-bold text-gray-900">Liquidação Diária</h1>
-            {liquidacao && <BadgeStatus status={liquidacao.status} />}
           </div>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-0.5">
             <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{rota.nome}</span>
@@ -933,9 +932,30 @@ export default function LiquidacaoDiariaPage() {
               <FileText className="w-3.5 h-3.5" />Extrato
             </button>
           )}
-          <button onClick={() => setMostrarCalendario(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-            <CalendarDays className="w-3.5 h-3.5" />Calendário
-          </button>
+          {(() => {
+            // Botão calendário com data da liquidação + cor por status
+            const status = liquidacao?.status;
+            const isAberto = status === 'ABERTO' || status === 'REABERTO';
+            const isFechado = status === 'FECHADO' || status === 'APROVADO';
+            const dataLiq = (liquidacao as any)?.data_liquidacao || liquidacao?.data_abertura?.split('T')[0];
+            const dataFormatada = dataLiq
+              ? new Date(dataLiq + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+              : 'Calendário';
+
+            let classes = 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+            if (isAberto) classes = 'bg-green-100 text-green-700 hover:bg-green-200';
+            else if (isFechado) classes = 'bg-blue-100 text-blue-700 hover:bg-blue-200';
+
+            return (
+              <button
+                onClick={() => setMostrarCalendario(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${classes}`}
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                {dataFormatada}
+              </button>
+            );
+          })()}
           <button onClick={handleAbrirNotas} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">
             <MessageSquare className="w-3.5 h-3.5" />Notas
             {qtdNotasLiquidacao > 0 && (
