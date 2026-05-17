@@ -41,6 +41,7 @@ import { clientesService } from '@/services/clientes';
 import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
 import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
 import { ModalQuitarEmprestimo } from '@/components/liquidacao/ModalQuitarEmprestimo';
+import { usePermissaoModulo } from '@/hooks/usePermissaoModulo';
 import type { 
   Cliente, 
   EmprestimoHistorico, 
@@ -425,6 +426,9 @@ function FormularioEdicao({
     foto_url: cliente.foto_url || '',
   });
 
+  // Permissão para alterar status do cliente (módulo GESTAO_CLIENTES, ação 'eliminar')
+  const { podeAcessar: podeAlterarStatus } = usePermissaoModulo('GESTAO_CLIENTES', 'eliminar');
+
   const handleChange = (campo: keyof FormEdicaoCliente, valor: string | boolean) => {
     setForm(prev => ({ ...prev, [campo]: valor }));
   };
@@ -454,11 +458,18 @@ function FormularioEdicao({
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Status
+            {!podeAlterarStatus && (
+              <span className="ml-2 text-xs text-gray-400 font-normal">(sem permissão)</span>
+            )}
+          </label>
           <select
             value={form.status}
             onChange={(e) => handleChange('status', e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            disabled={!podeAlterarStatus}
+            title={!podeAlterarStatus ? 'Você não tem permissão para alterar o status do cliente' : undefined}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
           >
             <option value="ATIVO">Ativo</option>
             <option value="INATIVO">Inativo</option>
