@@ -829,7 +829,11 @@ export default function LiquidacaoDiariaPage() {
     setDataSelecionada(data);
     setLoadingCalendario(true);
     const dataStr = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
-    const dataLiquidacaoAtiva = liquidacaoAtiva?.data_abertura?.split('T')[0];
+    // Usar data_liquidacao (dia operacional), não data_abertura (timestamp de criação).
+    // Importante pra liquidações retroativas: data_abertura pode ser hoje, mas
+    // data_liquidacao é o dia ao qual a liquidação se refere.
+    const dataLiquidacaoAtiva = (liquidacaoAtiva as any)?.data_liquidacao
+      || liquidacaoAtiva?.data_abertura?.split('T')[0];
 
     try {
       if (dataLiquidacaoAtiva && dataStr === dataLiquidacaoAtiva) {
