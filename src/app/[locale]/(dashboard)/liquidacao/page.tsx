@@ -540,23 +540,63 @@ function CardAbrirRetroativo({
 // CARD DE DIA NÃO TRABALHÁVEL
 // =====================================================
 
-function CardDiaNaoTrabalhavel({ data }: { data: Date }) {
+type MotivoBloqueio =
+  | { tipo: 'DOMINGO' }
+  | { tipo: 'FERIADO'; descricao: string }
+  | { tipo: 'FUTURO' }
+  | { tipo: 'MUITO_ANTIGO' }
+  | { tipo: 'OUTRA_ABERTA'; dataLiquidacaoAtiva: string };
+
+function CardDiaNaoTrabalhavel({ data, motivo }: { data: Date; motivo: MotivoBloqueio }) {
   const dataFormatada = data.toLocaleDateString('pt-BR', {
     weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
   });
 
+  let titulo = 'Dia não trabalhável';
+  let mensagem = '';
+  let icone = <CalendarDays className="w-8 h-8 text-gray-400" />;
+  let corFundo = 'bg-gray-100';
+
+  switch (motivo.tipo) {
+    case 'DOMINGO':
+      titulo = 'Domingo';
+      mensagem = 'Esta rota não trabalha aos domingos. Não é possível abrir liquidação neste dia.';
+      break;
+    case 'FERIADO':
+      titulo = 'Feriado';
+      mensagem = `Este dia está marcado como feriado: "${motivo.descricao}". Não é possível abrir liquidação.`;
+      break;
+    case 'FUTURO':
+      titulo = 'Data futura';
+      mensagem = 'Não é possível abrir liquidação para uma data no futuro. Aguarde até o dia chegar.';
+      corFundo = 'bg-blue-100';
+      icone = <CalendarDays className="w-8 h-8 text-blue-400" />;
+      break;
+    case 'MUITO_ANTIGO':
+      titulo = 'Data muito antiga';
+      mensagem = 'Não é possível abrir liquidação para mais de 30 dias atrás.';
+      break;
+    case 'OUTRA_ABERTA': {
+      const dataAtivaFmt = new Date(motivo.dataLiquidacaoAtiva + 'T12:00:00').toLocaleDateString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
+      });
+      titulo = 'Liquidação já aberta';
+      mensagem = `Existe uma liquidação aberta para o dia ${dataAtivaFmt}. Para abrir um novo dia, é necessário fechar a liquidação atual primeiro.`;
+      corFundo = 'bg-amber-100';
+      icone = <AlertTriangle className="w-8 h-8 text-amber-500" />;
+      break;
+    }
+  }
+
   return (
     <div className="flex items-center justify-center min-h-[50vh]">
       <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
-        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
-          <CalendarDays className="w-8 h-8 text-gray-400" />
+        <div className={`w-16 h-16 ${corFundo} rounded-full flex items-center justify-center mx-auto mb-6`}>
+          {icone}
         </div>
-        <h2 className="text-lg font-bold text-gray-900 mb-1">Dia não trabalhável</h2>
+        <h2 className="text-lg font-bold text-gray-900 mb-1">{titulo}</h2>
         <p className="text-base font-medium text-gray-600 capitalize mb-3">{dataFormatada}</p>
-        <p className="text-sm text-gray-500">
-          Este dia é domingo (a rota não trabalha aos domingos) ou está marcado como feriado.
-          Não é possível abrir liquidação.
-        </p>
+        <p className="text-sm text-gray-500">{mensagem}</p>
       </div>
     </div>
   );
@@ -642,6 +682,8 @@ export default function LiquidacaoDiariaPage() {
   // Data alvo p/ abrir (pode ser hoje ou retroativo)
   const [dataAlvoAbertura, setDataAlvoAbertura] = useState<Date | null>(null);
   // Estado de "dia trabalhável" pro card retroativo
+  // null = ainda checando ou trabalhável; objeto = motivo de bloqueio
+  const [motivoBloqueio, setMotivoBloqueio] = useState<MotivoBloqueio | null>(null);
   const [diaTrabalhavel, setDiaTrabalhavel] = useState<boolean | null>(null);
 
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
@@ -879,45 +921,81 @@ export default function LiquidacaoDiariaPage() {
     })();
   }, [rota, liquidacao, visualizandoOutroDia]);
 
-  // Quando seleciona um dia passado sem liquidação, verifica se é trabalhável
+  // Quando seleciona um dia sem liquidação, verifica se é trabalhável e identifica motivo
   useEffect(() => {
     if (!rota || liquidacao || !visualizandoOutroDia) {
       setDiaTrabalhavel(null);
+      setMotivoBloqueio(null);
       return;
     }
-    // Calcular diff em dias entre hoje e dataSelecionada
+
+    // Se já existe uma liquidação ATIVA em outro dia, não permite abrir outra
+    if (liquidacaoAtiva) {
+      const dataLiqAtivaStr = (liquidacaoAtiva as any).data_liquidacao
+        || liquidacaoAtiva.data_abertura?.split('T')[0];
+      setDiaTrabalhavel(false);
+      setMotivoBloqueio({ tipo: 'OUTRA_ABERTA', dataLiquidacaoAtiva: dataLiqAtivaStr });
+      return;
+    }
+
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     const sel = new Date(dataSelecionada);
     sel.setHours(0, 0, 0, 0);
     const diffDays = Math.round((hoje.getTime() - sel.getTime()) / (1000 * 60 * 60 * 24));
 
-    // Bloquear datas futuras e mais de 30 dias atrás
-    if (diffDays < 0 || diffDays > 30) {
+    // Data futura
+    if (diffDays < 0) {
       setDiaTrabalhavel(false);
+      setMotivoBloqueio({ tipo: 'FUTURO' });
       return;
     }
 
+    // Data muito antiga (>30 dias atrás)
+    if (diffDays > 30) {
+      setDiaTrabalhavel(false);
+      setMotivoBloqueio({ tipo: 'MUITO_ANTIGO' });
+      return;
+    }
+
+    // Verifica domingo + feriado via banco
     (async () => {
       try {
         const dataStr = `${sel.getFullYear()}-${String(sel.getMonth() + 1).padStart(2, '0')}-${String(sel.getDate()).padStart(2, '0')}`;
         const supabase = (await import('@/lib/supabase/client')).createClient();
-        const { data, error } = await supabase.rpc('fn_dia_eh_trabalhavel', {
-          p_rota_id: rota.id,
-          p_data: dataStr,
-        });
-        if (error) {
-          console.error('Erro ao verificar dia trabalhável:', error);
+
+        // Check 1: domingo (DOW = 0) e rota não trabalha aos domingos
+        const ehDomingo = sel.getDay() === 0;
+        if (ehDomingo && !(rota as any).trabalha_domingo) {
           setDiaTrabalhavel(false);
+          setMotivoBloqueio({ tipo: 'DOMINGO' });
           return;
         }
-        setDiaTrabalhavel(data === true);
+
+        // Check 2: feriado da rota
+        const { data: feriadoData } = await supabase
+          .from('feriados_rota')
+          .select('descricao')
+          .eq('rota_id', rota.id)
+          .eq('data', dataStr)
+          .maybeSingle();
+
+        if (feriadoData) {
+          setDiaTrabalhavel(false);
+          setMotivoBloqueio({ tipo: 'FERIADO', descricao: feriadoData.descricao || 'Feriado' });
+          return;
+        }
+
+        // Trabalhável
+        setDiaTrabalhavel(true);
+        setMotivoBloqueio(null);
       } catch (err) {
-        console.error('Erro inesperado em fn_dia_eh_trabalhavel:', err);
+        console.error('Erro ao verificar dia trabalhável:', err);
         setDiaTrabalhavel(false);
+        setMotivoBloqueio({ tipo: 'MUITO_ANTIGO' });
       }
     })();
-  }, [rota, liquidacao, visualizandoOutroDia, dataSelecionada]);
+  }, [rota, liquidacao, liquidacaoAtiva, visualizandoOutroDia, dataSelecionada]);
 
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
     if (!rota || !userId) return;
@@ -1341,8 +1419,8 @@ export default function LiquidacaoDiariaPage() {
               loading={loadingAcao}
             />
           )}
-          {diaTrabalhavel === false && (
-            <CardDiaNaoTrabalhavel data={dataSelecionada} />
+          {diaTrabalhavel === false && motivoBloqueio && (
+            <CardDiaNaoTrabalhavel data={dataSelecionada} motivo={motivoBloqueio} />
           )}
         </>
       )}
