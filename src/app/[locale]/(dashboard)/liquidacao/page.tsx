@@ -937,16 +937,25 @@ export default function LiquidacaoDiariaPage() {
 
   const abrirLiquidacaoEfetivamente = async (caixaInicial: number) => {
     if (!rota || !userId) return;
-    setLoadingAcao(true);
-    // Guarda referências antes de limpar state
+
+    // Captura referências locais antes de qualquer mudança de state
     const dataAlvo = dataAlvoAbertura;
     const ehRetroativa = !!dataAlvo;
+
+    // Fecha os modais IMEDIATAMENTE — antes do await — pra UI responder
+    setModalAbrir(false);
+    setModalDiasPulados(false);
+    setCaixaInicialPendente(null);
+    setDataAlvoAbertura(null);
+
+    setLoadingAcao(true);
     try {
       // Define data_liquidacao se for retroativo
       let dataLiqStr: string | undefined;
       if (dataAlvo) {
         dataLiqStr = `${dataAlvo.getFullYear()}-${String(dataAlvo.getMonth() + 1).padStart(2, '0')}-${String(dataAlvo.getDate()).padStart(2, '0')}`;
       }
+
       const resultado = await liquidacaoService.abrirLiquidacao({
         vendedor_id: vendedor?.id || '',
         rota_id: rota.id,
@@ -955,25 +964,50 @@ export default function LiquidacaoDiariaPage() {
         ...(dataLiqStr ? { data_liquidacao: dataLiqStr } : {}),
       } as any);
 
-      if (resultado.sucesso && resultado.liquidacao_id) {
-        // Fecha todos os modais primeiro
-        setModalAbrir(false);
-        setModalDiasPulados(false);
-        setCaixaInicialPendente(null);
-        setDataAlvoAbertura(null);
-
-        if (ehRetroativa && dataAlvo) {
-          // Abertura retroativa: carregar liquidação do dia específico
-          // (a liquidação ativa pode ser outra, então não usamos carregarDados)
-          await handleSelecionarData(dataAlvo);
-        } else {
-          // Abertura de hoje: usa fluxo normal
-          setVisualizandoOutroDia(false);
-          await carregarDados();
-        }
-      } else {
-        alert(resultado.mensagem);
+      if (!resultado.sucesso || !resultado.liquidacao_id) {
+        alert(resultado.mensagem || 'Erro ao abrir liquidação');
+        return;
       }
+
+      // Carrega a liquidação recém-criada DIRETAMENTE pelo ID
+      const novaLiquidacao = await liquidacaoService.buscarLiquidacaoPorId(resultado.liquidacao_id);
+      if (!novaLiquidacao) {
+        // Fallback: usa carregarDados normal
+        await carregarDados();
+        return;
+      }
+
+      // Atualiza states de modo coordenado
+      const dataAberturaLiq = new Date(novaLiquidacao.data_abertura);
+      setLiquidacao(novaLiquidacao);
+
+      if (ehRetroativa && dataAlvo) {
+        // Retroativa: NÃO marca como liquidação ativa, mantém visualização do dia escolhido
+        setVisualizandoOutroDia(true);
+        setDataSelecionada(dataAlvo);
+      } else {
+        // Hoje: torna a nova liquidação a "ativa"
+        setLiquidacaoAtiva(novaLiquidacao);
+        setVisualizandoOutroDia(false);
+        setDataSelecionada(dataAberturaLiq);
+      }
+
+      // Carregar dados da liquidação (clientes, empréstimos, etc)
+      await carregarDadosLiquidacao(novaLiquidacao, rota.id);
+
+      // Atualizar saldo de conta da rota (caixa pode ter mudado)
+      try {
+        const contaData = await liquidacaoService.buscarSaldoContaRota(rota.id);
+        setSaldoConta(contaData?.saldo_atual || 0);
+      } catch (e) { /* silencioso */ }
+
+      // Recarregar liquidações do mês pro calendário refletir
+      try {
+        const ano = (dataAlvo || dataAberturaLiq).getFullYear();
+        const mes = (dataAlvo || dataAberturaLiq).getMonth() + 1;
+        await carregarDadosCalendario(rota.id, ano, mes);
+      } catch (e) { /* silencioso */ }
+
     } catch (error) {
       console.error('Erro ao abrir liquidação:', error);
       alert('Erro ao abrir liquidação');
