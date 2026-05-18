@@ -264,10 +264,10 @@ export const liquidacaoService = {
   // ==================================================
   // ABRIR LIQUIDAÇÃO DIÁRIA (via RPC)
   // ==================================================
-  async abrirLiquidacao(input: AbrirLiquidacaoInput): Promise<RespostaAbrirLiquidacao> {
+  async abrirLiquidacao(input: AbrirLiquidacaoInput & { data_liquidacao?: string }): Promise<RespostaAbrirLiquidacao> {
     const supabase = createClient();
-    
-    const { data, error } = await supabase.rpc('fn_abrir_liquidacao_diaria', {
+
+    const params: Record<string, any> = {
       p_vendedor_id: input.vendedor_id,
       p_rota_id: input.rota_id,
       p_caixa_inicial: input.caixa_inicial,
@@ -275,8 +275,15 @@ export const liquidacaoService = {
       p_latitude: input.latitude || null,
       p_longitude: input.longitude || null,
       p_precisao_gps: input.precisao_gps || null,
-    });
-    
+    };
+
+    // Abertura retroativa: passa a data desejada
+    if (input.data_liquidacao) {
+      params.p_data_liquidacao = input.data_liquidacao;
+    }
+
+    const { data, error } = await supabase.rpc('fn_abrir_liquidacao_diaria', params);
+
     if (error) {
       console.error('Erro ao abrir liquidação:', error);
       return {
@@ -284,9 +291,9 @@ export const liquidacaoService = {
         mensagem: error.message || 'Erro ao abrir liquidação',
       };
     }
-    
+
     const resultado = Array.isArray(data) ? data[0] : data;
-    
+
     return {
       sucesso: resultado?.sucesso ?? false,
       mensagem: resultado?.mensagem || 'Liquidação processada',
@@ -738,5 +745,21 @@ export const liquidacaoService = {
       parcelasVencidas: dados.filter(p => p.status_dia === 'EM_ATRASO').length,
       valorVencido: dados.reduce((acc, p) => acc + Number(p.valor_total_vencido || 0), 0),
     };
+  },
+
+  // ==================================================
+  // VERIFICAR SE UMA DATA É TRABALHÁVEL PARA UMA ROTA
+  // ==================================================
+  async verificarDiaTrabalhavel(rotaId: string, dataStr: string): Promise<boolean> {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc('fn_dia_eh_trabalhavel', {
+      p_rota_id: rotaId,
+      p_data: dataStr,
+    });
+    if (error) {
+      console.error('Erro ao verificar dia trabalhável:', error);
+      return false;
+    }
+    return data === true;
   },
 };

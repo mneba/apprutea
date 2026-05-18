@@ -345,6 +345,72 @@ function ModalReabrirLiquidacao({
 }
 
 // =====================================================
+// TELA SEM LIQUIDAÇÃO ABERTA
+// =====================================================
+
+function TelaIniciarDia({
+  vendedor, rota, saldoConta, onAbrir, loading, onAbrirCalendario, dataProxima,
+}: {
+  vendedor: VendedorLiquidacao | null;
+  rota: RotaLiquidacao;
+  saldoConta: number;
+  onAbrir: () => void;
+  loading: boolean;
+  onAbrirCalendario: () => void;
+  dataProxima?: Date | null;
+}) {
+  const dataFormatada = dataProxima
+    ? dataProxima.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    : null;
+  const dataCurta = dataProxima
+    ? dataProxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
+          <p className="text-gray-500 text-sm flex items-center gap-2 mt-1">
+            <MapPin className="w-4 h-4" />{rota.nome}
+            {vendedor && <><span className="text-gray-300">•</span>{vendedor.nome}</>}
+          </p>
+        </div>
+        <button onClick={onAbrirCalendario} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+          <CalendarDays className="w-4 h-4" />Calendário
+        </button>
+      </div>
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><Play className="w-8 h-8 text-white" /></div>
+          <h2 className="text-xl font-bold text-gray-900 mb-1">Iniciar o Dia</h2>
+          {dataFormatada && (
+            <p className="text-base font-semibold text-green-700 capitalize mb-2">{dataFormatada}</p>
+          )}
+          <p className="text-gray-500 text-sm mb-6">Nenhuma liquidação aberta. Inicie sua sessão de trabalho.</p>
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-sm font-bold text-blue-600">{vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}</span></div>
+              <div>
+                <p className="font-medium text-gray-900 text-sm">{vendedor?.nome || 'Vendedor não vinculado'}</p>
+                <p className="text-xs text-gray-500">{rota.nome}</p>
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Saldo disponível:</span>
+              <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
+            </div>
+          </div>
+          <button onClick={onAbrir} disabled={loading} className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5" />Abrir Liquidação{dataCurta && ` (${dataCurta})`}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
 // MODAL DE CONFIRMAÇÃO DE DIAS PULADOS
 // =====================================================
 
@@ -421,66 +487,76 @@ function ModalDiasPulados({
 }
 
 // =====================================================
-// TELA SEM LIQUIDAÇÃO ABERTA
+// CARD DE ABRIR LIQUIDAÇÃO RETROATIVA (dia passado)
 // =====================================================
 
-function TelaIniciarDia({
-  vendedor, rota, saldoConta, onAbrir, loading, onAbrirCalendario, dataProxima,
+function CardAbrirRetroativo({
+  data, saldoConta, onAbrir, loading,
 }: {
-  vendedor: VendedorLiquidacao | null;
-  rota: RotaLiquidacao;
+  data: Date;
   saldoConta: number;
   onAbrir: () => void;
   loading: boolean;
-  onAbrirCalendario: () => void;
-  dataProxima?: Date | null;
 }) {
-  const dataFormatada = dataProxima
-    ? dataProxima.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
-    : null;
-  const dataCurta = dataProxima
-    ? dataProxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-    : null;
+  const dataFormatada = data.toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  });
+  const dataCurta = data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
-          <p className="text-gray-500 text-sm flex items-center gap-2 mt-1">
-            <MapPin className="w-4 h-4" />{rota.nome}
-            {vendedor && <><span className="text-gray-300">•</span>{vendedor.nome}</>}
-          </p>
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="bg-white rounded-xl border border-amber-200 p-8 max-w-md w-full text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-amber-500 to-amber-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Play className="w-8 h-8 text-white" />
         </div>
-        <button onClick={onAbrirCalendario} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
-          <CalendarDays className="w-4 h-4" />Calendário
+        <h2 className="text-xl font-bold text-gray-900 mb-1">Abrir Liquidação Retroativa</h2>
+        <p className="text-base font-semibold text-amber-700 capitalize mb-2">{dataFormatada}</p>
+        <p className="text-gray-500 text-sm mb-4">
+          Este dia ainda não foi trabalhado e é um dia útil. Você pode abri-lo agora.
+        </p>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-xs text-amber-800">
+          <AlertTriangle className="w-4 h-4 inline mr-1" />
+          Abertura retroativa. Use com cuidado.
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-gray-500">Saldo disponível:</span>
+            <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
+          </div>
+        </div>
+        <button
+          onClick={onAbrir}
+          disabled={loading}
+          className="w-full px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg font-semibold hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5" />Abrir Liquidação ({dataCurta})</>}
         </button>
       </div>
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
-          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><Play className="w-8 h-8 text-white" /></div>
-          <h2 className="text-xl font-bold text-gray-900 mb-1">Iniciar o Dia</h2>
-          {dataFormatada && (
-            <p className="text-base font-semibold text-green-700 capitalize mb-2">{dataFormatada}</p>
-          )}
-          <p className="text-gray-500 text-sm mb-6">Nenhuma liquidação aberta. Inicie sua sessão de trabalho.</p>
-          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-sm font-bold text-blue-600">{vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}</span></div>
-              <div>
-                <p className="font-medium text-gray-900 text-sm">{vendedor?.nome || 'Vendedor não vinculado'}</p>
-                <p className="text-xs text-gray-500">{rota.nome}</p>
-              </div>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-gray-500">Saldo disponível:</span>
-              <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
-            </div>
-          </div>
-          <button onClick={onAbrir} disabled={loading} className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
-            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5" />Abrir Liquidação{dataCurta && ` (${dataCurta})`}</>}
-          </button>
+    </div>
+  );
+}
+
+// =====================================================
+// CARD DE DIA NÃO TRABALHÁVEL
+// =====================================================
+
+function CardDiaNaoTrabalhavel({ data }: { data: Date }) {
+  const dataFormatada = data.toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  });
+
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
+        <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-6">
+          <CalendarDays className="w-8 h-8 text-gray-400" />
         </div>
+        <h2 className="text-lg font-bold text-gray-900 mb-1">Dia não trabalhável</h2>
+        <p className="text-base font-medium text-gray-600 capitalize mb-3">{dataFormatada}</p>
+        <p className="text-sm text-gray-500">
+          Este dia é domingo (a rota não trabalha aos domingos) ou está marcado como feriado.
+          Não é possível abrir liquidação.
+        </p>
       </div>
     </div>
   );
@@ -563,6 +639,10 @@ export default function LiquidacaoDiariaPage() {
   }>({ dataProxima: null, diasPulados: [] });
   const [modalDiasPulados, setModalDiasPulados] = useState(false);
   const [caixaInicialPendente, setCaixaInicialPendente] = useState<number | null>(null);
+  // Data alvo p/ abrir (pode ser hoje ou retroativo)
+  const [dataAlvoAbertura, setDataAlvoAbertura] = useState<Date | null>(null);
+  // Estado de "dia trabalhável" pro card retroativo
+  const [diaTrabalhavel, setDiaTrabalhavel] = useState<boolean | null>(null);
 
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
@@ -768,7 +848,7 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [rota, carregarDadosCalendario]);
 
-  // Busca info da próxima liquidação a abrir (quando não há liquidação aberta)
+  // Busca info de próxima liquidação a abrir (quando não há liquidação ativa)
   useEffect(() => {
     if (!rota || liquidacao || visualizandoOutroDia) {
       setProximaInfo({ dataProxima: null, diasPulados: [] });
@@ -799,10 +879,54 @@ export default function LiquidacaoDiariaPage() {
     })();
   }, [rota, liquidacao, visualizandoOutroDia]);
 
+  // Quando seleciona um dia passado sem liquidação, verifica se é trabalhável
+  useEffect(() => {
+    if (!rota || liquidacao || !visualizandoOutroDia) {
+      setDiaTrabalhavel(null);
+      return;
+    }
+    // Calcular diff em dias entre hoje e dataSelecionada
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const sel = new Date(dataSelecionada);
+    sel.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((hoje.getTime() - sel.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Bloquear datas futuras e mais de 30 dias atrás
+    if (diffDays < 0 || diffDays > 30) {
+      setDiaTrabalhavel(false);
+      return;
+    }
+
+    (async () => {
+      try {
+        const dataStr = `${sel.getFullYear()}-${String(sel.getMonth() + 1).padStart(2, '0')}-${String(sel.getDate()).padStart(2, '0')}`;
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data, error } = await supabase.rpc('fn_dia_eh_trabalhavel', {
+          p_rota_id: rota.id,
+          p_data: dataStr,
+        });
+        if (error) {
+          console.error('Erro ao verificar dia trabalhável:', error);
+          setDiaTrabalhavel(false);
+          return;
+        }
+        setDiaTrabalhavel(data === true);
+      } catch (err) {
+        console.error('Erro inesperado em fn_dia_eh_trabalhavel:', err);
+        setDiaTrabalhavel(false);
+      }
+    })();
+  }, [rota, liquidacao, visualizandoOutroDia, dataSelecionada]);
+
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
     if (!rota || !userId) return;
-    // Se há dias pulados, pede confirmação antes
-    if (proximaInfo.diasPulados.length > 0) {
+    // Se for abertura HOJE e tem dias pulados, pede confirmação antes
+    const ehHoje = !dataAlvoAbertura || (() => {
+      const hoje = new Date();
+      return dataAlvoAbertura.toDateString() === hoje.toDateString();
+    })();
+    if (ehHoje && proximaInfo.diasPulados.length > 0) {
       setCaixaInicialPendente(caixaInicial);
       setModalAbrir(false);
       setModalDiasPulados(true);
@@ -815,11 +939,37 @@ export default function LiquidacaoDiariaPage() {
     if (!rota || !userId) return;
     setLoadingAcao(true);
     try {
-      const resultado = await liquidacaoService.abrirLiquidacao({ vendedor_id: vendedor?.id || '', rota_id: rota.id, caixa_inicial: caixaInicial, user_id: userId });
-      if (resultado.sucesso && resultado.liquidacao_id) { await carregarDados(); setModalAbrir(false); setModalDiasPulados(false); setCaixaInicialPendente(null); }
-      else alert(resultado.mensagem);
+      // Define data_liquidacao se for retroativo
+      let dataLiqStr: string | undefined;
+      if (dataAlvoAbertura) {
+        const d = dataAlvoAbertura;
+        dataLiqStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      }
+      const resultado = await liquidacaoService.abrirLiquidacao({
+        vendedor_id: vendedor?.id || '',
+        rota_id: rota.id,
+        caixa_inicial: caixaInicial,
+        user_id: userId,
+        ...(dataLiqStr ? { data_liquidacao: dataLiqStr } : {}),
+      } as any);
+      if (resultado.sucesso && resultado.liquidacao_id) {
+        await carregarDados();
+        setModalAbrir(false);
+        setModalDiasPulados(false);
+        setCaixaInicialPendente(null);
+        setDataAlvoAbertura(null);
+        setVisualizandoOutroDia(false);
+      } else {
+        alert(resultado.mensagem);
+      }
     } catch (error) { console.error('Erro ao abrir liquidação:', error); alert('Erro ao abrir liquidação'); }
     finally { setLoadingAcao(false); }
+  };
+
+  // Inicia fluxo de abertura retroativa (de um dia passado selecionado no calendário)
+  const handleAbrirRetroativo = () => {
+    setDataAlvoAbertura(new Date(dataSelecionada));
+    setModalAbrir(true);
   };
 
   const handleFecharLiquidacao = async (observacoes: string) => {
@@ -1002,7 +1152,15 @@ export default function LiquidacaoDiariaPage() {
   if (!liquidacao && !visualizandoOutroDia) {
     return (
       <>
-        <TelaIniciarDia vendedor={vendedor} rota={rota} saldoConta={saldoConta} onAbrir={() => setModalAbrir(true)} loading={loadingAcao} onAbrirCalendario={() => setMostrarCalendario(true)} dataProxima={proximaInfo.dataProxima} />
+        <TelaIniciarDia
+          vendedor={vendedor}
+          rota={rota}
+          saldoConta={saldoConta}
+          onAbrir={() => { setDataAlvoAbertura(null); setModalAbrir(true); }}
+          loading={loadingAcao}
+          onAbrirCalendario={() => setMostrarCalendario(true)}
+          dataProxima={proximaInfo.dataProxima}
+        />
         <ModalAbrirLiquidacao isOpen={modalAbrir} onClose={() => setModalAbrir(false)} onConfirmar={handleAbrirLiquidacao} loading={loadingAcao} saldoSugerido={saldoConta} />
         <ModalDiasPulados
           isOpen={modalDiasPulados}
@@ -1121,6 +1279,23 @@ export default function LiquidacaoDiariaPage() {
           )}
         </div>
       </div>
+
+      {/* Quando visualizando um dia sem liquidação: card central */}
+      {visualizandoOutroDia && !liquidacao && (
+        <>
+          {diaTrabalhavel === true && (
+            <CardAbrirRetroativo
+              data={dataSelecionada}
+              saldoConta={saldoConta}
+              onAbrir={handleAbrirRetroativo}
+              loading={loadingAcao}
+            />
+          )}
+          {diaTrabalhavel === false && (
+            <CardDiaNaoTrabalhavel data={dataSelecionada} />
+          )}
+        </>
+      )}
 
       {/* LAYOUT 2 COLUNAS: 35% / 65% */}
       {liquidacao && (
@@ -1298,6 +1473,13 @@ export default function LiquidacaoDiariaPage() {
 
       {/* MODAIS */}
       <ModalAbrirLiquidacao isOpen={modalAbrir} onClose={() => setModalAbrir(false)} onConfirmar={handleAbrirLiquidacao} loading={loadingAcao} saldoSugerido={saldoConta} />
+      <ModalDiasPulados
+        isOpen={modalDiasPulados}
+        onClose={() => { setModalDiasPulados(false); setCaixaInicialPendente(null); }}
+        onConfirmar={() => { if (caixaInicialPendente !== null) abrirLiquidacaoEfetivamente(caixaInicialPendente); }}
+        diasPulados={proximaInfo.diasPulados}
+        dataProxima={proximaInfo.dataProxima}
+      />
       <ModalFecharLiquidacao isOpen={modalFechar} onClose={() => setModalFechar(false)} onConfirmar={handleFecharLiquidacao} loading={loadingAcao} liquidacao={liquidacao} />
       <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={liquidacao?.data_abertura?.split('T')[0] || ''} />
       <ModalExtratoLiquidacao isOpen={modalExtrato} onClose={() => setModalExtrato(false)} liquidacao={liquidacao} rotaNome={rota?.nome || ''} vendedorNome={vendedor?.nome} empresaNome={empresaNome} />
