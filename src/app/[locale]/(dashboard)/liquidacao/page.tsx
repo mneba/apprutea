@@ -981,7 +981,7 @@ export default function LiquidacaoDiariaPage() {
 
       // Carrega a liquidação recém-criada DIRETAMENTE pelo ID
       const novaLiquidacao = await liquidacaoService.buscarLiquidacaoPorId(resultado.liquidacao_id);
-      console.log('[ABRIR_LIQ] Nova liquidação carregada:', novaLiquidacao?.id, novaLiquidacao?.data_liquidacao || novaLiquidacao?.data_abertura);
+      console.log('[ABRIR_LIQ] Nova liquidação carregada:', novaLiquidacao?.id, (novaLiquidacao as any)?.data_liquidacao || novaLiquidacao?.data_abertura);
 
       if (!novaLiquidacao) {
         // Fallback: usa carregarDados normal
