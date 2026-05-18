@@ -686,21 +686,23 @@ export const liquidacaoService = {
     data: string
   ): Promise<LiquidacaoDiaria | null> {
     const supabase = createClient();
-    
+
+    // Filtra por data_liquidacao (campo que representa o DIA OPERACIONAL da liquidação)
+    // e NÃO por data_abertura (timestamp de criação). Importante para liquidações retroativas:
+    // uma liquidação criada hoje pode se referir a um dia passado.
     const { data: liquidacoes, error } = await supabase
       .from('liquidacoes_diarias')
       .select('*')
       .eq('rota_id', rotaId)
-      .gte('data_abertura', data)
-      .lt('data_abertura', data + 'T23:59:59')
+      .eq('data_liquidacao', data)
       .order('data_abertura', { ascending: false })
       .limit(1);
-    
+
     if (error) {
       console.error('Erro ao buscar liquidação por data:', error);
       return null;
     }
-    
+
     return liquidacoes?.[0] || null;
   },
 
