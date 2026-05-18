@@ -1242,8 +1242,8 @@ export default function LiquidacaoDiariaPage() {
         />
       )}
 
-      {/* Banner visualizando outro dia */}
-      {visualizandoOutroDia && (
+      {/* Banner visualizando outro dia — só quando dia já foi fechado ou não tem liquidação */}
+      {visualizandoOutroDia && (!liquidacao || liquidacao.status === 'FECHADO' || liquidacao.status === 'APROVADO') && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <CalendarDays className="w-4 h-4 text-amber-600" />
