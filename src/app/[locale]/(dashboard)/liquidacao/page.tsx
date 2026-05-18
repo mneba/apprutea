@@ -921,12 +921,14 @@ export default function LiquidacaoDiariaPage() {
 
   const handleAbrirLiquidacao = async (caixaInicial: number) => {
     if (!rota || !userId) return;
+    console.log('[HANDLE_ABRIR] Click. caixaInicial=', caixaInicial, 'dataAlvoAbertura=', dataAlvoAbertura, 'diasPulados=', proximaInfo.diasPulados);
     // Se for abertura HOJE e tem dias pulados, pede confirmação antes
     const ehHoje = !dataAlvoAbertura || (() => {
       const hoje = new Date();
       return dataAlvoAbertura.toDateString() === hoje.toDateString();
     })();
     if (ehHoje && proximaInfo.diasPulados.length > 0) {
+      console.log('[HANDLE_ABRIR] Hoje com dias pulados, abrindo modal confirmacao');
       setCaixaInicialPendente(caixaInicial);
       setModalAbrir(false);
       setModalDiasPulados(true);
@@ -942,11 +944,15 @@ export default function LiquidacaoDiariaPage() {
     const dataAlvo = dataAlvoAbertura;
     const ehRetroativa = !!dataAlvo;
 
+    console.log('[ABRIR_LIQ] Iniciando. dataAlvo:', dataAlvo, 'ehRetroativa:', ehRetroativa);
+
     // Fecha os modais IMEDIATAMENTE — antes do await — pra UI responder
     setModalAbrir(false);
     setModalDiasPulados(false);
     setCaixaInicialPendente(null);
     setDataAlvoAbertura(null);
+
+    console.log('[ABRIR_LIQ] Modais fechados (setState chamado)');
 
     setLoadingAcao(true);
     try {
@@ -956,6 +962,8 @@ export default function LiquidacaoDiariaPage() {
         dataLiqStr = `${dataAlvo.getFullYear()}-${String(dataAlvo.getMonth() + 1).padStart(2, '0')}-${String(dataAlvo.getDate()).padStart(2, '0')}`;
       }
 
+      console.log('[ABRIR_LIQ] Chamando RPC fn_abrir_liquidacao_diaria com data_liquidacao:', dataLiqStr);
+
       const resultado = await liquidacaoService.abrirLiquidacao({
         vendedor_id: vendedor?.id || '',
         rota_id: rota.id,
@@ -964,6 +972,8 @@ export default function LiquidacaoDiariaPage() {
         ...(dataLiqStr ? { data_liquidacao: dataLiqStr } : {}),
       } as any);
 
+      console.log('[ABRIR_LIQ] Resultado RPC:', resultado);
+
       if (!resultado.sucesso || !resultado.liquidacao_id) {
         alert(resultado.mensagem || 'Erro ao abrir liquidação');
         return;
@@ -971,8 +981,11 @@ export default function LiquidacaoDiariaPage() {
 
       // Carrega a liquidação recém-criada DIRETAMENTE pelo ID
       const novaLiquidacao = await liquidacaoService.buscarLiquidacaoPorId(resultado.liquidacao_id);
+      console.log('[ABRIR_LIQ] Nova liquidação carregada:', novaLiquidacao?.id, novaLiquidacao?.data_liquidacao || novaLiquidacao?.data_abertura);
+
       if (!novaLiquidacao) {
         // Fallback: usa carregarDados normal
+        console.warn('[ABRIR_LIQ] buscarLiquidacaoPorId retornou null. Usando fallback carregarDados.');
         await carregarDados();
         return;
       }
@@ -985,11 +998,13 @@ export default function LiquidacaoDiariaPage() {
         // Retroativa: NÃO marca como liquidação ativa, mantém visualização do dia escolhido
         setVisualizandoOutroDia(true);
         setDataSelecionada(dataAlvo);
+        console.log('[ABRIR_LIQ] Retroativa: visualizandoOutroDia=true, dataSelecionada=', dataAlvo);
       } else {
         // Hoje: torna a nova liquidação a "ativa"
         setLiquidacaoAtiva(novaLiquidacao);
         setVisualizandoOutroDia(false);
         setDataSelecionada(dataAberturaLiq);
+        console.log('[ABRIR_LIQ] Hoje: liquidacaoAtiva atualizada');
       }
 
       // Carregar dados da liquidação (clientes, empréstimos, etc)
@@ -1008,8 +1023,10 @@ export default function LiquidacaoDiariaPage() {
         await carregarDadosCalendario(rota.id, ano, mes);
       } catch (e) { /* silencioso */ }
 
+      console.log('[ABRIR_LIQ] Concluído com sucesso');
+
     } catch (error) {
-      console.error('Erro ao abrir liquidação:', error);
+      console.error('[ABRIR_LIQ] Erro:', error);
       alert('Erro ao abrir liquidação');
     } finally {
       setLoadingAcao(false);
