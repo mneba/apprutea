@@ -938,12 +938,14 @@ export default function LiquidacaoDiariaPage() {
   const abrirLiquidacaoEfetivamente = async (caixaInicial: number) => {
     if (!rota || !userId) return;
     setLoadingAcao(true);
+    // Guarda referências antes de limpar state
+    const dataAlvo = dataAlvoAbertura;
+    const ehRetroativa = !!dataAlvo;
     try {
       // Define data_liquidacao se for retroativo
       let dataLiqStr: string | undefined;
-      if (dataAlvoAbertura) {
-        const d = dataAlvoAbertura;
-        dataLiqStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (dataAlvo) {
+        dataLiqStr = `${dataAlvo.getFullYear()}-${String(dataAlvo.getMonth() + 1).padStart(2, '0')}-${String(dataAlvo.getDate()).padStart(2, '0')}`;
       }
       const resultado = await liquidacaoService.abrirLiquidacao({
         vendedor_id: vendedor?.id || '',
@@ -952,18 +954,32 @@ export default function LiquidacaoDiariaPage() {
         user_id: userId,
         ...(dataLiqStr ? { data_liquidacao: dataLiqStr } : {}),
       } as any);
+
       if (resultado.sucesso && resultado.liquidacao_id) {
-        await carregarDados();
+        // Fecha todos os modais primeiro
         setModalAbrir(false);
         setModalDiasPulados(false);
         setCaixaInicialPendente(null);
         setDataAlvoAbertura(null);
-        setVisualizandoOutroDia(false);
+
+        if (ehRetroativa && dataAlvo) {
+          // Abertura retroativa: carregar liquidação do dia específico
+          // (a liquidação ativa pode ser outra, então não usamos carregarDados)
+          await handleSelecionarData(dataAlvo);
+        } else {
+          // Abertura de hoje: usa fluxo normal
+          setVisualizandoOutroDia(false);
+          await carregarDados();
+        }
       } else {
         alert(resultado.mensagem);
       }
-    } catch (error) { console.error('Erro ao abrir liquidação:', error); alert('Erro ao abrir liquidação'); }
-    finally { setLoadingAcao(false); }
+    } catch (error) {
+      console.error('Erro ao abrir liquidação:', error);
+      alert('Erro ao abrir liquidação');
+    } finally {
+      setLoadingAcao(false);
+    }
   };
 
   // Inicia fluxo de abertura retroativa (de um dia passado selecionado no calendário)
