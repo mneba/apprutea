@@ -294,9 +294,10 @@ export const liquidacaoService = {
 
     const resultado = Array.isArray(data) ? data[0] : data;
 
+    // O SQL retorna o campo como `success` (inglês), mas a interface TS usa `sucesso` (português)
     return {
-      sucesso: resultado?.sucesso ?? false,
-      mensagem: resultado?.mensagem || 'Liquidação processada',
+      sucesso: resultado?.success ?? resultado?.sucesso ?? false,
+      mensagem: resultado?.message ?? resultado?.mensagem ?? 'Liquidação processada',
       liquidacao_id: resultado?.liquidacao_id,
       data_abertura: resultado?.data_abertura,
     };
