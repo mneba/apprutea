@@ -492,6 +492,10 @@ export const organizacaoService = {
         vendedor_id,
         quantidade_clientes,
         trabalha_domingo,
+        veiculo_tipo,
+        veiculo_cor,
+        veiculo_placa,
+        veiculo_modelo,
         vendedores (
           id,
           nome
@@ -529,6 +533,10 @@ export const organizacaoService = {
           total_clientes: rota.quantidade_clientes || 0,
           total_emprestimos: totalEmprestimos || 0,
           trabalha_domingo: rota.trabalha_domingo ?? false,
+          veiculo_tipo: rota.veiculo_tipo ?? null,
+          veiculo_cor: rota.veiculo_cor ?? null,
+          veiculo_placa: rota.veiculo_placa ?? null,
+          veiculo_modelo: rota.veiculo_modelo ?? null,
         };
       })
     );
@@ -574,6 +582,10 @@ export const organizacaoService = {
     descricao?: string;
     vendedor_id?: string;
     trabalha_domingo?: boolean;
+    veiculo_tipo?: 'CARRO' | 'MOTO' | null;
+    veiculo_cor?: string | null;
+    veiculo_placa?: string | null;
+    veiculo_modelo?: string | null;
   }): Promise<RotaResumo> {
     const { data, error } = await supabase
       .from('rotas')
@@ -582,6 +594,10 @@ export const organizacaoService = {
         descricao: dados.descricao,
         vendedor_id: dados.vendedor_id,
         trabalha_domingo: dados.trabalha_domingo ?? false,
+        veiculo_tipo: dados.veiculo_tipo ?? null,
+        veiculo_cor: dados.veiculo_cor ?? null,
+        veiculo_placa: dados.veiculo_placa ?? null,
+        veiculo_modelo: dados.veiculo_modelo ?? null,
         empresa_id: empresaId,
         status: 'ATIVA',
       })
@@ -603,6 +619,10 @@ export const organizacaoService = {
       total_clientes: 0,
       total_emprestimos: 0,
       trabalha_domingo: data.trabalha_domingo ?? false,
+      veiculo_tipo: data.veiculo_tipo ?? null,
+      veiculo_cor: data.veiculo_cor ?? null,
+      veiculo_placa: data.veiculo_placa ?? null,
+      veiculo_modelo: data.veiculo_modelo ?? null,
     };
   },
 
@@ -612,6 +632,10 @@ export const organizacaoService = {
     vendedor_id?: string | null;
     status?: string;
     trabalha_domingo?: boolean;
+    veiculo_tipo?: 'CARRO' | 'MOTO' | null;
+    veiculo_cor?: string | null;
+    veiculo_placa?: string | null;
+    veiculo_modelo?: string | null;
   }): Promise<void> {
     const { error } = await supabase
       .from('rotas')
