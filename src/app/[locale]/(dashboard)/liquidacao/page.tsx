@@ -1429,12 +1429,12 @@ export default function LiquidacaoDiariaPage() {
         </>
       )}
 
-      {/* LAYOUT 2 COLUNAS: 35% / 65% */}
+      {/* LAYOUT 2 COLUNAS: Clientes à esquerda (65%) / Cards à direita (35%) */}
       {liquidacao && (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[35%_1fr] gap-3 min-h-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_35%] gap-3 min-h-0">
 
-          {/* COLUNA ESQUERDA — 4 cards distribuídos */}
-          <div className="flex flex-col gap-3 min-h-0">
+          {/* COLUNA ESQUERDA (visualmente) — 4 cards, mas movida pra direita via 'order' */}
+          <div className="flex flex-col gap-3 min-h-0 lg:order-2">
 
             {/* Caixa */}
             <CardSaldo titulo="Caixa" inicial={liquidacao.caixa_inicial} final={liquidacao.caixa_final} icone={Wallet} corBase="blue" />
@@ -1523,8 +1523,8 @@ export default function LiquidacaoDiariaPage() {
             </div>
           </div>
 
-          {/* COLUNA DIREITA — CLIENTES */}
-          <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+          {/* COLUNA DIREITA (visualmente esquerda agora) — CLIENTES */}
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden lg:order-1">
             {/* Cabeçalho com filtros + busca */}
             <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center justify-between mb-2">
