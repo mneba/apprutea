@@ -691,8 +691,11 @@ export default function LiquidacaoDiariaPage() {
 
   const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
     try {
-      const dataVencimento = liq.data_abertura.split('T')[0];
-      const clientes = await liquidacaoService.buscarClientesDoDia(rotaId, dataVencimento);
+      // Se a liquidação tem ID, usa o snapshot de clientes planejados (clientes_planejados_ids).
+      // Fallback automático pra busca dinâmica se o array estiver vazio (liquidações antigas).
+      const clientes = liq.id
+        ? await liquidacaoService.buscarClientesDaLiquidacao(liq.id)
+        : await liquidacaoService.buscarClientesDoDia(rotaId, liq.data_abertura.split('T')[0]);
       setClientesDia(clientes);
       const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
       setEstatisticas(stats);

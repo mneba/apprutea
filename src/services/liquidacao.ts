@@ -441,6 +441,66 @@ export const liquidacaoService = {
   },
 
   // ==================================================
+  // BUSCAR CLIENTES PLANEJADOS DA LIQUIDAÇÃO (snapshot)
+  // ==================================================
+  // Usa a coluna clientes_planejados_ids (UUID[]) populada na abertura.
+  // Garante que a lista mostrada é o plano original do dia, imutável.
+  async buscarClientesDaLiquidacao(
+    liquidacaoId: string,
+    filtros?: FiltrosClientesDia
+  ): Promise<ClienteDoDia[]> {
+    const supabase = createClient();
+
+    // 1) Buscar liquidação pra pegar o array de IDs + data + rota
+    const { data: liq, error: errLiq } = await supabase
+      .from('liquidacoes_diarias')
+      .select('id, rota_id, data_liquidacao, clientes_planejados_ids')
+      .eq('id', liquidacaoId)
+      .maybeSingle();
+
+    if (errLiq || !liq) {
+      console.error('Erro ao buscar liquidação:', errLiq);
+      return [];
+    }
+
+    const idsPlanejados: string[] = (liq as any).clientes_planejados_ids || [];
+
+    // Fallback: se a liquidação é antiga e não tem o array preenchido,
+    // cai no método legado que calcula dinamicamente.
+    if (!idsPlanejados.length) {
+      const dataStr = (liq as any).data_liquidacao || '';
+      if (!dataStr) return [];
+      return this.buscarClientesDoDia((liq as any).rota_id, dataStr, filtros);
+    }
+
+    // 2) Buscar dados da view filtrando pelos IDs planejados + data
+    let query = supabase
+      .from('vw_clientes_rota_dia')
+      .select('*')
+      .eq('rota_id', (liq as any).rota_id)
+      .eq('data_vencimento', (liq as any).data_liquidacao)
+      .in('cliente_id', idsPlanejados)
+      .order('ordem_visita_dia', { ascending: true, nullsFirst: false });
+
+    if (filtros?.status) {
+      query = query.eq('status_dia', filtros.status);
+    }
+
+    if (filtros?.busca) {
+      query = query.ilike('nome', `%${filtros.busca}%`);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Erro ao buscar clientes planejados da liquidação:', error);
+      return [];
+    }
+
+    return data || [];
+  },
+
+  // ==================================================
   // CALCULAR ESTATÍSTICAS DOS CLIENTES DO DIA
   // ==================================================
   calcularEstatisticasClientesDia(clientes: ClienteDoDia[]): EstatisticasClientesDia {
