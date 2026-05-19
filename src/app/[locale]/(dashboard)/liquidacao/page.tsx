@@ -686,6 +686,9 @@ export default function LiquidacaoDiariaPage() {
   const [motivoBloqueio, setMotivoBloqueio] = useState<MotivoBloqueio | null>(null);
   const [diaTrabalhavel, setDiaTrabalhavel] = useState<boolean | null>(null);
 
+  // Última data fechada da rota (pra validar se pode reabrir)
+  const [ultimaDataFechada, setUltimaDataFechada] = useState<string | null>(null);
+
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
 
@@ -896,6 +899,37 @@ export default function LiquidacaoDiariaPage() {
       carregarDadosCalendario(rota.id, agora.getFullYear(), agora.getMonth() + 1);
     }
   }, [rota, carregarDadosCalendario]);
+
+  // Busca a data da última liquidação FECHADA/APROVADA da rota
+  // (usada pra validar se a liquidação atual pode ser reaberta)
+  useEffect(() => {
+    if (!rota) {
+      setUltimaDataFechada(null);
+      return;
+    }
+    (async () => {
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data, error } = await supabase
+          .from('liquidacoes_diarias')
+          .select('data_liquidacao')
+          .eq('rota_id', rota.id)
+          .in('status', ['FECHADO', 'APROVADO'])
+          .order('data_liquidacao', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) {
+          console.error('Erro ao buscar última data fechada:', error);
+          setUltimaDataFechada(null);
+          return;
+        }
+        setUltimaDataFechada((data as any)?.data_liquidacao || null);
+      } catch (err) {
+        console.error('Erro inesperado ao buscar última data fechada:', err);
+        setUltimaDataFechada(null);
+      }
+    })();
+  }, [rota, liquidacao]);  // Recarrega quando a liquidação muda (após fechar uma, atualiza)
 
   // Busca info de próxima liquidação a abrir (quando não há liquidação ativa)
   useEffect(() => {
@@ -1402,11 +1436,27 @@ export default function LiquidacaoDiariaPage() {
               </span>
             )}
           </button>
-          {liquidacao?.status === 'FECHADO' && podeReabrir && (
-            <button onClick={() => setModalReabrir(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors">
-              <RotateCcw className="w-3.5 h-3.5" />Reabrir
-            </button>
-          )}
+          {liquidacao?.status === 'FECHADO' && podeReabrir && (() => {
+            // Só pode reabrir se for a última liquidação fechada da rota
+            const dataLiqAtual = (liquidacao as any)?.data_liquidacao
+              || liquidacao?.data_abertura?.split('T')[0];
+            const ehUltimaFechada = !!ultimaDataFechada && dataLiqAtual === ultimaDataFechada;
+            const ultimaFmt = ultimaDataFechada
+              ? new Date(ultimaDataFechada + 'T12:00:00').toLocaleDateString('pt-BR')
+              : '';
+            return (
+              <button
+                onClick={() => ehUltimaFechada && setModalReabrir(true)}
+                disabled={!ehUltimaFechada}
+                title={ehUltimaFechada
+                  ? 'Reabrir esta liquidação'
+                  : `Só é permitido reabrir a última liquidação fechada (${ultimaFmt}).`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-100"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />Reabrir
+              </button>
+            );
+          })()}
           {(liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO') && !visualizandoOutroDia && (
             <button onClick={() => setModalFechar(true)} className={`flex items-center gap-1.5 px-3 py-1.5 ${liquidacao?.status === 'REABERTO' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg text-xs font-medium transition-colors`}>
               <Square className="w-3.5 h-3.5" />Fechar Dia
