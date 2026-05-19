@@ -30,6 +30,10 @@ export interface RotaResumo {
   total_emprestimos: number;
   status: 'ATIVA' | 'INATIVA';
   trabalha_domingo?: boolean;
+  veiculo_tipo?: 'CARRO' | 'MOTO' | null;
+  veiculo_cor?: string | null;
+  veiculo_placa?: string | null;
+  veiculo_modelo?: string | null;
 }
 export interface ResumoGeral {
   total_empresas: number;

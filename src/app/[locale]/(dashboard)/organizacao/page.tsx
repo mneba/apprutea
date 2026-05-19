@@ -54,6 +54,10 @@ export default function OrganizacaoPage() {
   const [descricaoRota, setDescricaoRota] = useState('');
   const [vendedorRotaId, setVendedorRotaId] = useState('');
   const [trabalhaDomingo, setTrabalhaDomingo] = useState(false);
+  const [veiculoTipo, setVeiculoTipo] = useState<'' | 'CARRO' | 'MOTO'>('');
+  const [veiculoCor, setVeiculoCor] = useState('');
+  const [veiculoPlaca, setVeiculoPlaca] = useState('');
+  const [veiculoModelo, setVeiculoModelo] = useState('');
   const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState<VendedorDisponivel[]>([]);
   const [empresaParaRota, setEmpresaParaRota] = useState<EmpresaResumo | null>(null);
   const [salvandoRota, setSalvandoRota] = useState(false);
@@ -229,6 +233,10 @@ export default function OrganizacaoPage() {
     setDescricaoRota('');
     setVendedorRotaId('');
     setTrabalhaDomingo(false);
+    setVeiculoTipo('');
+    setVeiculoCor('');
+    setVeiculoPlaca('');
+    setVeiculoModelo('');
     
     // Carregar vendedores disponíveis
     const vendedores = await organizacaoService.buscarVendedoresDisponiveis(empresa.id);
@@ -246,6 +254,10 @@ export default function OrganizacaoPage() {
     setDescricaoRota(rota.descricao || '');
     setVendedorRotaId(rota.vendedor_id || '');
     setTrabalhaDomingo(rota.trabalha_domingo ?? false);
+    setVeiculoTipo((rota.veiculo_tipo as 'CARRO' | 'MOTO' | null) || '');
+    setVeiculoCor(rota.veiculo_cor || '');
+    setVeiculoPlaca(rota.veiculo_placa || '');
+    setVeiculoModelo(rota.veiculo_modelo || '');
     
     // Carregar vendedores disponíveis + o vendedor atual da rota
     const vendedores = await organizacaoService.buscarVendedoresDisponiveis(empresaSelecionada.id);
@@ -286,7 +298,11 @@ export default function OrganizacaoPage() {
           descricao: descricaoRota.trim() || undefined,
           vendedor_id: vendedorRotaId || null,
           trabalha_domingo: trabalhaDomingo,
-        });
+          veiculo_tipo: veiculoTipo || null,
+          veiculo_cor: veiculoCor.trim() || null,
+          veiculo_placa: veiculoPlaca.trim() || null,
+          veiculo_modelo: veiculoModelo.trim() || null,
+        } as any);
 
         // Se DESATIVOU trabalha_domingo, mover parcelas de domingo para segunda
         if (desativouTrabalhaDomingo) {
@@ -304,7 +320,11 @@ export default function OrganizacaoPage() {
           descricao: descricaoRota.trim() || undefined,
           vendedor_id: vendedorRotaId || undefined,
           trabalha_domingo: trabalhaDomingo,
-        });
+          veiculo_tipo: veiculoTipo || null,
+          veiculo_cor: veiculoCor.trim() || null,
+          veiculo_placa: veiculoPlaca.trim() || null,
+          veiculo_modelo: veiculoModelo.trim() || null,
+        } as any);
       }
       
       setModalRota(false);
@@ -1312,6 +1332,69 @@ export default function OrganizacaoPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Veículo */}
+              <div className="pt-4 border-t border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Veículo da Rota</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Tipo
+                    </label>
+                    <select
+                      value={veiculoTipo}
+                      onChange={(e) => setVeiculoTipo(e.target.value as '' | 'CARRO' | 'MOTO')}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                    >
+                      <option value="">Selecione</option>
+                      <option value="CARRO">Carro</option>
+                      <option value="MOTO">Moto</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Modelo
+                    </label>
+                    <input
+                      type="text"
+                      value={veiculoModelo}
+                      onChange={(e) => setVeiculoModelo(e.target.value.slice(0, 30))}
+                      maxLength={30}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Ex: Honda Biz"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Cor
+                    </label>
+                    <input
+                      type="text"
+                      value={veiculoCor}
+                      onChange={(e) => setVeiculoCor(e.target.value.slice(0, 30))}
+                      maxLength={30}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Ex: Vermelho"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1.5">
+                      Placa
+                    </label>
+                    <input
+                      type="text"
+                      value={veiculoPlaca}
+                      onChange={(e) => setVeiculoPlaca(e.target.value.slice(0, 30))}
+                      maxLength={30}
+                      className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      placeholder="Ex: ABC-1234"
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
