@@ -441,63 +441,42 @@ export const liquidacaoService = {
   },
 
   // ==================================================
-  // BUSCAR CLIENTES PLANEJADOS DA LIQUIDAÇÃO (snapshot)
+  // BUSCAR CLIENTES DA LIQUIDAÇÃO (via RPC fn_clientes_da_liquidacao)
   // ==================================================
-  // Usa a coluna clientes_planejados_ids (UUID[]) populada na abertura.
-  // Garante que a lista mostrada é o plano original do dia, imutável.
+  // Usa a RPC fn_clientes_da_liquidacao do banco, que internamente:
+  //   - Pega o snapshot `clientes_planejados_ids` da liquidação
+  //   - Faz fallback dinâmico se o array estiver vazio (liquidações antigas)
+  // Retorna estrutura compatível com ClienteDoDia.
   async buscarClientesDaLiquidacao(
     liquidacaoId: string,
     filtros?: FiltrosClientesDia
   ): Promise<ClienteDoDia[]> {
     const supabase = createClient();
 
-    // 1) Buscar liquidação pra pegar o array de IDs + data + rota
-    const { data: liq, error: errLiq } = await supabase
-      .from('liquidacoes_diarias')
-      .select('id, rota_id, data_liquidacao, clientes_planejados_ids')
-      .eq('id', liquidacaoId)
-      .maybeSingle();
-
-    if (errLiq || !liq) {
-      console.error('Erro ao buscar liquidação:', errLiq);
-      return [];
-    }
-
-    const idsPlanejados: string[] = (liq as any).clientes_planejados_ids || [];
-
-    // Fallback: se a liquidação é antiga e não tem o array preenchido,
-    // cai no método legado que calcula dinamicamente.
-    if (!idsPlanejados.length) {
-      const dataStr = (liq as any).data_liquidacao || '';
-      if (!dataStr) return [];
-      return this.buscarClientesDoDia((liq as any).rota_id, dataStr, filtros);
-    }
-
-    // 2) Buscar dados da view filtrando pelos IDs planejados + data
-    let query = supabase
-      .from('vw_clientes_rota_dia')
-      .select('*')
-      .eq('rota_id', (liq as any).rota_id)
-      .eq('data_vencimento', (liq as any).data_liquidacao)
-      .in('cliente_id', idsPlanejados)
-      .order('ordem_visita_dia', { ascending: true, nullsFirst: false });
-
-    if (filtros?.status) {
-      query = query.eq('status_dia', filtros.status);
-    }
-
-    if (filtros?.busca) {
-      query = query.ilike('nome', `%${filtros.busca}%`);
-    }
-
-    const { data, error } = await query;
+    const { data, error } = await supabase.rpc('fn_clientes_da_liquidacao', {
+      p_liquidacao_id: liquidacaoId,
+    });
 
     if (error) {
-      console.error('Erro ao buscar clientes planejados da liquidação:', error);
+      console.error('Erro ao buscar clientes da liquidação (RPC):', error);
       return [];
     }
 
-    return data || [];
+    let clientes: ClienteDoDia[] = (data || []) as ClienteDoDia[];
+
+    // Filtros aplicados em memória (a RPC retorna tudo, filtramos no client)
+    if (filtros?.status) {
+      clientes = clientes.filter(c => c.status_dia === filtros.status);
+    }
+    if (filtros?.busca) {
+      const q = filtros.busca.toLowerCase();
+      clientes = clientes.filter(c =>
+        (c.nome || '').toLowerCase().includes(q) ||
+        (c.consecutivo || '').toLowerCase().includes(q)
+      );
+    }
+
+    return clientes;
   },
 
   // ==================================================
