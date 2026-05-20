@@ -30,6 +30,13 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
+  CheckCircle2,
+  Check,
+  RefreshCw,
+  Undo2,
+  Plus,
+  ArrowDownAZ,
+  ListOrdered,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
@@ -660,6 +667,9 @@ export default function LiquidacaoDiariaPage() {
 
   const [filtroLista, setFiltroLista] = useState<FiltroLista>('TODOS');
   const [buscaCliente, setBuscaCliente] = useState('');
+  // Ordenação da lista: 'ROTA' (ordem_rota_cliente) ou 'ALFABETICA'
+  const [ordenacao, setOrdenacao] = useState<'ROTA' | 'ALFABETICA'>('ROTA');
+  const [ordemRotaMap, setOrdemRotaMap] = useState<Map<string, number>>(new Map());
 
   // Contagem de notas
   const [qtdNotasLiquidacao, setQtdNotasLiquidacao] = useState(0);
@@ -711,6 +721,17 @@ export default function LiquidacaoDiariaPage() {
         .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
         .eq('liquidacao_id', liq.id);
       setEmprestimosDoDia((empsLista || []) as any);
+
+      // Buscar ordem dos clientes na rota (ordem_rota_cliente)
+      const { data: ordemData } = await supabase
+        .from('ordem_rota_cliente')
+        .select('cliente_id, ordem')
+        .eq('rota_id', rotaId);
+      const novoOrdemMap = new Map<string, number>();
+      (ordemData || []).forEach((o: any) => {
+        if (o.cliente_id != null) novoOrdemMap.set(o.cliente_id, Number(o.ordem ?? 0));
+      });
+      setOrdemRotaMap(novoOrdemMap);
 
       // Contagem total de notas da liquidação
       const { count: countNotasLiq } = await supabase
@@ -1299,6 +1320,25 @@ export default function LiquidacaoDiariaPage() {
     });
   }, [clientesComEvento, filtroLista, buscaCliente]);
 
+  // Aplicar ordenação (ordem da rota ou alfabética)
+  const clientesOrdenados = useMemo(() => {
+    const arr = [...clientesFiltrados];
+    if (ordenacao === 'ALFABETICA') {
+      arr.sort((a, b) => (a.cliente.nome || '').localeCompare(b.cliente.nome || '', 'pt-BR'));
+    } else {
+      // ROTA: usa ordem_rota_cliente; clientes sem ordem vão pro fim (ordenados por nome)
+      arr.sort((a, b) => {
+        const oa = ordemRotaMap.get(a.cliente.cliente_id);
+        const ob = ordemRotaMap.get(b.cliente.cliente_id);
+        if (oa != null && ob != null) return oa - ob;
+        if (oa != null) return -1;
+        if (ob != null) return 1;
+        return (a.cliente.nome || '').localeCompare(b.cliente.nome || '', 'pt-BR');
+      });
+    }
+    return arr;
+  }, [clientesFiltrados, ordenacao, ordemRotaMap]);
+
   const percentualMeta = liquidacao ? calcularPercentual(liquidacao.valor_recebido_dia || 0, liquidacao.valor_esperado_dia || metaDia) : 0;
 
   if (loading) return <TelaSkeleton />;
@@ -1582,7 +1622,18 @@ export default function LiquidacaoDiariaPage() {
             <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center justify-between mb-2">
                 <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
-                <span className="text-xs text-gray-500">{clientesFiltrados.length} de {contagens.todos}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setOrdenacao(o => o === 'ROTA' ? 'ALFABETICA' : 'ROTA')}
+                    title={ordenacao === 'ROTA' ? 'Ordenado pela rota — clique para alfabética' : 'Ordenado por nome — clique para ordem da rota'}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    {ordenacao === 'ROTA'
+                      ? <><ListOrdered className="w-3.5 h-3.5" />Rota</>
+                      : <><ArrowDownAZ className="w-3.5 h-3.5" />A-Z</>}
+                  </button>
+                  <span className="text-xs text-gray-500">{clientesOrdenados.length} de {contagens.todos}</span>
+                </div>
               </div>
               <div className="flex flex-wrap gap-1 mb-2">
                 <ChipFiltro label="Todos" qtd={contagens.todos} ativo={filtroLista === 'TODOS'} onClick={() => setFiltroLista('TODOS')} cor="blue" />
@@ -1612,9 +1663,9 @@ export default function LiquidacaoDiariaPage() {
 
             {/* Lista scrollável */}
             <div className="flex-1 overflow-y-auto">
-              {clientesFiltrados.length > 0 ? (
+              {clientesOrdenados.length > 0 ? (
                 <div className="divide-y divide-gray-100">
-                  {clientesFiltrados.map(({ cliente, evento }) => {
+                  {clientesOrdenados.map(({ cliente, evento }) => {
                     const notasInfo = notasClientes.get(cliente.cliente_id);
                     const temNotasLiquidacao = (notasInfo?.liquidacao || 0) > 0;
                     return (
@@ -1773,18 +1824,18 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
       </span>
     );
   }
-  if (evento.tipo === 'QUITADO') return <span className="text-emerald-700 font-medium">✅ Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
-  if (evento.tipo === 'NOVO') return <span className="text-green-700 font-medium">🆕 Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
-  if (evento.tipo === 'RENOVACAO') return <span className="text-blue-700 font-medium">🔄 Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
-  if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium">↩ Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'QUITADO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
+  if (evento.tipo === 'NOVO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'RENOVACAO') return <span className="text-blue-700 font-medium inline-flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium inline-flex items-center gap-1"><Undo2 className="w-3.5 h-3.5" />Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'PAGOU') {
     const qtdParc = evento.parcelasPagas || 1;
     const txt = qtdParc > 1
       ? `${qtdParc} parcelas pagas · ${formatarMoeda(evento.valorPago || 0)}`
       : `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
-    return <span className="text-green-700 font-medium">💚 {txt}</span>;
+    return <span className="text-green-700 font-medium inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" />{txt}</span>;
   }
-  if (evento.tipo === 'NAO_PAGOU') return <span className="text-red-600 font-medium">❌ Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}</span>;
+  if (evento.tipo === 'NAO_PAGOU') return <span className="text-red-600 font-medium inline-flex items-center gap-1"><X className="w-3.5 h-3.5" />Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}</span>;
   return null;
 }
 
