@@ -1,6 +1,6 @@
 // =====================================================
 // TYPES DO MÓDULO DE LIQUIDAÇÃO DIÁRIA
-// ATUALIZADO: Inclui campos de reabertura
+// ATUALIZADO: Inclui status_dia 'NOVO' para clientes com empréstimo recém-aberto
 // =====================================================
 
 // Interface principal da liquidação diária
@@ -88,9 +88,11 @@ export interface ContaRota {
   saldo_inicial?: number;
 }
 
-// Interface do cliente do dia (da view vw_clientes_rota_dia)
+// Interface do cliente do dia (da RPC fn_clientes_da_liquidacao)
 export interface ClienteDoDia {
-  parcela_id: string;
+  // ATENÇÃO: parcela_id é NULL quando status_dia = 'NOVO'
+  // (cliente recebeu empréstimo na liquidação mas não tem cobrança no dia)
+  parcela_id: string | null;
   cliente_id: string;
   emprestimo_id: string;
   rota_id: string;
@@ -100,27 +102,40 @@ export interface ClienteDoDia {
   consecutivo: string;
   telefone_celular?: string;
   endereco?: string;
+  latitude?: number;
+  longitude?: number;
   
-  // Dados da parcela
-  numero_parcela: number;
+  // Dados da parcela (podem ser null/0 quando NOVO)
+  numero_parcela: number | null;
   numero_parcelas: number;
   valor_parcela: number;
   valor_pago_parcela: number;
-  data_vencimento: string;
-  status_dia: 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'EM_ATRASO';
+  saldo_parcela?: number;
+  status_parcela?: string | null;
+  data_vencimento: string | null;
+  status_dia: 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'EM_ATRASO' | 'NOVO';
   
   // Dados do empréstimo
   valor_principal: number;
   saldo_emprestimo: number;
+  status_emprestimo?: string;
+  frequencia_pagamento?: string;
   
   // Flags
   tem_parcelas_vencidas: boolean;
   total_parcelas_vencidas: number;
   valor_total_vencido: number;
+  is_parcela_atrasada?: boolean;
   permite_emprestimo_adicional?: boolean;
+
+  // Vínculo de parcela com liquidação (campo da parcela, renomeado pra não conflitar)
+  liquidacao_id_parcela?: string | null;
   
   // Ordem de visita
   ordem_visita_dia?: number;
+
+  // Data de referência (vem da RPC, útil pra debug)
+  dia_referencia?: string;
 }
 
 // Interface do microseguro do dia
@@ -185,7 +200,7 @@ export interface RespostaFecharLiquidacao {
 
 // Filtros para clientes do dia
 export interface FiltrosClientesDia {
-  status?: 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'EM_ATRASO';
+  status?: 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'EM_ATRASO' | 'NOVO';
   busca?: string;
 }
 
