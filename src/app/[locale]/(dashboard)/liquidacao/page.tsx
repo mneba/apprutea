@@ -1207,14 +1207,14 @@ export default function LiquidacaoDiariaPage() {
 
     for (const c of clientesDia) {
       if (c.status_dia === 'PAGO' || c.status_dia === 'PARCIAL') {
-        const atual = pagosPorCliente.get(c.cliente_id) || { somaValor: 0, parcelas: [], totalParcelas: c.numero_parcelas };
+        const atual = pagosPorCliente.get(c.cliente_id) || { somaValor: 0, parcelas: [], totalParcelas: c.numero_parcelas ?? 0 };
         atual.somaValor += Number(c.valor_pago_parcela || 0);
-        atual.parcelas.push(c.numero_parcela);
-        atual.totalParcelas = c.numero_parcelas;
+        if (c.numero_parcela != null) atual.parcelas.push(c.numero_parcela);
+        atual.totalParcelas = c.numero_parcelas ?? atual.totalParcelas;
         pagosPorCliente.set(c.cliente_id, atual);
       } else {
         if (!naoPagosPorCliente.has(c.cliente_id)) {
-          naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela, total: c.numero_parcelas });
+          naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela ?? 0, total: c.numero_parcelas });
         }
       }
     }
