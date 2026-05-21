@@ -16,7 +16,10 @@ import {
   MapPin,
   Smartphone,
   Unlock,
-  Bell
+  Bell,
+  ArrowDown,
+  AlertCircle,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { usuariosService } from '@/services/usuarios';
@@ -129,6 +132,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     if (!empresa?.rotas_ids) return [];
     return todasRotas.filter((r) => empresa.rotas_ids?.includes(r.id));
   })();
+
+  // Seleção pendente: empresa escolhida no formulário mas ainda NÃO adicionada à lista
+  const temSelecaoPendente = !!novaEmpresaId && !selecoes.some((s) => s.empresa_id === novaEmpresaId);
 
   // Auto-select: se hierarquia tem só 1 cidade, seleciona ela automaticamente
   useEffect(() => {
@@ -604,43 +610,78 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
               {/* ABA ACESSO */}
               {activeTab === 'acesso' && (
                 <div className="space-y-6">
-                  {/* Seleções existentes */}
-                  {selecoes.length > 0 && (
-                    <div className="space-y-3">
-                      <h3 className="text-sm font-medium text-gray-700">Acessos Configurados</h3>
-                      {selecoes.map((selecao, index) => (
-                        <div
-                          key={index}
-                          className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                        >
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-900">
-                              {getNomeEmpresa(selecao.empresa_id)}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              {getNomeHierarquia(selecao.hierarquia_id)}
-                              {selecao.cidade_id && ` > ${getNomeCidade(selecao.cidade_id)}`}
-                            </p>
-                            {selecao.rotas_ids.length > 0 && (
-                              <p className="text-xs text-blue-600 mt-1">
-                                Rotas: {getNomesRotas(selecao.rotas_ids)}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => handleRemoverSelecao(index)}
-                            className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                  {/* (4) Lista de acessos configurados — cards claros */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <h3 className="text-sm font-semibold text-gray-900">
+                        Acessos Configurados
+                      </h3>
+                      <span className="text-xs text-gray-400">
+                        ({selecoes.length})
+                      </span>
                     </div>
-                  )}
 
-                  {/* Adicionar novo acesso */}
-                  <div className="space-y-4 p-4 border border-dashed border-gray-300 rounded-xl">
-                    <h3 className="text-sm font-medium text-gray-700">Adicionar Acesso</h3>
+                    {selecoes.length > 0 ? (
+                      <div className="space-y-2">
+                        {selecoes.map((selecao, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-3 bg-white border border-gray-200 rounded-xl shadow-sm"
+                          >
+                            <div className="flex items-start gap-3 flex-1">
+                              <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                                <Building2 className="w-4 h-4 text-blue-600" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {getNomeEmpresa(selecao.empresa_id)}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {getNomeHierarquia(selecao.hierarquia_id)}
+                                  {selecao.cidade_id && ` › ${getNomeCidade(selecao.cidade_id)}`}
+                                </p>
+                                {selecao.rotas_ids.length > 0 ? (
+                                  <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" />
+                                    {getNomesRotas(selecao.rotas_ids)}
+                                  </p>
+                                ) : (
+                                  <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3" />
+                                    Todas as rotas
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => handleRemoverSelecao(index)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg flex-shrink-0"
+                              title="Remover acesso"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-6 px-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                        <p className="text-sm text-gray-400">
+                          Nenhum acesso configurado ainda.
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">
+                          Use o formulário abaixo e clique em <span className="font-medium text-gray-500">Adicionar</span>.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* (1) Caixa "Adicionar Acesso" destacada */}
+                  <div className="space-y-4 p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Plus className="w-4 h-4 text-blue-600" />
+                      <h3 className="text-sm font-semibold text-blue-900">Adicionar Acesso</h3>
+                    </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -654,7 +695,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             setNovaEmpresaId('');
                             setNovasRotasIds([]);
                           }}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
                         >
                           <option value="">Selecione...</option>
                           {paises.map((pais) => (
@@ -676,7 +717,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             setNovasRotasIds([]);
                           }}
                           disabled={!novoPais}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-100"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:bg-gray-100"
                         >
                           <option value="">Selecione...</option>
                           {estadosDoPais.map((h) => (
@@ -699,7 +740,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                             setNovaEmpresaId('');
                             setNovasRotasIds([]);
                           }}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
                         >
                           <option value="">Selecione...</option>
                           {cidadesDaHierarquia.map((c) => (
@@ -720,7 +761,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                           setNovasRotasIds([]);
                         }}
                         disabled={!novaCidadeId}
-                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-100"
+                        className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white disabled:bg-gray-100"
                       >
                         <option value="">Selecione...</option>
                         {empresasDaCidade.map((e) => (
@@ -744,7 +785,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                               className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
                                 novasRotasIds.includes(rota.id)
                                   ? 'bg-blue-600 text-white'
-                                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                  : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-100'
                               }`}
                             >
                               {rota.nome}
@@ -754,13 +795,28 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       </div>
                     )}
 
+                    {/* (3) Aviso inline quando há empresa selecionada não adicionada */}
+                    {temSelecaoPendente && (
+                      <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
+                        <ArrowDown className="w-4 h-4 text-amber-600 flex-shrink-0 animate-bounce" />
+                        <p className="text-xs text-amber-700">
+                          Clique em <span className="font-semibold">Adicionar</span> para incluir este acesso na lista antes de salvar.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* (2) Botão Adicionar destacado quando há seleção pendente */}
                     <button
                       onClick={handleAdicionarSelecao}
                       disabled={!novaEmpresaId}
-                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className={`flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg text-sm font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                        temSelecaoPendente
+                          ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md ring-2 ring-blue-300'
+                          : 'bg-blue-600 text-white hover:bg-blue-700'
+                      }`}
                     >
                       <Plus className="w-4 h-4" />
-                      Adicionar
+                      Adicionar à Lista
                     </button>
                   </div>
                 </div>
@@ -1093,21 +1149,32 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSalvar}
-            disabled={saving}
-            className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-          >
-            {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-            Salvar Alterações
-          </button>
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          {/* (5) Aviso de seleção pendente não adicionada */}
+          <div className="flex-1">
+            {activeTab === 'acesso' && temSelecaoPendente && (
+              <div className="flex items-center gap-1.5 text-xs text-amber-700">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>Há um acesso preenchido não adicionado à lista.</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleSalvar}
+              disabled={saving}
+              className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+              Salvar Alterações
+            </button>
+          </div>
         </div>
       </div>
     </div>
