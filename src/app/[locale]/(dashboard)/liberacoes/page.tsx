@@ -799,7 +799,6 @@ function ModalDetalhesSolicitacao({
                           <option value="SEMANAL">Semanal</option>
                           <option value="QUINZENAL">Quinzenal</option>
                           <option value="MENSAL">Mensal</option>
-                          <option value="FLEXIVEL">Flexível</option>
                         </select>
                       </div>
                       <div>
@@ -825,23 +824,41 @@ function ModalDetalhesSolicitacao({
                       </div>
                       {editVenda.frequencia === 'SEMANAL' && (
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Dia da semana (0=Dom..6=Sáb)</label>
-                          <input
-                            type="number" min="0" max="6"
+                          <label className="block text-xs text-gray-500 mb-1">Dia da semana</label>
+                          <select
                             value={editVenda.dia_semana_cobranca ?? ''}
                             onChange={(e) => setEditVenda({ ...editVenda, dia_semana_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
                             disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                          />
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="0">Domingo</option>
+                            <option value="1">Segunda-feira</option>
+                            <option value="2">Terça-feira</option>
+                            <option value="3">Quarta-feira</option>
+                            <option value="4">Quinta-feira</option>
+                            <option value="5">Sexta-feira</option>
+                            <option value="6">Sábado</option>
+                          </select>
                         </div>
                       )}
                       {(editVenda.frequencia === 'MENSAL' || editVenda.frequencia === 'QUINZENAL') && (
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Dia do mês (1..31)</label>
+                          <label className="block text-xs text-gray-500 mb-1">Dia do mês (1 a 31)</label>
                           <input
                             type="number" min="1" max="31"
                             value={editVenda.dia_mes_cobranca ?? ''}
-                            onChange={(e) => setEditVenda({ ...editVenda, dia_mes_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
+                            onChange={(e) => {
+                              if (e.target.value === '') {
+                                setEditVenda({ ...editVenda, dia_mes_cobranca: null });
+                                return;
+                              }
+                              let v = parseInt(e.target.value);
+                              if (isNaN(v)) return;
+                              if (v < 1) v = 1;
+                              if (v > 31) v = 31;
+                              setEditVenda({ ...editVenda, dia_mes_cobranca: v });
+                            }}
                             disabled={solicitacao.status !== 'PENDENTE'}
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
                           />
