@@ -110,12 +110,14 @@ function ModalDetalhesSolicitacao({
   onClose,
   onAprovar,
   onRejeitar,
+  onVendaResolvida,
   loading,
 }: {
   solicitacao: Solicitacao;
   onClose: () => void;
   onAprovar: (motivo?: string) => void;
   onRejeitar: (motivo: string) => void;
+  onVendaResolvida?: () => void;
   loading: boolean;
 }) {
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
@@ -291,9 +293,9 @@ function ModalDetalhesSolicitacao({
         alert(res.mensagem || 'Erro ao aprovar venda');
         return;
       }
-      onClose();
-      // Recarrega a lista via callback de aprovação (sem motivo, só pra refresh)
-      onAprovar();
+      // Avisa o pai que terminou — ele fecha o modal e recarrega a lista.
+      // (NÃO chamar onClose aqui antes do onAprovar, senão o pai perde a referência da solicitação)
+      onVendaResolvida?.();
     } catch (err: any) {
       console.error('Erro ao aprovar venda:', err);
       alert(err.message || 'Erro ao aprovar venda');
@@ -324,8 +326,7 @@ function ModalDetalhesSolicitacao({
         alert(res.mensagem || 'Erro ao rejeitar venda');
         return;
       }
-      onClose();
-      onRejeitar(motivoRejeicao);
+      onVendaResolvida?.();
     } catch (err: any) {
       console.error('Erro ao rejeitar venda:', err);
       alert(err.message || 'Erro ao rejeitar venda');
@@ -1456,6 +1457,10 @@ export default function LiberacoesPage() {
           onClose={() => setSolicitacaoSelecionada(null)}
           onAprovar={handleAprovar}
           onRejeitar={handleRejeitar}
+          onVendaResolvida={() => {
+            setSolicitacaoSelecionada(null);
+            carregarSolicitacoes();
+          }}
           loading={loadingAcao}
         />
       )}
