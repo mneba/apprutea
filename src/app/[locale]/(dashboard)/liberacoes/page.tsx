@@ -124,6 +124,10 @@ function ModalDetalhesSolicitacao({
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
   const [detalhesEmprestimo, setDetalhesEmprestimo] = useState<any>(null);
   const [loadingDetalhes, setLoadingDetalhes] = useState(false);
+  // Venda pendente (VENDA_EXCEDE_LIMITE)
+  const [vendaPendente, setVendaPendente] = useState<any>(null);
+  const [loadingVenda, setLoadingVenda] = useState(false);
+  const [editVenda, setEditVenda] = useState<any>(null);
 
   const statusColors = STATUS_SOLICITACAO_COLORS[solicitacao.status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
   const tipoConfig = TIPO_CONFIG[solicitacao.tipo_solicitacao] || { 
@@ -161,6 +165,7 @@ function ModalDetalhesSolicitacao({
   const isRenegociacao = solicitacao.tipo_solicitacao === 'RENEGOCIACAO';
   const isEmprestimoAdicional = solicitacao.tipo_solicitacao === 'EMPRESTIMO_ADICIONAL';
   const isAutorizacaoCliente = isRenegociacao || isEmprestimoAdicional;
+  const isVendaExcedeLimite = solicitacao.tipo_solicitacao === 'VENDA_EXCEDE_LIMITE';
 
   // Carregar detalhes do empréstimo para renegociação
   useEffect(() => {
@@ -195,6 +200,58 @@ function ModalDetalhesSolicitacao({
     carregarDetalhesEmprestimo();
   }, [isRenegociacao, solicitacao.emprestimo_id]);
 
+  // Carregar detalhes da venda pendente (VENDA_EXCEDE_LIMITE)
+  useEffect(() => {
+    const carregarVendaPendente = async () => {
+      if (!isVendaExcedeLimite || !(solicitacao as any).venda_pendente_id) return;
+
+      setLoadingVenda(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.rpc('fn_buscar_detalhes_venda_pendente', {
+          p_venda_pendente_id: (solicitacao as any).venda_pendente_id,
+        });
+
+        if (error) {
+          console.error('Erro ao buscar venda pendente:', error);
+          setLoadingVenda(false);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const vp = data[0];
+          setVendaPendente(vp);
+          // Estado editável inicializado com os valores atuais
+          setEditVenda({
+            cliente_nome: vp.cliente_nome ?? '',
+            cliente_telefone: vp.cliente_telefone ?? '',
+            cliente_telefone_fixo: vp.cliente_telefone_fixo ?? '',
+            cliente_email: vp.cliente_email ?? '',
+            cliente_endereco: vp.cliente_endereco ?? '',
+            cliente_endereco_comercial: vp.cliente_endereco_comercial ?? '',
+            cliente_observacoes: vp.cliente_observacoes ?? '',
+            valor_principal: vp.valor_principal ?? 0,
+            numero_parcelas: vp.numero_parcelas ?? 1,
+            taxa_juros: vp.taxa_juros ?? 0,
+            frequencia: vp.frequencia ?? 'DIARIO',
+            data_primeiro_vencimento: vp.data_primeiro_vencimento ?? '',
+            dia_semana_cobranca: vp.dia_semana_cobranca ?? null,
+            dia_mes_cobranca: vp.dia_mes_cobranca ?? null,
+            iniciar_proximo_mes: vp.iniciar_proximo_mes ?? false,
+            observacoes_emprestimo: vp.observacoes_emprestimo ?? '',
+            microseguro_valor: vp.microseguro_valor ?? null,
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao carregar venda pendente:', err);
+      } finally {
+        setLoadingVenda(false);
+      }
+    };
+
+    carregarVendaPendente();
+  }, [isVendaExcedeLimite, (solicitacao as any).venda_pendente_id]);
+
   // Handler para confirmar aprovação de autorização de cliente
   const handleConfirmarAprovacao = () => {
     if (isAutorizacaoCliente) {
@@ -207,6 +264,74 @@ function ModalDetalhesSolicitacao({
   const handleAprovacaoConfirmada = () => {
     setMostrarConfirmacao(false);
     onAprovar(motivoAprovacao || undefined);
+  };
+
+  // Handlers específicos para VENDA_EXCEDE_LIMITE (chamam a RPC fn_resolver_venda_pendente)
+  const [salvandoVenda, setSalvandoVenda] = useState(false);
+
+  const handleAprovarVenda = async () => {
+    if (!(solicitacao as any).venda_pendente_id || !editVenda) return;
+    setSalvandoVenda(true);
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const adminId = userData.user?.id;
+
+      const { data, error } = await supabase.rpc('fn_resolver_venda_pendente', {
+        p_venda_pendente_id: (solicitacao as any).venda_pendente_id,
+        p_acao: 'APROVAR',
+        p_admin_user_id: adminId,
+        p_motivo: motivoAprovacao || null,
+        p_dados_editados: editVenda,
+      });
+
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Erro ao aprovar venda');
+        return;
+      }
+      onClose();
+      // Recarrega a lista via callback de aprovação (sem motivo, só pra refresh)
+      onAprovar();
+    } catch (err: any) {
+      console.error('Erro ao aprovar venda:', err);
+      alert(err.message || 'Erro ao aprovar venda');
+    } finally {
+      setSalvandoVenda(false);
+    }
+  };
+
+  const handleRejeitarVenda = async () => {
+    if (!(solicitacao as any).venda_pendente_id) return;
+    setSalvandoVenda(true);
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const adminId = userData.user?.id;
+
+      const { data, error } = await supabase.rpc('fn_resolver_venda_pendente', {
+        p_venda_pendente_id: (solicitacao as any).venda_pendente_id,
+        p_acao: 'REJEITAR',
+        p_admin_user_id: adminId,
+        p_motivo: motivoRejeicao,
+        p_dados_editados: null,
+      });
+
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Erro ao rejeitar venda');
+        return;
+      }
+      onClose();
+      onRejeitar(motivoRejeicao);
+    } catch (err: any) {
+      console.error('Erro ao rejeitar venda:', err);
+      alert(err.message || 'Erro ao rejeitar venda');
+    } finally {
+      setSalvandoVenda(false);
+    }
   };
 
   return (
@@ -421,7 +546,7 @@ function ModalDetalhesSolicitacao({
           )}
 
           {/* === OUTROS TIPOS (layout genérico) === */}
-          {!isAbertura && !isExclusaoParcela && !isAutorizacaoCliente && (
+          {!isAbertura && !isExclusaoParcela && !isAutorizacaoCliente && !isVendaExcedeLimite && (
             <>
               {/* Info Grid */}
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -487,6 +612,267 @@ function ModalDetalhesSolicitacao({
                   </p>
                 </div>
               </div>
+            </>
+          )}
+
+          {/* === VENDA EXCEDE LIMITE === */}
+          {isVendaExcedeLimite && (
+            <>
+              {loadingVenda ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : vendaPendente && editVenda ? (
+                <>
+                  {/* Cabeçalho: vendedor / rota / limite */}
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Vendedor</span>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
+                        <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Rota</span>
+                      <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Limite do vendedor</span>
+                      <p className="font-medium text-gray-900">{formatarMoeda(vendaPendente.valor_limite)}</p>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Valor solicitado</span>
+                      <p className="font-semibold text-blue-700 text-lg">{formatarMoeda(vendaPendente.valor_principal)}</p>
+                    </div>
+                  </div>
+
+                  {/* Bloco CLIENTE */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-blue-50 px-4 py-2 border-b border-gray-200">
+                      <h3 className="text-sm font-semibold text-blue-900">Dados do Cliente</h3>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Nome</label>
+                        <input
+                          type="text"
+                          value={editVenda.cliente_nome}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_nome: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">
+                          Documento <span className="text-gray-400">(não editável)</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={vendaPendente.cliente_documento || ''}
+                          disabled
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-gray-100 text-gray-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Segmento</label>
+                        <input
+                          type="text"
+                          value={vendaPendente.cliente_segmento_nome || '-'}
+                          disabled
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-gray-100 text-gray-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Telefone</label>
+                        <input
+                          type="text"
+                          value={editVenda.cliente_telefone}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_telefone: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Telefone fixo</label>
+                        <input
+                          type="text"
+                          value={editVenda.cliente_telefone_fixo}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_telefone_fixo: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Email</label>
+                        <input
+                          type="text"
+                          value={editVenda.cliente_email}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_email: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Endereço residencial</label>
+                        <input
+                          type="text"
+                          value={editVenda.cliente_endereco}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_endereco: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Endereço comercial</label>
+                        <input
+                          type="text"
+                          value={editVenda.cliente_endereco_comercial}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_endereco_comercial: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Observações do cliente</label>
+                        <textarea
+                          value={editVenda.cliente_observacoes}
+                          onChange={(e) => setEditVenda({ ...editVenda, cliente_observacoes: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bloco EMPRÉSTIMO */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-emerald-50 px-4 py-2 border-b border-gray-200">
+                      <h3 className="text-sm font-semibold text-emerald-900">Dados do Empréstimo</h3>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editVenda.valor_principal}
+                          onChange={(e) => setEditVenda({ ...editVenda, valor_principal: parseFloat(e.target.value) || 0 })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nº de parcelas</label>
+                        <input
+                          type="number"
+                          value={editVenda.numero_parcelas}
+                          onChange={(e) => setEditVenda({ ...editVenda, numero_parcelas: parseInt(e.target.value) || 1 })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Taxa de juros (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editVenda.taxa_juros}
+                          onChange={(e) => setEditVenda({ ...editVenda, taxa_juros: parseFloat(e.target.value) || 0 })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Frequência</label>
+                        <select
+                          value={editVenda.frequencia}
+                          onChange={(e) => setEditVenda({ ...editVenda, frequencia: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
+                        >
+                          <option value="DIARIO">Diário</option>
+                          <option value="SEMANAL">Semanal</option>
+                          <option value="QUINZENAL">Quinzenal</option>
+                          <option value="MENSAL">Mensal</option>
+                          <option value="FLEXIVEL">Flexível</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">1º vencimento</label>
+                        <input
+                          type="date"
+                          value={editVenda.data_primeiro_vencimento}
+                          onChange={(e) => setEditVenda({ ...editVenda, data_primeiro_vencimento: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Microseguro</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editVenda.microseguro_valor ?? ''}
+                          onChange={(e) => setEditVenda({ ...editVenda, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      {editVenda.frequencia === 'SEMANAL' && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Dia da semana (0=Dom..6=Sáb)</label>
+                          <input
+                            type="number" min="0" max="6"
+                            value={editVenda.dia_semana_cobranca ?? ''}
+                            onChange={(e) => setEditVenda({ ...editVenda, dia_semana_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
+                            disabled={solicitacao.status !== 'PENDENTE'}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          />
+                        </div>
+                      )}
+                      {(editVenda.frequencia === 'MENSAL' || editVenda.frequencia === 'QUINZENAL') && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Dia do mês (1..31)</label>
+                          <input
+                            type="number" min="1" max="31"
+                            value={editVenda.dia_mes_cobranca ?? ''}
+                            onChange={(e) => setEditVenda({ ...editVenda, dia_mes_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
+                            disabled={solicitacao.status !== 'PENDENTE'}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          />
+                        </div>
+                      )}
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Observações do empréstimo</label>
+                        <textarea
+                          value={editVenda.observacoes_emprestimo}
+                          onChange={(e) => setEditVenda({ ...editVenda, observacoes_emprestimo: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Motivo do vendedor */}
+                  {solicitacao.motivo_solicitacao && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <p className="text-xs text-amber-600 mb-1">Comentário do vendedor:</p>
+                      <p className="text-sm text-amber-900 whitespace-pre-wrap">{solicitacao.motivo_solicitacao}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-400">
+                  Não foi possível carregar os dados da venda.
+                </div>
+              )}
             </>
           )}
 
@@ -567,12 +953,12 @@ function ModalDetalhesSolicitacao({
                   Rejeitar
                 </button>
                 <button
-                  onClick={handleConfirmarAprovacao}
-                  disabled={loading}
+                  onClick={isVendaExcedeLimite ? handleAprovarVenda : handleConfirmarAprovacao}
+                  disabled={loading || salvandoVenda}
                   className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : 'Aprovar'}
+                  {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : 'Aprovar'}
                 </button>
               </>
             ) : (
@@ -584,11 +970,11 @@ function ModalDetalhesSolicitacao({
                   Voltar
                 </button>
                 <button
-                  onClick={() => onRejeitar(motivoRejeicao)}
-                  disabled={loading || !motivoRejeicao.trim()}
+                  onClick={isVendaExcedeLimite ? handleRejeitarVenda : () => onRejeitar(motivoRejeicao)}
+                  disabled={loading || salvandoVenda || !motivoRejeicao.trim()}
                   className="flex items-center gap-1.5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
-                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                  {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                   Confirmar Rejeição
                 </button>
               </>
