@@ -349,7 +349,6 @@ export const usuariosService = {
 
       if (error) {
         console.error('Erro ao carregar mensagens:', error);
-        // Retornar array vazio em vez de quebrar
         return [];
       }
       
@@ -381,38 +380,64 @@ export const usuariosService = {
     if (error) throw error;
   },
 
+  // ============================================
+  // LIBERAÇÕES
+  // ============================================
 
-async listarLiberacoesUsuario(userId: string) {
-  const { data, error } = await supabase.rpc('fn_listar_liberacoes_usuario', {
-    p_user_id: userId
-  });
-  
-  if (error) throw error;
-  return data || [];
-},
+  // Listar liberações do usuário — retorna todos os registros com escopo empresa/rota
+  async listarLiberacoesUsuario(userId: string): Promise<{
+    id: string;
+    tipo_solicitacao: string;
+    empresa_id: string;
+    rota_id: string | null;
+    pode_liberar: boolean;
+  }[]> {
+    const { data, error } = await supabase.rpc('fn_listar_liberacoes_usuario', {
+      p_user_id: userId,
+    });
 
-async salvarLiberacoesUsuario(userId: string, liberacoes: { tipo_solicitacao: string; pode_liberar: boolean }[]) {
-  const { data, error } = await supabase.rpc('fn_salvar_liberacoes_usuario', {
-    p_user_id: userId,
-    p_liberacoes: liberacoes
-  });
-  
-  if (error) throw error;
-  return data;
-},
+    if (error) throw error;
+    return data || [];
+  },
 
-async verificarPodeLiberarTipo(userId: string, tipoSolicitacao: string): Promise<boolean> {
-  const { data, error } = await supabase.rpc('fn_usuario_pode_liberar', {
-    p_user_id: userId,
-    p_tipo_solicitacao: tipoSolicitacao
-  });
-  
-  if (error) {
-    console.error('Erro ao verificar permissão:', error);
-    return false;
-  }
-  
-  return data || false;
-},
+  // Salvar liberações do usuário — payload inclui escopo empresa/rota
+  async salvarLiberacoesUsuario(
+    userId: string,
+    liberacoes: {
+      tipo_solicitacao: string;
+      empresa_id: string;
+      rota_id: string | null;
+      pode_liberar: boolean;
+    }[]
+  ): Promise<void> {
+    const { error } = await supabase.rpc('fn_salvar_liberacoes_usuario', {
+      p_user_id: userId,
+      p_liberacoes: liberacoes,
+    });
+
+    if (error) throw error;
+  },
+
+  // Verificar se usuário pode liberar um tipo em um escopo específico
+  async verificarPodeLiberarTipo(
+    userId: string,
+    tipoSolicitacao: string,
+    empresaId: string,
+    rotaId?: string | null
+  ): Promise<boolean> {
+    const { data, error } = await supabase.rpc('fn_usuario_pode_liberar', {
+      p_user_id: userId,
+      p_tipo_solicitacao: tipoSolicitacao,
+      p_empresa_id: empresaId,
+      p_rota_id: rotaId ?? null,
+    });
+
+    if (error) {
+      console.error('Erro ao verificar permissão de liberação:', error);
+      return false;
+    }
+
+    return data || false;
+  },
 
 };
