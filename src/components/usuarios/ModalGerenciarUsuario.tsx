@@ -41,6 +41,12 @@ interface SelecaoAcesso {
   rotas_ids: string[];
 }
 
+// Chave do estado de liberações: "tipo|empresa_id|rota_id_ou_null"
+type LiberacaoKey = string;
+
+const makeLiberacaoKey = (tipo: string, empresaId: string, rotaId: string | null): LiberacaoKey =>
+  `${tipo}|${empresaId}|${rotaId ?? 'null'}`;
+
 // Tipos de solicitação agrupados por categoria
 const TIPOS_SOLICITACAO = {
   LIQUIDACAO: [
@@ -62,6 +68,12 @@ const TIPOS_SOLICITACAO = {
   ],
 };
 
+const TODOS_TIPOS = [
+  ...TIPOS_SOLICITACAO.LIQUIDACAO,
+  ...TIPOS_SOLICITACAO.LIMITES,
+  ...TIPOS_SOLICITACAO.OPERACOES,
+];
+
 export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(true);
@@ -76,7 +88,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === ABA DADOS ===
   const [nome, setNome] = useState(usuario.nome || '');
-  const [ddi, setDdi] = useState('+55'); // Padrão Brasil
+  const [ddi, setDdi] = useState('+55');
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [documento, setDocumento] = useState(usuario.documento || '');
   const [endereco, setEndereco] = useState(usuario.endereco || '');
@@ -101,7 +113,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   // === ABA ACESSO ===
   const [ehMonitor, setEhMonitor] = useState(usuario.tipo_usuario === 'MONITOR');
   const [selecoes, setSelecoes] = useState<SelecaoAcesso[]>([]);
-  
+
   // Seleção sendo adicionada
   const [novoPais, setNovoPais] = useState('');
   const [novaHierarquiaId, setNovaHierarquiaId] = useState('');
@@ -118,7 +130,8 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   const [permissoes, setPermissoes] = useState<Record<string, UserPermissao>>({});
 
   // === ABA LIBERAÇÕES ===
-  const [liberacoes, setLiberacoes] = useState<Record<string, boolean>>({});
+  // Chave: "tipo|empresa_id|rota_id_ou_null" → boolean
+  const [liberacoes, setLiberacoes] = useState<Record<LiberacaoKey, boolean>>({});
   const [recebeNotificacoes, setRecebeNotificacoes] = useState(false);
 
   // Derivados para seleção cascata
@@ -206,29 +219,30 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         empresasIds.forEach((empresaId: string) => {
           const empresa = empresasData.find((e) => e.id === empresaId);
           if (empresa) {
-            const rotasDaEmpresa = rotasIds.filter((rotaId: string) =>
+            const rotasDaEmpresaUsuario = rotasIds.filter((rotaId: string) =>
               empresa.rotas_ids?.includes(rotaId)
             );
             selecoesExistentes.push({
               hierarquia_id: empresa.hierarquia_id,
               cidade_id: empresa.cidade_id || '',
               empresa_id: empresaId,
-              rotas_ids: rotasDaEmpresa,
+              rotas_ids: rotasDaEmpresaUsuario,
             });
           }
         });
         setSelecoes(selecoesExistentes);
 
-        // Carregar liberações
+        // Carregar liberações — novo formato com escopo empresa/rota
         try {
           const liberacoesData = await usuariosService.listarLiberacoesUsuario(usuario.user_id);
-          const liberacoesMap: Record<string, boolean> = {};
-          liberacoesData.forEach((lib: { tipo_solicitacao: string; pode_liberar: boolean }) => {
-            liberacoesMap[lib.tipo_solicitacao] = lib.pode_liberar;
+          const liberacoesMap: Record<LiberacaoKey, boolean> = {};
+          liberacoesData.forEach((lib) => {
+            const key = makeLiberacaoKey(lib.tipo_solicitacao, lib.empresa_id, lib.rota_id);
+            liberacoesMap[key] = lib.pode_liberar;
           });
           setLiberacoes(liberacoesMap);
         } catch (err) {
-          console.warn('Erro ao carregar liberações (tabela pode não existir ainda):', err);
+          console.warn('Erro ao carregar liberações:', err);
         }
 
         // Carregar flag de notificações
@@ -246,21 +260,20 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   // === FUNÇÕES ABA ACESSO ===
   const handleAdicionarSelecao = () => {
     if (!novaHierarquiaId || !novaCidadeId || !novaEmpresaId) return;
-    
+
     const jaExiste = selecoes.some((s) => s.empresa_id === novaEmpresaId);
     if (jaExiste) {
       alert('Esta empresa já foi adicionada');
       return;
     }
-    
+
     setSelecoes([...selecoes, {
       hierarquia_id: novaHierarquiaId,
       cidade_id: novaCidadeId,
       empresa_id: novaEmpresaId,
       rotas_ids: novasRotasIds,
     }]);
-    
-    // Limpar seleção
+
     setNovoPais('');
     setNovaHierarquiaId('');
     setNovaCidadeId('');
@@ -317,7 +330,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     } catch (err: any) {
       console.error('Erro ao gerar código:', err);
       const mensagemErro = err?.message || 'Erro desconhecido';
-      
       if (mensagemErro.toLowerCase().includes('aprovado')) {
         alert('⚠️ O usuário precisa estar APROVADO para gerar código.\n\nVá na aba "Dados" e altere o status.');
       } else {
@@ -375,22 +387,52 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   };
 
   // === FUNÇÕES ABA LIBERAÇÕES ===
-  const toggleLiberacao = (tipo: string) => {
-    setLiberacoes((prev) => ({
-      ...prev,
-      [tipo]: !prev[tipo],
-    }));
+
+  // Toggle de uma célula individual da matriz
+  const toggleLiberacao = (tipo: string, empresaId: string, rotaId: string | null) => {
+    const key = makeLiberacaoKey(tipo, empresaId, rotaId);
+    setLiberacoes((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const marcarTodasLiberacoes = (categoria: keyof typeof TIPOS_SOLICITACAO, marcar: boolean) => {
+  // Marcar/desmarcar todos os tipos de uma categoria para um escopo específico
+  const marcarCategoriaEscopo = (
+    categoria: keyof typeof TIPOS_SOLICITACAO,
+    empresaId: string,
+    rotaId: string | null,
+    marcar: boolean
+  ) => {
     setLiberacoes((prev) => {
       const novas = { ...prev };
       TIPOS_SOLICITACAO[categoria].forEach((item) => {
-        novas[item.tipo] = marcar;
+        novas[makeLiberacaoKey(item.tipo, empresaId, rotaId)] = marcar;
       });
       return novas;
     });
   };
+
+  // Marcar/desmarcar todos os tipos para todos os escopos de uma coluna
+  const marcarColunaCompleta = (empresaId: string, rotaId: string | null, marcar: boolean) => {
+    setLiberacoes((prev) => {
+      const novas = { ...prev };
+      TODOS_TIPOS.forEach((item) => {
+        novas[makeLiberacaoKey(item.tipo, empresaId, rotaId)] = marcar;
+      });
+      return novas;
+    });
+  };
+
+  // Verificar se todos os tipos de uma categoria estão marcados para um escopo
+  const todosCategoriaMarcados = (
+    categoria: keyof typeof TIPOS_SOLICITACAO,
+    empresaId: string,
+    rotaId: string | null
+  ) => TIPOS_SOLICITACAO[categoria].every(
+    (t) => liberacoes[makeLiberacaoKey(t.tipo, empresaId, rotaId)]
+  );
+
+  // Verificar se todos os tipos estão marcados para um escopo (coluna inteira)
+  const todosColunaMarcados = (empresaId: string, rotaId: string | null) =>
+    TODOS_TIPOS.every((t) => liberacoes[makeLiberacaoKey(t.tipo, empresaId, rotaId)]);
 
   // Agrupar módulos por categoria
   const modulosPorCategoria = modulos.reduce((acc, modulo) => {
@@ -399,6 +441,27 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     acc[categoria].push(modulo);
     return acc;
   }, {} as Record<string, ModuloSistema[]>);
+
+  // Derivar colunas da aba Liberações a partir das seleções de acesso
+  // Cada coluna = { empresaId, rotaId (null = todas), label }
+  const colunasLiberacao = selecoes.flatMap((selecao) => {
+    if (selecao.rotas_ids.length === 0) {
+      // Sem rotas específicas → coluna única "Todas as rotas"
+      return [{
+        empresaId: selecao.empresa_id,
+        rotaId: null as string | null,
+        label: getNomeEmpresa(selecao.empresa_id),
+        sublabel: 'Todas as rotas',
+      }];
+    }
+    // Com rotas específicas → uma coluna por rota
+    return selecao.rotas_ids.map((rotaId) => ({
+      empresaId: selecao.empresa_id,
+      rotaId,
+      label: getNomeEmpresa(selecao.empresa_id),
+      sublabel: todasRotas.find((r) => r.id === rotaId)?.nome || rotaId,
+    }));
+  });
 
   // === SALVAR ===
   const handleSalvar = async () => {
@@ -434,11 +497,17 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
       }
 
-      const liberacoesArray = Object.entries(liberacoes).map(([tipo, pode]) => ({
-        tipo_solicitacao: tipo,
-        pode_liberar: pode,
-      }));
-      
+      // Montar array de liberações com escopo completo
+      // Inclui todas as combinações tipo × coluna, marcadas ou não
+      const liberacoesArray = colunasLiberacao.flatMap((col) =>
+        TODOS_TIPOS.map((item) => ({
+          tipo_solicitacao: item.tipo,
+          empresa_id: col.empresaId,
+          rota_id: col.rotaId,
+          pode_liberar: liberacoes[makeLiberacaoKey(item.tipo, col.empresaId, col.rotaId)] ?? false,
+        }))
+      );
+
       if (liberacoesArray.length > 0) {
         await usuariosService.salvarLiberacoesUsuario(usuario.user_id, liberacoesArray);
       }
@@ -589,8 +658,20 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       <option value="REJEITADO">Rejeitado</option>
                     </select>
                   </div>
+                </div>
+              )}
 
-                  <div className="flex items-center gap-3 pt-2">
+              {/* ABA ACESSO */}
+              {activeTab === 'acesso' && (
+                <div className="space-y-6">
+                  {/* Toggle Monitor — movido da aba Dados */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl">
+                    <div>
+                      <p className="text-sm font-medium text-gray-900">É Monitor</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        Monitores acessam apenas o app móvel e não possuem permissões de módulos
+                      </p>
+                    </div>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
@@ -600,17 +681,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       />
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
-                    <span className="text-sm text-gray-700">
-                      É Monitor (apenas app móvel)
-                    </span>
                   </div>
-                </div>
-              )}
 
-              {/* ABA ACESSO */}
-              {activeTab === 'acesso' && (
-                <div className="space-y-6">
-                  {/* (4) Lista de acessos configurados — cards claros */}
+                  {/* Lista de acessos configurados */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-emerald-600" />
@@ -676,7 +749,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                     )}
                   </div>
 
-                  {/* (1) Caixa "Adicionar Acesso" destacada */}
+                  {/* Caixa "Adicionar Acesso" */}
                   <div className="space-y-4 p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
                     <div className="flex items-center gap-2">
                       <Plus className="w-4 h-4 text-blue-600" />
@@ -795,7 +868,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       </div>
                     )}
 
-                    {/* (3) Aviso inline quando há empresa selecionada não adicionada */}
                     {temSelecaoPendente && (
                       <div className="flex items-center gap-2 p-2.5 bg-amber-50 border border-amber-200 rounded-lg">
                         <ArrowDown className="w-4 h-4 text-amber-600 flex-shrink-0 animate-bounce" />
@@ -805,7 +877,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       </div>
                     )}
 
-                    {/* (2) Botão Adicionar destacado quando há seleção pendente */}
                     <button
                       onClick={handleAdicionarSelecao}
                       disabled={!novaEmpresaId}
@@ -845,7 +916,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                     <div className="flex justify-between">
                       <span className="text-sm text-gray-500">Status:</span>
                       <span className={`text-sm font-medium ${
-                        status === 'APROVADO' ? 'text-green-600' : 
+                        status === 'APROVADO' ? 'text-green-600' :
                         status === 'PENDENTE' ? 'text-yellow-600' : 'text-red-600'
                       }`}>
                         {status}
@@ -986,6 +1057,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
               {/* ABA LIBERAÇÕES */}
               {activeTab === 'liberacoes' && (
                 <div className="space-y-6">
+
                   {/* Toggle de Notificações */}
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <div className="flex items-center justify-between">
@@ -1019,129 +1091,92 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                     )}
                   </div>
 
-                  {/* Tabela de Liberações */}
-                  <div>
-                    <p className="text-sm text-gray-600 mb-4">
-                      Configure quais tipos de solicitações este usuário pode aprovar/rejeitar.
-                    </p>
-                    <div className="border border-gray-200 rounded-xl overflow-hidden">
-                      <table className="w-full">
-                        <thead className="bg-gray-50">
-                          <tr>
-                            <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
-                              Tipo de Solicitação
-                            </th>
-                            <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-28">
-                              Pode Liberar
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-200">
-                          {/* LIQUIDAÇÃO */}
-                          <tr className="bg-gray-100">
-                            <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
-                              Liquidação
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <button
-                                onClick={() => {
-                                  const todosAtivos = TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]);
-                                  marcarTodasLiberacoes('LIQUIDACAO', !todosAtivos);
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-700"
-                              >
-                                {TIPOS_SOLICITACAO.LIQUIDACAO.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
-                              </button>
-                            </td>
-                          </tr>
-                          {TIPOS_SOLICITACAO.LIQUIDACAO.map((item) => (
-                            <tr key={item.tipo} className="hover:bg-gray-50">
-                              <td className="px-4 py-3">
-                                <div>
-                                  <span className="text-sm text-gray-700">{item.label}</span>
-                                  <p className="text-xs text-gray-500">{item.descricao}</p>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <Checkbox
-                                  checked={liberacoes[item.tipo] || false}
-                                  onChange={() => toggleLiberacao(item.tipo)}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-
-                          {/* LIMITES */}
-                          <tr className="bg-gray-100">
-                            <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
-                              Limites
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <button
-                                onClick={() => {
-                                  const todosAtivos = TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]);
-                                  marcarTodasLiberacoes('LIMITES', !todosAtivos);
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-700"
-                              >
-                                {TIPOS_SOLICITACAO.LIMITES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
-                              </button>
-                            </td>
-                          </tr>
-                          {TIPOS_SOLICITACAO.LIMITES.map((item) => (
-                            <tr key={item.tipo} className="hover:bg-gray-50">
-                              <td className="px-4 py-3">
-                                <div>
-                                  <span className="text-sm text-gray-700">{item.label}</span>
-                                  <p className="text-xs text-gray-500">{item.descricao}</p>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <Checkbox
-                                  checked={liberacoes[item.tipo] || false}
-                                  onChange={() => toggleLiberacao(item.tipo)}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-
-                          {/* OPERAÇÕES */}
-                          <tr className="bg-gray-100">
-                            <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
-                              Operações
-                            </td>
-                            <td className="px-4 py-2 text-center">
-                              <button
-                                onClick={() => {
-                                  const todosAtivos = TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]);
-                                  marcarTodasLiberacoes('OPERACOES', !todosAtivos);
-                                }}
-                                className="text-xs text-blue-600 hover:text-blue-700"
-                              >
-                                {TIPOS_SOLICITACAO.OPERACOES.every(t => liberacoes[t.tipo]) ? 'Desmarcar' : 'Marcar'} todos
-                              </button>
-                            </td>
-                          </tr>
-                          {TIPOS_SOLICITACAO.OPERACOES.map((item) => (
-                            <tr key={item.tipo} className="hover:bg-gray-50">
-                              <td className="px-4 py-3">
-                                <div>
-                                  <span className="text-sm text-gray-700">{item.label}</span>
-                                  <p className="text-xs text-gray-500">{item.descricao}</p>
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <Checkbox
-                                  checked={liberacoes[item.tipo] || false}
-                                  onChange={() => toggleLiberacao(item.tipo)}
-                                />
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                  {/* Matriz de Liberações */}
+                  {colunasLiberacao.length === 0 ? (
+                    <div className="text-center py-10 px-4 bg-gray-50 rounded-xl border border-dashed border-gray-200">
+                      <Unlock className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                      <p className="text-sm text-gray-500 font-medium">Nenhum acesso configurado</p>
+                      <p className="text-xs text-gray-400 mt-1">
+                        Configure os acessos na aba <span className="font-medium">Acesso</span> para definir as liberações por empresa e rota.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-3">
+                        Configure quais tipos de solicitações este usuário pode aprovar, por empresa e rota.
+                      </p>
+                      <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                        <table className="w-full min-w-max">
+                          <thead className="bg-gray-50">
+                            {/* Linha de empresas */}
+                            <tr>
+                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase min-w-[200px]">
+                                Tipo de Solicitação
+                              </th>
+                              {colunasLiberacao.map((col, idx) => (
+                                <th key={idx} className="px-3 py-3 text-center min-w-[130px]">
+                                  <div className="text-xs font-semibold text-gray-700 leading-tight">
+                                    {col.label}
+                                  </div>
+                                  <div className="text-xs text-gray-400 font-normal mt-0.5">
+                                    {col.sublabel}
+                                  </div>
+                                  {/* Botão marcar coluna inteira */}
+                                  <button
+                                    onClick={() => marcarColunaCompleta(col.empresaId, col.rotaId, !todosColunaMarcados(col.empresaId, col.rotaId))}
+                                    className="text-xs text-blue-500 hover:text-blue-700 mt-1 font-normal"
+                                  >
+                                    {todosColunaMarcados(col.empresaId, col.rotaId) ? 'Desmarcar todos' : 'Marcar todos'}
+                                  </button>
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-200">
+                            {(Object.keys(TIPOS_SOLICITACAO) as (keyof typeof TIPOS_SOLICITACAO)[]).map((categoria) => (
+                              <Fragment key={categoria}>
+                                {/* Linha de categoria */}
+                                <tr className="bg-gray-100">
+                                  <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                                    {categoria === 'LIQUIDACAO' ? 'Liquidação' : categoria === 'LIMITES' ? 'Limites' : 'Operações'}
+                                  </td>
+                                  {colunasLiberacao.map((col, idx) => (
+                                    <td key={idx} className="px-3 py-2 text-center">
+                                      <button
+                                        onClick={() => marcarCategoriaEscopo(categoria, col.empresaId, col.rotaId, !todosCategoriaMarcados(categoria, col.empresaId, col.rotaId))}
+                                        className="text-xs text-blue-500 hover:text-blue-700"
+                                      >
+                                        {todosCategoriaMarcados(categoria, col.empresaId, col.rotaId) ? 'Desmarcar' : 'Marcar'}
+                                      </button>
+                                    </td>
+                                  ))}
+                                </tr>
+                                {/* Linhas de tipos */}
+                                {TIPOS_SOLICITACAO[categoria].map((item) => (
+                                  <tr key={item.tipo} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3">
+                                      <div>
+                                        <span className="text-sm text-gray-700">{item.label}</span>
+                                        <p className="text-xs text-gray-400">{item.descricao}</p>
+                                      </div>
+                                    </td>
+                                    {colunasLiberacao.map((col, idx) => (
+                                      <td key={idx} className="px-3 py-3 text-center">
+                                        <Checkbox
+                                          checked={liberacoes[makeLiberacaoKey(item.tipo, col.empresaId, col.rotaId)] ?? false}
+                                          onChange={() => toggleLiberacao(item.tipo, col.empresaId, col.rotaId)}
+                                        />
+                                      </td>
+                                    ))}
+                                  </tr>
+                                ))}
+                              </Fragment>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </>
@@ -1150,7 +1185,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
         {/* Footer */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-          {/* (5) Aviso de seleção pendente não adicionada */}
           <div className="flex-1">
             {activeTab === 'acesso' && temSelecaoPendente && (
               <div className="flex items-center gap-1.5 text-xs text-amber-700">
