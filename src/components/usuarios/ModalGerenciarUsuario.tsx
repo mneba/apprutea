@@ -1081,8 +1081,11 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                                   <div className="text-xs font-semibold text-gray-700 leading-tight">
                                     {col.label}
                                   </div>
-                                  <div className="text-xs text-gray-400 font-normal mt-0.5">
-                                    {col.sublabel}
+                                  <div
+                                    className="text-xs text-gray-400 font-normal mt-0.5 cursor-default"
+                                    title={col.sublabel}
+                                  >
+                                    {col.sublabel.length > 15 ? col.sublabel.slice(0, 15) + '…' : col.sublabel}
                                   </div>
                                   <button
                                     onClick={() => marcarColunaCompleta(col.empresaId, col.rotaId, !todosColunaMarcados(col.empresaId, col.rotaId))}
