@@ -14,7 +14,8 @@ import {
   Shield,
   Building2,
   MapPin,
-  Smartphone,
+  Eye,
+  EyeOff,
   Unlock,
   ArrowDown,
   AlertCircle,
@@ -31,7 +32,7 @@ interface Props {
   onSave: () => void;
 }
 
-type TabType = 'dados' | 'acesso' | 'codigo' | 'permissoes' | 'liberacoes';
+type TabType = 'dados' | 'acesso' | 'permissoes' | 'liberacoes';
 
 interface SelecaoAcesso {
   hierarquia_id: string;
@@ -120,8 +121,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   const [novaEmpresaId, setNovaEmpresaId] = useState('');
   const [novasRotasIds, setNovasRotasIds] = useState<string[]>([]);
 
-  // === ABA CÓDIGO ===
+  // === ABA CÓDIGO (agora inline na aba Dados) ===
   const [codigo, setCodigo] = useState(usuario.token_acesso || '');
+  const [codigoVisivel, setCodigoVisivel] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [gerandoCodigo, setGerandoCodigo] = useState(false);
 
@@ -520,7 +522,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
   const tabs = [
     { id: 'dados' as TabType, label: 'Dados', icon: User },
     { id: 'acesso' as TabType, label: 'Acesso', icon: Building2 },
-    { id: 'codigo' as TabType, label: 'Código', icon: Key },
     { id: 'permissoes' as TabType, label: 'Permissões', icon: Shield },
     { id: 'liberacoes' as TabType, label: 'Liberações', icon: Unlock },
   ];
@@ -653,6 +654,72 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       <option value="APROVADO">Aprovado</option>
                       <option value="REJEITADO">Rejeitado</option>
                     </select>
+                  </div>
+
+                  {/* Código de Acesso — inline com olho */}
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                        <Key className="w-4 h-4 text-gray-400" />
+                        Código de Acesso
+                        {usuario.token_validado && (
+                          <span className="text-xs text-green-600 font-normal">✓ validado</span>
+                        )}
+                      </label>
+                    </div>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <input
+                          type={codigoVisivel ? 'text' : 'password'}
+                          value={codigo}
+                          readOnly
+                          placeholder="Nenhum código gerado"
+                          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-900 font-mono tracking-widest uppercase pr-10"
+                        />
+                        <button
+                          onClick={() => setCodigoVisivel((v) => !v)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                          title={codigoVisivel ? 'Ocultar código' : 'Mostrar código'}
+                        >
+                          {codigoVisivel
+                            ? <EyeOff className="w-4 h-4" />
+                            : <Eye className="w-4 h-4" />
+                          }
+                        </button>
+                      </div>
+                      <button
+                        onClick={gerarCodigo}
+                        disabled={gerandoCodigo || status !== 'APROVADO'}
+                        className="px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={status !== 'APROVADO' ? 'Aprovação necessária para gerar código' : 'Gerar novo código'}
+                      >
+                        {gerandoCodigo
+                          ? <Loader2 className="w-4 h-4 text-gray-600 animate-spin" />
+                          : <RefreshCw className="w-4 h-4 text-gray-600" />
+                        }
+                      </button>
+                      <button
+                        onClick={copiarCodigo}
+                        disabled={!codigo}
+                        className="px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
+                        title="Copiar código"
+                      >
+                        {copiado
+                          ? <Check className="w-4 h-4 text-green-600" />
+                          : <Copy className="w-4 h-4 text-gray-600" />
+                        }
+                      </button>
+                    </div>
+                    {status !== 'APROVADO' && (
+                      <p className="text-xs text-amber-600 mt-1.5">
+                        Aprove o usuário para gerar ou reger o código.
+                      </p>
+                    )}
+                    {codigo && codigo !== usuario.token_acesso && (
+                      <p className="text-xs text-green-600 mt-1.5">
+                        ✓ Novo código gerado. Clique em Salvar para confirmar.
+                      </p>
+                    )}
                   </div>
                 </div>
               )}
@@ -886,93 +953,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       Adicionar à Lista
                     </button>
                   </div>
-                </div>
-              )}
-
-              {/* ABA CÓDIGO */}
-              {activeTab === 'codigo' && (
-                <div className="space-y-6">
-                  {status !== 'APROVADO' && (
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-                      <div className="flex items-start gap-3">
-                        <Smartphone className="w-5 h-5 text-yellow-600 mt-0.5" />
-                        <div>
-                          <p className="text-sm font-medium text-yellow-800">
-                            Usuário não aprovado
-                          </p>
-                          <p className="text-sm text-yellow-700 mt-1">
-                            Para gerar o código de acesso, primeiro aprove o usuário na aba "Dados".
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Status:</span>
-                      <span className={`text-sm font-medium ${
-                        status === 'APROVADO' ? 'text-green-600' :
-                        status === 'PENDENTE' ? 'text-yellow-600' : 'text-red-600'
-                      }`}>
-                        {status}
-                      </span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm text-gray-500">Token validado:</span>
-                      <span className={`text-sm font-medium ${usuario.token_validado ? 'text-green-600' : 'text-gray-500'}`}>
-                        {usuario.token_validado ? 'Sim' : 'Não'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Código de Acesso
-                    </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={codigo}
-                        readOnly
-                        placeholder="Clique em gerar"
-                        className="flex-1 px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-900 text-center text-xl tracking-widest font-mono uppercase"
-                      />
-                      <button
-                        onClick={gerarCodigo}
-                        disabled={gerandoCodigo || status !== 'APROVADO'}
-                        className="px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={status !== 'APROVADO' ? 'Usuário precisa estar aprovado' : 'Gerar novo código'}
-                      >
-                        {gerandoCodigo ? (
-                          <Loader2 className="w-5 h-5 text-gray-600 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-5 h-5 text-gray-600" />
-                        )}
-                      </button>
-                      <button
-                        onClick={copiarCodigo}
-                        disabled={!codigo}
-                        className="px-4 py-3 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50"
-                        title="Copiar código"
-                      >
-                        {copiado ? (
-                          <Check className="w-5 h-5 text-green-600" />
-                        ) : (
-                          <Copy className="w-5 h-5 text-gray-600" />
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                      Formato: TK + 6 dígitos (gerado automaticamente)
-                    </p>
-                  </div>
-
-                  {codigo && codigo !== usuario.token_acesso && (
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                      <p className="text-sm text-green-700">✓ Novo código gerado! Clique em Salvar para confirmar.</p>
-                    </div>
-                  )}
                 </div>
               )}
 
