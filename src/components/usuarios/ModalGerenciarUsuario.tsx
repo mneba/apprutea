@@ -1077,14 +1077,13 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                                 Tipo de Solicitação
                               </th>
                               {colunasLiberacao.map((col, idx) => (
-                                <th key={idx} className="px-3 py-3 text-center min-w-[130px]">
+                                <th key={idx} className="px-3 py-3 text-left min-w-[130px]">
                                   <div className="text-xs font-semibold text-gray-700 leading-tight">
                                     {col.label}
                                   </div>
                                   <div className="text-xs text-gray-400 font-normal mt-0.5">
                                     {col.sublabel}
                                   </div>
-                                  {/* Botão marcar coluna inteira */}
                                   <button
                                     onClick={() => marcarColunaCompleta(col.empresaId, col.rotaId, !todosColunaMarcados(col.empresaId, col.rotaId))}
                                     className="text-xs text-blue-500 hover:text-blue-700 mt-1 font-normal"
@@ -1104,7 +1103,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                                     {categoria === 'LIQUIDACAO' ? 'Liquidação' : categoria === 'LIMITES' ? 'Limites' : 'Operações'}
                                   </td>
                                   {colunasLiberacao.map((col, idx) => (
-                                    <td key={idx} className="px-3 py-2 text-center">
+                                    <td key={idx} className="px-3 py-2 text-left">
                                       <button
                                         onClick={() => marcarCategoriaEscopo(categoria, col.empresaId, col.rotaId, !todosCategoriaMarcados(categoria, col.empresaId, col.rotaId))}
                                         className="text-xs text-blue-500 hover:text-blue-700"
@@ -1124,7 +1123,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                                       </div>
                                     </td>
                                     {colunasLiberacao.map((col, idx) => (
-                                      <td key={idx} className="px-3 py-3 text-center">
+                                      <td key={idx} className="px-3 py-3 text-left">
                                         <Checkbox
                                           checked={liberacoes[makeLiberacaoKey(item.tipo, col.empresaId, col.rotaId)] ?? false}
                                           onChange={() => toggleLiberacao(item.tipo, col.empresaId, col.rotaId)}
