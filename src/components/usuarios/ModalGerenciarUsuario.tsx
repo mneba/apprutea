@@ -1078,8 +1078,11 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                               </th>
                               {colunasLiberacao.map((col, idx) => (
                                 <th key={idx} className="px-3 py-3 text-left min-w-[130px]">
-                                  <div className="text-xs font-semibold text-gray-700 leading-tight">
-                                    {col.label}
+                                  <div
+                                    className="text-xs font-semibold text-gray-700 leading-tight cursor-default"
+                                    title={col.label}
+                                  >
+                                    {col.label.length > 15 ? col.label.slice(0, 15) + '…' : col.label}
                                   </div>
                                   <div
                                     className="text-xs text-gray-400 font-normal mt-0.5 cursor-default"
