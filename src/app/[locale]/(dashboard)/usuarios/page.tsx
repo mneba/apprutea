@@ -15,6 +15,7 @@ import {
   Copy,
   Check,
   Link,
+  ChevronDown,
 } from 'lucide-react';
 import { usuariosService } from '@/services/usuarios';
 import { useUser } from '@/contexts/UserContext';
@@ -228,33 +229,39 @@ export default function UsuariosPage() {
 
           {/* Filtro de empresa — só SUPER_ADMIN */}
           {ehSuperAdmin && (
-            <select
-              className="px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer min-w-[180px]"
-              value={filtroEmpresa}
-              onChange={(e) => setFiltroEmpresa(e.target.value)}
-            >
-              <option value="">Todas as Empresas</option>
-              <option value="sem_empresa">Sem Empresa</option>
-              {empresas.map((empresa) => (
-                <option key={empresa.id} value={empresa.id}>
-                  {empresa.nome}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <select
+                className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer"
+                value={filtroEmpresa}
+                onChange={(e) => setFiltroEmpresa(e.target.value)}
+              >
+                <option value="">Todas as Empresas</option>
+                <option value="sem_empresa">Sem Empresa</option>
+                {empresas.map((empresa) => (
+                  <option key={empresa.id} value={empresa.id}>
+                    {empresa.nome}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
           )}
 
           {/* Filtro de status */}
-          <select
-            className="px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer min-w-[160px]"
-            value={filtroStatus}
-            onChange={(e) => setFiltroStatus(e.target.value)}
-          >
-            <option value="">Todos os Status</option>
-            <option value="APROVADO">Aprovados</option>
-            <option value="PENDENTE">Pendentes</option>
-            <option value="REJEITADO">Rejeitados</option>
-            <option value="MONITOR">Apenas Móvel</option>
-          </select>
+          <div className="relative">
+            <select
+              className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer"
+              value={filtroStatus}
+              onChange={(e) => setFiltroStatus(e.target.value)}
+            >
+              <option value="">Todos os Status</option>
+              <option value="APROVADO">Aprovados</option>
+              <option value="PENDENTE">Pendentes</option>
+              <option value="REJEITADO">Rejeitados</option>
+              <option value="MONITOR">Apenas Móvel</option>
+            </select>
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+          </div>
         </div>
       </div>
 
