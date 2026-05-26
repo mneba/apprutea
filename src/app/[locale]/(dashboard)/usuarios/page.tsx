@@ -229,7 +229,7 @@ export default function UsuariosPage() {
           {/* Filtro de empresa — só SUPER_ADMIN */}
           {ehSuperAdmin && (
             <select
-              className="appearance-none px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer min-w-[180px]"
+              className="px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer min-w-[180px]"
               value={filtroEmpresa}
               onChange={(e) => setFiltroEmpresa(e.target.value)}
             >
@@ -245,7 +245,7 @@ export default function UsuariosPage() {
 
           {/* Filtro de status */}
           <select
-            className="appearance-none px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer min-w-[160px]"
+            className="px-4 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer min-w-[160px]"
             value={filtroStatus}
             onChange={(e) => setFiltroStatus(e.target.value)}
           >
