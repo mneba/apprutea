@@ -9,6 +9,7 @@ import {
   Clock,
   User,
   UserPlus,
+  Users,
   Building2,
   Loader2,
   Smartphone,
@@ -22,41 +23,100 @@ import { useUser } from '@/contexts/UserContext';
 import { ModalGerenciarUsuario } from '@/components/usuarios';
 import type { UserProfile, Empresa } from '@/types/database';
 
-const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
-  APROVADO: { label: 'Aprovado', color: 'bg-green-100 text-green-700', icon: CheckCircle },
-  PENDENTE: { label: 'Pendente', color: 'bg-yellow-100 text-yellow-700', icon: Clock },
-  REJEITADO: { label: 'Rejeitado', color: 'bg-red-100 text-red-700', icon: XCircle },
-};
+// =====================================================
+// COMPONENTES AUXILIARES
+// =====================================================
+
+function CardEstatistica({
+  titulo,
+  valor,
+  icone: Icone,
+  corIcone,
+  corFundo,
+  ativo = false,
+  onClick,
+}: {
+  titulo: string;
+  valor: number;
+  icone: React.ElementType;
+  corIcone: string;
+  corFundo: string;
+  ativo?: boolean;
+  onClick?: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full text-left bg-white rounded-xl border p-3 hover:shadow-md transition-all ${
+        ativo ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
+      }`}
+    >
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`w-5 h-5 ${corIcone}`} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xl font-bold text-gray-900">{valor}</p>
+          <p className="text-xs text-gray-500 truncate">{titulo}</p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function BadgeStatus({ status }: { status: string }) {
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    APROVADO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Aprovado' },
+    PENDENTE: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Pendente' },
+    REJEITADO: { bg: 'bg-red-100', text: 'text-red-700', label: 'Rejeitado' },
+  };
+  const c = config[status] || { bg: 'bg-gray-100', text: 'text-gray-700', label: status };
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>
+      {c.label}
+    </span>
+  );
+}
+
+// =====================================================
+// PÁGINA
+// =====================================================
 
 export default function UsuariosPage() {
   const { profile, localizacao, loading: loadingUser } = useUser();
   const [usuarios, setUsuarios] = useState<UserProfile[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filtroStatus, setFiltroStatus] = useState<string>('');
-  const [filtroEmpresa, setFiltroEmpresa] = useState<string>('');
+  const [busca, setBusca] = useState('');
+  const [statusFiltro, setStatusFiltro] = useState('');
+  const [empresaFiltro, setEmpresaFiltro] = useState('');
   const [usuarioSelecionado, setUsuarioSelecionado] = useState<UserProfile | null>(null);
   const [modalAberto, setModalAberto] = useState(false);
+
+  // Modal convite
+  const [modalConviteAberto, setModalConviteAberto] = useState(false);
+  const [conviteEmail, setConviteEmail] = useState('');
+  const [conviteEmpresaId, setConviteEmpresaId] = useState('');
+  const [linkGerado, setLinkGerado] = useState('');
+  const [linkCopiado, setLinkCopiado] = useState(false);
 
   const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
 
   useEffect(() => {
-    if (!loadingUser && profile) {
-      carregarDados();
-    }
+    if (!loadingUser && profile) carregarDados();
   }, [loadingUser, profile]);
 
   const carregarDados = async () => {
     setLoading(true);
     try {
-      const usuariosData = await usuariosService.listarUsuarios({
-        isSuperAdmin: ehSuperAdmin,
-        empresaId: ehSuperAdmin ? undefined : (localizacao.empresa_id || undefined),
-      });
+      const [usuariosData, empresasData] = await Promise.all([
+        usuariosService.listarUsuarios({
+          isSuperAdmin: ehSuperAdmin,
+          empresaId: ehSuperAdmin ? undefined : (localizacao.empresa_id || undefined),
+        }),
+        usuariosService.listarEmpresas(),
+      ]);
       setUsuarios(usuariosData);
-
-      const empresasData = await usuariosService.listarEmpresas();
       setEmpresas(empresasData);
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
@@ -66,18 +126,12 @@ export default function UsuariosPage() {
   };
 
   const getEmpresaNome = (usuario: UserProfile) => {
-    if (!usuario.empresas_ids || usuario.empresas_ids.length === 0) {
-      return usuario.empresa_pretendida || '-';
-    }
-    const empresa = empresas.find((e) => e.id === usuario.empresas_ids![0]);
-    return empresa?.nome || usuario.empresa_pretendida || '-';
+    if (!usuario.empresas_ids?.length) return usuario.empresa_pretendida || '-';
+    return empresas.find((e) => e.id === usuario.empresas_ids![0])?.nome || usuario.empresa_pretendida || '-';
   };
 
-  const getFotoUrl = (usuario: UserProfile): string => {
-    return (usuario as any).url_foto_usuario || (usuario as any).Url_foto_usuario || '';
-  };
-
-  const ehMonitor = (usuario: UserProfile) => usuario.tipo_usuario === 'MONITOR';
+  const getFotoUrl = (usuario: UserProfile): string =>
+    (usuario as any).url_foto_usuario || (usuario as any).Url_foto_usuario || '';
 
   const estatisticas = {
     total: usuarios.length,
@@ -87,40 +141,24 @@ export default function UsuariosPage() {
   };
 
   const handleFiltroStatus = (status: string) => {
-    setFiltroStatus((prev) => (prev === status ? '' : status));
+    setStatusFiltro((prev) => (prev === status ? '' : status));
   };
 
-  const usuariosFiltrados = usuarios.filter((usuario) => {
-    const matchSearch =
-      !search ||
-      usuario.nome?.toLowerCase().includes(search.toLowerCase()) ||
-      usuario.telefone?.toLowerCase().includes(search.toLowerCase()) ||
-      usuario.empresa_pretendida?.toLowerCase().includes(search.toLowerCase());
-
+  const usuariosFiltrados = usuarios.filter((u) => {
+    const matchBusca =
+      !busca ||
+      u.nome?.toLowerCase().includes(busca.toLowerCase()) ||
+      u.telefone?.toLowerCase().includes(busca.toLowerCase()) ||
+      u.empresa_pretendida?.toLowerCase().includes(busca.toLowerCase());
     const matchStatus =
-      !filtroStatus ||
-      (filtroStatus === 'MONITOR'
-        ? usuario.tipo_usuario === 'MONITOR'
-        : usuario.status === filtroStatus);
-
+      !statusFiltro ||
+      (statusFiltro === 'MONITOR' ? u.tipo_usuario === 'MONITOR' : u.status === statusFiltro);
     const matchEmpresa =
-      !filtroEmpresa ||
-      (usuario.empresas_ids && usuario.empresas_ids.includes(filtroEmpresa)) ||
-      (!usuario.empresas_ids?.length && filtroEmpresa === 'sem_empresa');
-
-    return matchSearch && matchStatus && matchEmpresa;
+      !empresaFiltro ||
+      u.empresas_ids?.includes(empresaFiltro) ||
+      (!u.empresas_ids?.length && empresaFiltro === 'sem_empresa');
+    return matchBusca && matchStatus && matchEmpresa;
   });
-
-  const [modalConviteAberto, setModalConviteAberto] = useState(false);
-  const [conviteEmail, setConviteEmail] = useState('');
-  const [conviteEmpresaId, setConviteEmpresaId] = useState('');
-  const [linkGerado, setLinkGerado] = useState('');
-  const [linkCopiado, setLinkCopiado] = useState(false);
-
-  const handleGerenciar = (usuario: UserProfile) => {
-    setUsuarioSelecionado(usuario);
-    setModalAberto(true);
-  };
 
   const handleAbrirConvite = () => {
     setConviteEmail('');
@@ -131,14 +169,9 @@ export default function UsuariosPage() {
   };
 
   const handleGerarLink = () => {
-    const empresaId = conviteEmpresaId;
-    if (!empresaId) {
-      alert('Selecione uma empresa para gerar o link.');
-      return;
-    }
+    if (!conviteEmpresaId) { alert('Selecione uma empresa.'); return; }
     const base = typeof window !== 'undefined' ? window.location.origin : '';
-    const link = `${base}/cadastro?empresa_id=${empresaId}`;
-    setLinkGerado(link);
+    setLinkGerado(`${base}/cadastro?empresa_id=${conviteEmpresaId}`);
     setLinkCopiado(false);
   };
 
@@ -147,9 +180,7 @@ export default function UsuariosPage() {
       await navigator.clipboard.writeText(linkGerado);
       setLinkCopiado(true);
       setTimeout(() => setLinkCopiado(false), 2000);
-    } catch {
-      alert('Erro ao copiar. Copie manualmente.');
-    }
+    } catch { alert('Copie manualmente.'); }
   };
 
   if (loadingUser) {
@@ -166,7 +197,7 @@ export default function UsuariosPage() {
       {/* ===== HEADER FIXO ===== */}
       <div className="flex-shrink-0 space-y-4 pb-4 border-b border-gray-200">
 
-        {/* Título */}
+        {/* Título + Botão */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Usuários</h1>
@@ -181,78 +212,49 @@ export default function UsuariosPage() {
           </button>
         </div>
 
-        {/* Cards de Estatísticas */}
+        {/* Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {[
-            { id: '', label: 'Total', valor: estatisticas.total, icon: User, iconBg: 'bg-blue-100', iconColor: 'text-blue-600' },
-            { id: 'APROVADO', label: 'Aprovados', valor: estatisticas.aprovados, icon: CheckCircle, iconBg: 'bg-green-100', iconColor: 'text-green-600' },
-            { id: 'PENDENTE', label: 'Pendentes', valor: estatisticas.pendentes, icon: Clock, iconBg: 'bg-yellow-100', iconColor: 'text-yellow-600' },
-            { id: 'MONITOR', label: 'Apenas Móvel', valor: estatisticas.monitores, icon: Smartphone, iconBg: 'bg-orange-100', iconColor: 'text-orange-600' },
-          ].map((card) => {
-            const Icon = card.icon;
-            const ativo = filtroStatus === card.id;
-            return (
-              <button
-                key={card.id}
-                onClick={() => handleFiltroStatus(card.id)}
-                className={`w-full text-left bg-white rounded-xl border p-3 hover:shadow-md transition-all ${
-                  ativo ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-10 h-10 rounded-lg ${card.iconBg} flex items-center justify-center flex-shrink-0`}>
-                    <Icon className={`w-5 h-5 ${card.iconColor}`} />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-xl font-bold text-gray-900">{card.valor}</p>
-                    <p className="text-xs text-gray-500 truncate">{card.label}</p>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+          <CardEstatistica titulo="Total" valor={estatisticas.total} icone={Users} corIcone="text-blue-600" corFundo="bg-blue-100" ativo={!statusFiltro} onClick={() => handleFiltroStatus('')} />
+          <CardEstatistica titulo="Aprovados" valor={estatisticas.aprovados} icone={CheckCircle} corIcone="text-green-600" corFundo="bg-green-100" ativo={statusFiltro === 'APROVADO'} onClick={() => handleFiltroStatus('APROVADO')} />
+          <CardEstatistica titulo="Pendentes" valor={estatisticas.pendentes} icone={Clock} corIcone="text-yellow-600" corFundo="bg-yellow-100" ativo={statusFiltro === 'PENDENTE'} onClick={() => handleFiltroStatus('PENDENTE')} />
+          <CardEstatistica titulo="Apenas Móvel" valor={estatisticas.monitores} icone={Smartphone} corIcone="text-orange-600" corFundo="bg-orange-100" ativo={statusFiltro === 'MONITOR'} onClick={() => handleFiltroStatus('MONITOR')} />
         </div>
 
-        {/* Busca e Filtros */}
+        {/* Filtros */}
         <div className="flex flex-col sm:flex-row gap-3">
-          {/* Busca */}
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por nome, telefone ou empresa..."
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
-          {/* Filtro de empresa — só SUPER_ADMIN */}
           {ehSuperAdmin && (
             <div className="relative">
               <select
-                className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer"
-                value={filtroEmpresa}
-                onChange={(e) => setFiltroEmpresa(e.target.value)}
+                value={empresaFiltro}
+                onChange={(e) => setEmpresaFiltro(e.target.value)}
+                className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
                 <option value="">Todas as Empresas</option>
                 <option value="sem_empresa">Sem Empresa</option>
-                {empresas.map((empresa) => (
-                  <option key={empresa.id} value={empresa.id}>
-                    {empresa.nome}
-                  </option>
+                {empresas.map((e) => (
+                  <option key={e.id} value={e.id}>{e.nome}</option>
                 ))}
               </select>
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
           )}
 
-          {/* Filtro de status */}
           <div className="relative">
             <select
-              className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm cursor-pointer"
-              value={filtroStatus}
-              onChange={(e) => setFiltroStatus(e.target.value)}
+              value={statusFiltro}
+              onChange={(e) => setStatusFiltro(e.target.value)}
+              className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="">Todos os Status</option>
               <option value="APROVADO">Aprovados</option>
@@ -283,9 +285,9 @@ export default function UsuariosPage() {
               <tbody className="divide-y divide-gray-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-16 text-center text-gray-500">
+                    <td colSpan={6} className="px-4 py-16 text-center">
                       <Loader2 className="w-6 h-6 text-blue-600 animate-spin mx-auto mb-2" />
-                      <p className="text-sm">Carregando usuários...</p>
+                      <p className="text-sm text-gray-500">Carregando usuários...</p>
                     </td>
                   </tr>
                 ) : usuariosFiltrados.length === 0 ? (
@@ -297,10 +299,7 @@ export default function UsuariosPage() {
                   </tr>
                 ) : (
                   usuariosFiltrados.map((usuario) => {
-                    const statusInfo = statusConfig[usuario.status] || statusConfig.PENDENTE;
-                    const StatusIcon = statusInfo.icon;
                     const fotoUrl = getFotoUrl(usuario);
-
                     return (
                       <tr key={usuario.id} className="hover:bg-gray-50 transition-colors">
 
@@ -315,7 +314,7 @@ export default function UsuariosPage() {
                                   <User className="w-4 h-4 text-gray-400" />
                                 )}
                               </div>
-                              {ehMonitor(usuario) && (
+                              {usuario.tipo_usuario === 'MONITOR' && (
                                 <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center border-2 border-white">
                                   <Smartphone className="w-2.5 h-2.5 text-white" />
                                 </div>
@@ -338,10 +337,7 @@ export default function UsuariosPage() {
 
                         {/* Status */}
                         <td className="px-4 py-3">
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${statusInfo.color}`}>
-                            <StatusIcon className="w-3.5 h-3.5" />
-                            {statusInfo.label}
-                          </span>
+                          <BadgeStatus status={usuario.status} />
                         </td>
 
                         {/* Código */}
@@ -370,7 +366,7 @@ export default function UsuariosPage() {
                         {/* Ações */}
                         <td className="px-4 py-3 text-center">
                           <button
-                            onClick={() => handleGerenciar(usuario)}
+                            onClick={() => { setUsuarioSelecionado(usuario); setModalAberto(true); }}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                           >
                             <Settings className="w-3.5 h-3.5" />
@@ -387,28 +383,21 @@ export default function UsuariosPage() {
         </div>
       </div>
 
-      {/* Modal */}
+      {/* ===== MODAL GERENCIAR ===== */}
       {modalAberto && usuarioSelecionado && (
         <ModalGerenciarUsuario
           usuario={usuarioSelecionado}
-          onClose={() => {
-            setModalAberto(false);
-            setUsuarioSelecionado(null);
-          }}
-          onSave={() => {
-            carregarDados();
-            setModalAberto(false);
-            setUsuarioSelecionado(null);
-          }}
+          onClose={() => { setModalAberto(false); setUsuarioSelecionado(null); }}
+          onSave={() => { carregarDados(); setModalAberto(false); setUsuarioSelecionado(null); }}
         />
       )}
-      {/* Modal Novo Usuário (Convite) */}
+
+      {/* ===== MODAL CONVITE ===== */}
       {modalConviteAberto && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setModalConviteAberto(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
 
-            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -419,18 +408,12 @@ export default function UsuariosPage() {
                   <p className="text-xs text-gray-500">Gere um link de cadastro para enviar</p>
                 </div>
               </div>
-              <button
-                onClick={() => setModalConviteAberto(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg"
-              >
+              <button onClick={() => setModalConviteAberto(false)} className="p-2 hover:bg-gray-100 rounded-lg">
                 <XCircle className="w-5 h-5 text-gray-400" />
               </button>
             </div>
 
-            {/* Body */}
             <div className="p-6 space-y-4">
-
-              {/* E-mail (provisório — será usado quando o envio for implementado) */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   E-mail do convidado
@@ -441,29 +424,28 @@ export default function UsuariosPage() {
                   value={conviteEmail}
                   onChange={(e) => setConviteEmail(e.target.value)}
                   placeholder="usuario@exemplo.com"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className="w-full pl-4 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
 
-              {/* Empresa — só SUPER_ADMIN escolhe */}
               {ehSuperAdmin ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Empresa <span className="text-red-500">*</span>
                   </label>
-                  <select
-                    value={conviteEmpresaId}
-                    onChange={(e) => {
-                      setConviteEmpresaId(e.target.value);
-                      setLinkGerado('');
-                    }}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 text-sm bg-white"
-                  >
-                    <option value="">Selecione uma empresa...</option>
-                    {empresas.map((e) => (
-                      <option key={e.id} value={e.id}>{e.nome}</option>
-                    ))}
-                  </select>
+                  <div className="relative">
+                    <select
+                      value={conviteEmpresaId}
+                      onChange={(e) => { setConviteEmpresaId(e.target.value); setLinkGerado(''); }}
+                      className="appearance-none w-full pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                    >
+                      <option value="">Selecione uma empresa...</option>
+                      {empresas.map((e) => (
+                        <option key={e.id} value={e.id}>{e.nome}</option>
+                      ))}
+                    </select>
+                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                  </div>
                 </div>
               ) : (
                 <div>
@@ -475,7 +457,6 @@ export default function UsuariosPage() {
                 </div>
               )}
 
-              {/* Link gerado */}
               {linkGerado && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-700">Link de Cadastro</label>
@@ -488,26 +469,18 @@ export default function UsuariosPage() {
                       className="px-3 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex-shrink-0"
                       title="Copiar link"
                     >
-                      {linkCopiado
-                        ? <Check className="w-4 h-4 text-green-600" />
-                        : <Copy className="w-4 h-4 text-gray-500" />
-                      }
+                      {linkCopiado ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-gray-500" />}
                     </button>
                   </div>
-                  <p className="text-xs text-amber-600 flex items-start gap-1.5">
-                    <span className="flex-shrink-0 mt-0.5">⚠</span>
-                    Envio automático por e-mail ainda não implementado. Copie o link e envie manualmente.
+                  <p className="text-xs text-amber-600">
+                    ⚠ Envio automático por e-mail ainda não implementado. Copie o link e envie manualmente.
                   </p>
                 </div>
               )}
             </div>
 
-            {/* Footer */}
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button
-                onClick={() => setModalConviteAberto(false)}
-                className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm"
-              >
+              <button onClick={() => setModalConviteAberto(false)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm">
                 Cancelar
               </button>
               <button
