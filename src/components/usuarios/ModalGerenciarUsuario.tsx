@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Fragment } from 'react';
+import { useState, useEffect, Fragment, useRef } from 'react';
 import { 
   X, 
   User, 
@@ -16,12 +16,14 @@ import {
   MapPin,
   Eye,
   EyeOff,
+  Camera,
   Unlock,
   ArrowDown,
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
+import { createClient } from '@/lib/supabase/client';
 import { usuariosService } from '@/services/usuarios';
 import { organizacaoService } from '@/services/organizacao';
 import type { UserProfile, Hierarquia, Cidade, Empresa, Rota, ModuloSistema, UserPermissao } from '@/types/database';
@@ -75,6 +77,7 @@ const TODOS_TIPOS = [
 ];
 
 export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
+  const supabase = createClient();
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -519,6 +522,51 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     }
   };
 
+  // === FOTO ===
+  const [fotoUrl, setFotoUrl] = useState(usuario.url_foto_usuario || (usuario as any).Url_foto_usuario || '');
+  const [uploadandoFoto, setUploadandoFoto] = useState(false);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFotoClick = () => {
+    fotoInputRef.current?.click();
+  };
+
+  const handleFotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadandoFoto(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `usuarios/${usuario.user_id}.${ext}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('fotos')
+        .upload(path, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('fotos')
+        .getPublicUrl(path);
+
+      const url = urlData.publicUrl;
+
+      await usuariosService.atualizarUsuario(usuario.user_id, {
+        url_foto_usuario: url,
+      } as any);
+
+      setFotoUrl(url);
+    } catch (err) {
+      console.error('Erro ao fazer upload da foto:', err);
+      alert('Erro ao enviar foto. Tente novamente.');
+    } finally {
+      setUploadandoFoto(false);
+      // Limpar input para permitir reenvio do mesmo arquivo
+      if (fotoInputRef.current) fotoInputRef.current.value = '';
+    }
+  };
+
   const tabs = [
     { id: 'dados' as TabType, label: 'Dados', icon: User },
     { id: 'acesso' as TabType, label: 'Acesso', icon: Building2 },
@@ -535,13 +583,36 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center overflow-hidden">
-              {usuario.Url_foto_usuario ? (
-                <img src={usuario.Url_foto_usuario} alt="" className="w-12 h-12 object-cover" />
-              ) : (
-                <User className="w-6 h-6 text-white" />
-              )}
+          <div className="flex items-center gap-4">
+            {/* Avatar clicável */}
+            <div className="relative">
+              <button
+                onClick={handleFotoClick}
+                disabled={uploadandoFoto}
+                className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center overflow-hidden ring-2 ring-white shadow-md hover:ring-blue-300 transition-all group"
+                title="Clique para trocar a foto"
+              >
+                {uploadandoFoto ? (
+                  <Loader2 className="w-6 h-6 text-white animate-spin" />
+                ) : fotoUrl ? (
+                  <img src={fotoUrl} alt="" className="w-16 h-16 object-cover" />
+                ) : (
+                  <User className="w-7 h-7 text-white" />
+                )}
+                {/* Overlay no hover */}
+                {!uploadandoFoto && (
+                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center rounded-full">
+                    <Camera className="w-5 h-5 text-white" />
+                  </div>
+                )}
+              </button>
+              <input
+                ref={fotoInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFotoChange}
+                className="hidden"
+              />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-gray-900">{usuario.nome}</h2>
