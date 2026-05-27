@@ -459,6 +459,16 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     }));
   });
 
+  const handleAlterarStatus = async (novoStatus: 'APROVADO' | 'PENDENTE' | 'REJEITADO') => {
+    try {
+      await usuariosService.atualizarUsuario(usuario.user_id, { status: novoStatus });
+      setStatus(novoStatus);
+    } catch (err) {
+      console.error('Erro ao alterar status:', err);
+      alert('Erro ao alterar status. Tente novamente.');
+    }
+  };
+
   // === MUDANÇA DE TIPO DE USUÁRIO ===
   const handleMudarTipoUsuario = async (novoTipo: 'ADMIN' | 'USUARIO_PADRAO') => {
     setTipoUsuario(novoTipo);
@@ -746,15 +756,45 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
-                    <select
-                      value={status}
-                      onChange={(e) => setStatus(e.target.value as typeof status)}
-                      className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                    >
-                      <option value="PENDENTE">Pendente</option>
-                      <option value="APROVADO">Aprovado</option>
-                      <option value="REJEITADO">Rejeitado</option>
-                    </select>
+                    <div className="flex items-center gap-3">
+                      {/* Badge do status atual */}
+                      <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium flex-shrink-0 ${
+                        status === 'APROVADO' ? 'bg-green-100 text-green-700' :
+                        status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {status === 'APROVADO' ? '✓ Aprovado' :
+                         status === 'PENDENTE' ? '⏳ Pendente' : '✗ Rejeitado'}
+                      </span>
+
+                      {/* Botões de ação — só mostra os que fazem sentido */}
+                      <div className="flex gap-2 flex-1">
+                        {status !== 'APROVADO' && (
+                          <button
+                            onClick={() => handleAlterarStatus('APROVADO')}
+                            className="flex-1 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
+                          >
+                            Aprovar
+                          </button>
+                        )}
+                        {status !== 'REJEITADO' && (
+                          <button
+                            onClick={() => handleAlterarStatus('REJEITADO')}
+                            className="flex-1 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
+                          >
+                            Rejeitar
+                          </button>
+                        )}
+                        {status !== 'PENDENTE' && (
+                          <button
+                            onClick={() => handleAlterarStatus('PENDENTE')}
+                            className="flex-1 px-3 py-1.5 text-sm font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg hover:bg-yellow-100 transition-colors"
+                          >
+                            Pendente
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
 
                   {/* Código de Acesso — inline com olho */}
