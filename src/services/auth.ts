@@ -27,7 +27,7 @@ export const authService = {
         nome: dados.nome,
         telefone: dados.telefone,
         empresa_pretendida: dados.empresa_pretendida,
-        status: 'APROVADO',
+        status: 'PENDENTE',
         tipo_usuario: 'USUARIO_PADRAO',
         empresas_ids: [],
         hierarquias_ids: [],
