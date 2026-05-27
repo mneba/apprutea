@@ -50,14 +50,14 @@ const menuGroups: MenuGroup[] = [
     title: 'Estrutura',
     items: [
       { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores' },
-      { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao', sempreAtivo: true },
+      { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao' },
     ],
   },
   {
     title: 'Administração',
     items: [
       { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes' },
-      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', sempreAtivo: true },
+      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios' },
     ],
   },
 ];
