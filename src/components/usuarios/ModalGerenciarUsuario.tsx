@@ -32,6 +32,7 @@ interface Props {
   usuario: UserProfile;
   onClose: () => void;
   onSave: () => void;
+  onStatusChange?: () => void;
 }
 
 type TabType = 'dados' | 'acesso' | 'permissoes' | 'liberacoes';
@@ -76,7 +77,7 @@ const TODOS_TIPOS = [
   ...TIPOS_SOLICITACAO.OPERACOES,
 ];
 
-export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
+export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange }: Props) {
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(true);
@@ -459,10 +460,23 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     }));
   });
 
+  const [toast, setToast] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const handleAlterarStatus = async (novoStatus: 'APROVADO' | 'PENDENTE' | 'REJEITADO') => {
     try {
       await usuariosService.atualizarUsuario(usuario.user_id, { status: novoStatus });
       setStatus(novoStatus);
+      showToast(
+        novoStatus === 'APROVADO' ? '✓ Usuário aprovado com sucesso' :
+        novoStatus === 'REJEITADO' ? '✗ Usuário rejeitado' :
+        '⏳ Status alterado para Pendente'
+      );
+      onStatusChange?.(); // atualiza a lista sem fechar o modal
     } catch (err) {
       console.error('Erro ao alterar status:', err);
       alert('Erro ao alterar status. Tente novamente.');
@@ -664,6 +678,17 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
           </button>
         </div>
 
+        {/* Toast de feedback */}
+        {toast && (
+          <div className={`mx-6 mt-3 px-4 py-2.5 rounded-lg text-sm font-medium text-center transition-all ${
+            toast.startsWith('✓') ? 'bg-green-100 text-green-800 border border-green-200' :
+            toast.startsWith('✗') ? 'bg-red-100 text-red-800 border border-red-200' :
+            'bg-yellow-100 text-yellow-800 border border-yellow-200'
+          }`}>
+            {toast}
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="flex border-b border-gray-200 px-4">
           {tabsVisiveis.map((tab) => {
@@ -755,45 +780,51 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Status</label>
-                    <div className="flex items-center gap-3">
-                      {/* Badge do status atual */}
-                      <span className={`inline-flex items-center px-3 py-1.5 rounded-lg text-sm font-medium flex-shrink-0 ${
-                        status === 'APROVADO' ? 'bg-green-100 text-green-700' :
-                        status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
-                        'bg-red-100 text-red-700'
-                      }`}>
-                        {status === 'APROVADO' ? '✓ Aprovado' :
-                         status === 'PENDENTE' ? '⏳ Pendente' : '✗ Rejeitado'}
-                      </span>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Status</label>
 
-                      {/* Botões de ação — só mostra os que fazem sentido */}
-                      <div className="flex gap-2 flex-1">
-                        {status !== 'APROVADO' && (
-                          <button
-                            onClick={() => handleAlterarStatus('APROVADO')}
-                            className="flex-1 px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg hover:bg-green-100 transition-colors"
-                          >
-                            Aprovar
-                          </button>
-                        )}
-                        {status !== 'REJEITADO' && (
-                          <button
-                            onClick={() => handleAlterarStatus('REJEITADO')}
-                            className="flex-1 px-3 py-1.5 text-sm font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 transition-colors"
-                          >
-                            Rejeitar
-                          </button>
-                        )}
-                        {status !== 'PENDENTE' && (
-                          <button
-                            onClick={() => handleAlterarStatus('PENDENTE')}
-                            className="flex-1 px-3 py-1.5 text-sm font-medium text-yellow-700 bg-yellow-50 border border-yellow-200 rounded-lg hover:bg-yellow-100 transition-colors"
-                          >
-                            Pendente
-                          </button>
-                        )}
-                      </div>
+                    {/* Badge do status atual */}
+                    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-3 w-fit ${
+                      status === 'APROVADO' ? 'bg-green-100 text-green-800' :
+                      status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      <span className="text-base">
+                        {status === 'APROVADO' ? '✓' : status === 'PENDENTE' ? '⏳' : '✗'}
+                      </span>
+                      <span className="text-sm font-semibold">
+                        {status === 'APROVADO' ? 'Aprovado' : status === 'PENDENTE' ? 'Pendente' : 'Rejeitado'}
+                      </span>
+                    </div>
+
+                    {/* Botões de ação */}
+                    <div className="flex gap-2">
+                      {status !== 'APROVADO' && (
+                        <button
+                          onClick={() => handleAlterarStatus('APROVADO')}
+                          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 active:bg-green-800 transition-colors shadow-sm"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          Aprovar
+                        </button>
+                      )}
+                      {status !== 'REJEITADO' && (
+                        <button
+                          onClick={() => handleAlterarStatus('REJEITADO')}
+                          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors shadow-sm"
+                        >
+                          <XCircle className="w-4 h-4" />
+                          Rejeitar
+                        </button>
+                      )}
+                      {status !== 'PENDENTE' && (
+                        <button
+                          onClick={() => handleAlterarStatus('PENDENTE')}
+                          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-yellow-500 text-white hover:bg-yellow-600 active:bg-yellow-700 transition-colors shadow-sm"
+                        >
+                          <Clock className="w-4 h-4" />
+                          Pendente
+                        </button>
+                      )}
                     </div>
                   </div>
 

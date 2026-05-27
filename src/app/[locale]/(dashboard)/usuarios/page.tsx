@@ -388,6 +388,7 @@ export default function UsuariosPage() {
         <ModalGerenciarUsuario
           usuario={usuarioSelecionado}
           onClose={() => { setModalAberto(false); setUsuarioSelecionado(null); }}
+          onStatusChange={() => carregarDados()}
           onSave={() => { carregarDados(); setModalAberto(false); setUsuarioSelecionado(null); }}
         />
       )}
