@@ -21,6 +21,8 @@ import {
   ArrowDown,
   AlertCircle,
   CheckCircle2,
+  XCircle,
+  Clock,
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
