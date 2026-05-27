@@ -9,6 +9,13 @@ import type { Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
 
 export function SeletorLocalizacao() {
   const { profile, isSuperAdmin, localizacao, setLocalizacao } = useUser();
+
+  // Calcular se deve ocultar o seletor:
+  // Não-SUPER_ADMIN com 1 empresa e no máximo 1 rota não precisa do seletor
+  const deveOcultarSeletor = !isSuperAdmin && profile && (
+    (profile.empresas_ids || []).length <= 1 &&
+    (profile.rotas_ids || []).length <= 1
+  );
   const [isOpen, setIsOpen] = useState(false);
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
   const [cidades, setCidades] = useState<Cidade[]>([]);
@@ -249,6 +256,9 @@ export function SeletorLocalizacao() {
   };
 
   const breadcrumb = getBreadcrumb();
+
+  // Ocultar seletor para usuários com 1 empresa e no máximo 1 rota
+  if (deveOcultarSeletor) return null;
 
   return (
     <div className="relative" ref={dropdownRef}>

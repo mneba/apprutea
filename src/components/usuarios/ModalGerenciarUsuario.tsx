@@ -631,7 +631,16 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     { id: 'liberacoes' as TabType, label: 'Liberações', icon: Unlock },
   ];
 
-  const tabsVisiveis = ehMonitor ? tabs.filter(t => t.id !== 'permissoes') : tabs;
+  // No modo próprio perfil, esconde aba Acesso se tem só 1 empresa e no máximo 1 rota
+  const deveEsconderAbaAcesso = modoProprioPerfil &&
+    selecoes.length <= 1 &&
+    (selecoes.length === 0 || selecoes[0].rotas_ids.length <= 1);
+
+  const tabsVisiveis = tabs.filter(t => {
+    if (ehMonitor && t.id === 'permissoes') return false;
+    if (deveEsconderAbaAcesso && t.id === 'acesso') return false;
+    return true;
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1011,6 +1020,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                                 )}
                               </div>
                             </div>
+                            {!modoProprioPerfil && (
                             <button
                               onClick={() => handleRemoverSelecao(index)}
                               className="p-2 text-red-500 hover:bg-red-50 rounded-lg flex-shrink-0"
@@ -1018,6 +1028,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
+                            )}
                           </div>
                         ))}
                       </div>
