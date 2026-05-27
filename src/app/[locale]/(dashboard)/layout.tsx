@@ -28,6 +28,7 @@ interface MenuItem {
   label: string;
   icon: React.ReactNode;
   href: string;
+  sempreAtivo?: boolean;
 }
 
 interface MenuGroup {
@@ -39,7 +40,7 @@ const menuGroups: MenuGroup[] = [
   {
     title: 'Operações',
     items: [
-      { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: '/dashboard' },
+      { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: '/dashboard', sempreAtivo: true },
       { key: 'liquidacao', label: 'Liquidação Diária', icon: <FileText className="w-5 h-5" />, href: '/liquidacao' },
       { key: 'clientes', label: 'Clientes', icon: <Users className="w-5 h-5" />, href: '/clientes' },
       { key: 'financeiro', label: 'Financeiro', icon: <DollarSign className="w-5 h-5" />, href: '/financeiro' },
@@ -49,14 +50,14 @@ const menuGroups: MenuGroup[] = [
     title: 'Estrutura',
     items: [
       { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores' },
-      { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao' },
+      { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao', sempreAtivo: true },
     ],
   },
   {
     title: 'Administração',
     items: [
       { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes' },
-      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios' },
+      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', sempreAtivo: true },
     ],
   },
 ];
@@ -65,7 +66,8 @@ const menuGroups: MenuGroup[] = [
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile } = useUser();
+  const { user, profile, localizacao } = useUser();
+  const temLocalizacao = !!localizacao.empresa_id;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
@@ -130,24 +132,42 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
               <ul className="space-y-1 px-2">
-                {group.items.map((item) => (
-                  <li key={item.key}>
-                    <Link
-                      href={item.href}
-                      className={`
-                        flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
-                        ${isActive(item.href) 
-                          ? 'bg-blue-600 text-white' 
-                          : 'text-gray-300 hover:bg-white/10 hover:text-white'
-                        }
-                      `}
-                      onClick={() => setSidebarOpen(false)}
-                    >
-                      {item.icon}
-                      <span className="font-medium">{item.label}</span>
-                    </Link>
-                  </li>
-                ))}
+                {group.items.map((item) => {
+                  const habilitado = temLocalizacao || item.sempreAtivo;
+                  const ativo = isActive(item.href);
+
+                  if (!habilitado) {
+                    return (
+                      <li key={item.key}>
+                        <div
+                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-500 cursor-not-allowed select-none opacity-40"
+                          title="Selecione uma empresa para acessar"
+                        >
+                          {item.icon}
+                          <span className="font-medium">{item.label}</span>
+                        </div>
+                      </li>
+                    );
+                  }
+
+                  return (
+                    <li key={item.key}>
+                      <Link
+                        href={item.href}
+                        className={`
+                          flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
+                          ${ativo
+                            ? 'bg-blue-600 text-white'
+                            : 'text-gray-300 hover:bg-white/10 hover:text-white'}
+                        `}
+                        onClick={() => setSidebarOpen(false)}
+                      >
+                        {item.icon}
+                        <span className="font-medium">{item.label}</span>
+                      </Link>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           ))}
