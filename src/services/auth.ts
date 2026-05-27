@@ -12,6 +12,17 @@ export const authService = {
     });
 
     if (error) throw error;
+
+    // signUp não garante sessão ativa — fazer login explícito
+    if (data.user && !data.session) {
+      const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (loginError) throw loginError;
+      return { ...data, session: loginData.session };
+    }
+
     return data;
   },
 
