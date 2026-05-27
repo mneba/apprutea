@@ -266,8 +266,72 @@ export const usuariosService = {
   },
 
   // ============================================
-  // PERMISSÕES
+  // CÓPIA DE PERMISSÕES PARA ADMIN
+  // Copia permissões + liberações do admin logado para o target.
+  // Se o admin logado for SUPER_ADMIN (sem registros em user_permissoes),
+  // gera todas as permissões como true.
   // ============================================
+
+  async copiarPermissoesParaAdmin(targetUserId: string): Promise<{
+    permissoes: UserPermissao[];
+    liberacoes: { tipo_solicitacao: string; empresa_id: string; rota_id: string | null; pode_liberar: boolean }[];
+  }> {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error('Não autenticado');
+
+    // Buscar perfil do admin logado para saber o tipo
+    const { data: adminProfile } = await supabase
+      .from('user_profiles')
+      .select('tipo_usuario, empresas_ids')
+      .eq('user_id', user.id)
+      .single();
+
+    const isSuperAdmin = adminProfile?.tipo_usuario === 'SUPER_ADMIN';
+
+    let permissoesFonte: UserPermissao[] = [];
+
+    if (isSuperAdmin) {
+      // SUPER_ADMIN: gerar todas as permissões como true
+      const modulos = await this.listarModulos();
+      permissoesFonte = modulos.map((m) => ({
+        modulo_id: m.id,
+        user_id: targetUserId,
+        pode_todos: true,
+        pode_guardar: true,
+        pode_buscar: true,
+        pode_eliminar: true,
+      } as UserPermissao));
+    } else {
+      // Admin normal: copiar suas próprias permissões
+      const permissoesAdmin = await this.listarPermissoesUsuario(user.id);
+      permissoesFonte = permissoesAdmin.map((p) => ({
+        ...p,
+        user_id: targetUserId,
+      }));
+    }
+
+    // Copiar liberações
+    let liberacoesFonte: { tipo_solicitacao: string; empresa_id: string; rota_id: string | null; pode_liberar: boolean }[] = [];
+
+    if (isSuperAdmin) {
+      // SUPER_ADMIN: não tem liberações cadastradas, retorna vazio
+      // (as liberações do novo ADMIN serão definidas manualmente)
+      liberacoesFonte = [];
+    } else {
+      const libAdmin = await this.listarLiberacoesUsuario(user.id);
+      liberacoesFonte = libAdmin.map((l) => ({
+        tipo_solicitacao: l.tipo_solicitacao,
+        empresa_id: l.empresa_id,
+        rota_id: l.rota_id,
+        pode_liberar: l.pode_liberar,
+      }));
+    }
+
+    return {
+      permissoes: permissoesFonte,
+      liberacoes: liberacoesFonte,
+    };
+  },
 
   // Listar módulos do sistema
   async listarModulos(): Promise<ModuloSistema[]> {

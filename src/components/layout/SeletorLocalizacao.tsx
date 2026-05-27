@@ -103,7 +103,10 @@ export function SeletorLocalizacao() {
       // Filtrar por permissões se não for SUPER_ADMIN
       if (!isSuperAdmin && profile) {
         const rotasPermitidas = profile.rotas_ids || [];
-        setRotas(rotasData.filter(r => rotasPermitidas.includes(r.id)));
+        // Array vazio = acesso a todas as rotas da empresa
+        setRotas(rotasPermitidas.length === 0
+          ? rotasData
+          : rotasData.filter(r => rotasPermitidas.includes(r.id)));
       } else {
         setRotas(rotasData);
       }
@@ -157,7 +160,10 @@ export function SeletorLocalizacao() {
       let rotasFiltradas = rotasData;
       if (!isSuperAdmin && profile) {
         const rotasPermitidas = profile.rotas_ids || [];
-        rotasFiltradas = rotasData.filter(r => rotasPermitidas.includes(r.id));
+        // Array vazio = acesso a todas as rotas da empresa
+        rotasFiltradas = rotasPermitidas.length === 0
+          ? rotasData
+          : rotasData.filter(r => rotasPermitidas.includes(r.id));
       }
 
       setRotas(rotasFiltradas);

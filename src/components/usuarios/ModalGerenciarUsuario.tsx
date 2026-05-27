@@ -115,6 +115,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === ABA ACESSO ===
   const [ehMonitor, setEhMonitor] = useState(usuario.tipo_usuario === 'MONITOR');
+  const [tipoUsuario, setTipoUsuario] = useState<'ADMIN' | 'USUARIO_PADRAO'>(
+    usuario.tipo_usuario === 'ADMIN' ? 'ADMIN' : 'USUARIO_PADRAO'
+  );
+  const [copiandoPermissoes, setCopiandoPermissoes] = useState(false);
   const [selecoes, setSelecoes] = useState<SelecaoAcesso[]>([]);
 
   // Seleção sendo adicionada
@@ -465,6 +469,38 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
     }));
   });
 
+  // === MUDANÇA DE TIPO DE USUÁRIO ===
+  const handleMudarTipoUsuario = async (novoTipo: 'ADMIN' | 'USUARIO_PADRAO') => {
+    setTipoUsuario(novoTipo);
+
+    // Ao classificar como ADMIN, copiar permissões + liberações do admin logado
+    if (novoTipo === 'ADMIN') {
+      setCopiandoPermissoes(true);
+      try {
+        const { permissoes: permissoesCopias, liberacoes: liberacoesCopias } =
+          await usuariosService.copiarPermissoesParaAdmin(usuario.user_id);
+
+        // Montar mapa de permissões
+        const permissoesMap: Record<string, UserPermissao> = {};
+        permissoesCopias.forEach((p) => {
+          permissoesMap[p.modulo_id] = p;
+        });
+        setPermissoes(permissoesMap);
+
+        // Montar mapa de liberações
+        const liberacoesMap: Record<LiberacaoKey, boolean> = {};
+        liberacoesCopias.forEach((l) => {
+          liberacoesMap[makeLiberacaoKey(l.tipo_solicitacao, l.empresa_id, l.rota_id)] = l.pode_liberar;
+        });
+        setLiberacoes(liberacoesMap);
+      } catch (err) {
+        console.error('Erro ao copiar permissões:', err);
+      } finally {
+        setCopiandoPermissoes(false);
+      }
+    }
+  };
+
   // === SALVAR ===
   const handleSalvar = async () => {
     setSaving(true);
@@ -474,9 +510,13 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
       const cidadesIds = [...new Set(selecoes.map((s) => s.cidade_id).filter(Boolean))];
       const rotasIds = [...new Set(selecoes.flatMap((s) => s.rotas_ids))];
 
-      let tipoUsuario = usuario.tipo_usuario;
-      if (tipoUsuario !== 'SUPER_ADMIN') {
-        tipoUsuario = ehMonitor ? 'MONITOR' : 'USUARIO_PADRAO';
+      let tipoFinal = usuario.tipo_usuario;
+      if (tipoFinal !== 'SUPER_ADMIN') {
+        if (ehMonitor) {
+          tipoFinal = 'MONITOR';
+        } else {
+          tipoFinal = tipoUsuario; // ADMIN ou USUARIO_PADRAO
+        }
       }
 
       const telefoneCompleto = telefoneNumero ? `${ddi}${telefoneNumero.replace(/\D/g, '')}` : '';
@@ -487,7 +527,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
         documento,
         endereco,
         status,
-        tipo_usuario: tipoUsuario,
+        tipo_usuario: tipoFinal,
         empresas_ids: empresasIds,
         hierarquias_ids: hierarquiasIds,
         cidades_ids: cidadesIds,
@@ -798,7 +838,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
               {/* ABA ACESSO */}
               {activeTab === 'acesso' && (
                 <div className="space-y-6">
-                  {/* Toggle Monitor — movido da aba Dados */}
+                  {/* Toggle Monitor */}
                   <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl">
                     <div>
                       <p className="text-sm font-medium text-gray-900">É Monitor</p>
@@ -816,6 +856,51 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
+
+                  {/* Seletor de Tipo — só aparece se não for Monitor e não for SUPER_ADMIN */}
+                  {!ehMonitor && usuario.tipo_usuario !== 'SUPER_ADMIN' && (
+                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
+                      <div>
+                        <p className="text-sm font-medium text-gray-900 mb-1">Tipo de Usuário</p>
+                        <p className="text-xs text-gray-500">
+                          Admin herda suas permissões e liberações como ponto de partida
+                        </p>
+                      </div>
+                      <div className="flex gap-3">
+                        <button
+                          onClick={() => handleMudarTipoUsuario('USUARIO_PADRAO')}
+                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
+                            tipoUsuario === 'USUARIO_PADRAO'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          Usuário Padrão
+                        </button>
+                        <button
+                          onClick={() => handleMudarTipoUsuario('ADMIN')}
+                          disabled={copiandoPermissoes}
+                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all disabled:opacity-50 ${
+                            tipoUsuario === 'ADMIN'
+                              ? 'bg-blue-600 text-white border-blue-600'
+                              : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
+                          }`}
+                        >
+                          {copiandoPermissoes ? (
+                            <span className="flex items-center justify-center gap-1.5">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              Copiando...
+                            </span>
+                          ) : 'Admin'}
+                        </button>
+                      </div>
+                      {tipoUsuario === 'ADMIN' && !copiandoPermissoes && (
+                        <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                          ✓ Permissões e liberações copiadas do seu perfil. Ajuste nas abas correspondentes se necessário.
+                        </p>
+                      )}
+                    </div>
+                  )}
 
                   {/* Lista de acessos configurados */}
                   <div className="space-y-3">

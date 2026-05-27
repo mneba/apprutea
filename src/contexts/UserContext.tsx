@@ -25,11 +25,56 @@ interface UserContextType {
   refreshProfile: () => Promise<void>;
 }
 
-// Debug helper
 const DEBUG = true;
 const log = (...args: any[]) => DEBUG && console.log('🔐 UserContext:', ...args);
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
+
+// =====================================================
+// Valida se a localização salva ainda é permitida
+// para o perfil atual. Se não for, ajusta para o
+// primeiro item permitido ou null.
+// =====================================================
+function validarLocalizacao(
+  profileData: UserProfile,
+  loc: LocalizacaoAtual
+): LocalizacaoAtual {
+  // SUPER_ADMIN não tem restrições
+  if (profileData.tipo_usuario === 'SUPER_ADMIN') return loc;
+
+  const empresasPermitidas: string[] = profileData.empresas_ids || [];
+  const rotasPermitidas: string[] = profileData.rotas_ids || [];
+
+  let empresaIdValida = loc.empresa_id;
+  let rotaIdValida = loc.rota_id;
+  let mudou = false;
+
+  // Empresa já não está mais nos acessos permitidos?
+  if (empresaIdValida && !empresasPermitidas.includes(empresaIdValida)) {
+    log('Empresa da localização não permitida, redefinindo para primeira disponível');
+    empresaIdValida = empresasPermitidas[0] || null;
+    rotaIdValida = null; // zerar rota também
+    mudou = true;
+  }
+
+  // Rota já não está mais nos acessos permitidos?
+  // (rotas_ids vazio = acesso a todas → não invalida)
+  if (rotaIdValida && rotasPermitidas.length > 0 && !rotasPermitidas.includes(rotaIdValida)) {
+    log('Rota da localização não permitida, limpando rota');
+    rotaIdValida = null;
+    mudou = true;
+  }
+
+  if (!mudou) return loc;
+
+  return {
+    ...loc,
+    empresa_id: empresaIdValida,
+    empresa: empresaIdValida !== loc.empresa_id ? null : loc.empresa,
+    rota_id: rotaIdValida,
+    rota: rotaIdValida !== loc.rota_id ? null : loc.rota,
+  };
+}
 
 export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
@@ -47,10 +92,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
   });
 
   const supabase = createClient();
-
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
 
-  // Carregar usuário e perfil
   const loadUser = async () => {
     log('Iniciando carregamento do usuário...');
     try {
@@ -59,7 +102,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
       setUser(user);
 
       if (user) {
-        // Buscar perfil completo
         const { data: profileData, error } = await supabase
           .from('user_profiles')
           .select('*')
@@ -68,10 +110,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         log('Profile carregado:', profileData?.nome, 'Tipo:', profileData?.tipo_usuario);
         if (error) log('Erro ao carregar profile:', error);
-        
+
         setProfile(profileData);
 
-        // Carregar localização salva (apenas se não for SUPER_ADMIN sem localização definida)
         if (profileData) {
           await loadLocalizacaoSalva(profileData);
         }
@@ -84,9 +125,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  // Carregar localização salva do perfil
   const loadLocalizacaoSalva = async (profileData: UserProfile) => {
-    const newLocalizacao: LocalizacaoAtual = {
+    const locBruta: LocalizacaoAtual = {
       hierarquia_id: profileData.ultima_hierarquia_id || null,
       hierarquia: null,
       cidade_id: profileData.ultima_cidade_id || null,
@@ -97,55 +137,67 @@ export function UserProvider({ children }: { children: ReactNode }) {
       rota: null,
     };
 
-    // Buscar dados da hierarquia
-    if (profileData.ultima_hierarquia_id) {
-      const { data: hierarquia } = await supabase
+    // Validar antes de carregar os dados relacionados
+    const locValidada = validarLocalizacao(profileData, locBruta);
+
+    // Se a empresa mudou por causa da validação, salvar no banco
+    if (locValidada.empresa_id !== locBruta.empresa_id || locValidada.rota_id !== locBruta.rota_id) {
+      log('Localizacao ajustada pela validação, salvando no banco');
+      await supabase
+        .from('user_profiles')
+        .update({
+          ultima_empresa_id: locValidada.empresa_id,
+          ultima_rota_id: locValidada.rota_id,
+        })
+        .eq('user_id', profileData.user_id);
+    }
+
+    const newLocalizacao = { ...locValidada };
+
+    // Carregar dados relacionados da localização validada
+    if (locValidada.hierarquia_id) {
+      const { data } = await supabase
         .from('hierarquias')
         .select('*')
-        .eq('id', profileData.ultima_hierarquia_id)
+        .eq('id', locValidada.hierarquia_id)
         .single();
-      newLocalizacao.hierarquia = hierarquia;
+      newLocalizacao.hierarquia = data;
     }
 
-    // Buscar dados da cidade
-    if (profileData.ultima_cidade_id) {
-      const { data: cidade } = await supabase
+    if (locValidada.cidade_id) {
+      const { data } = await supabase
         .from('cidades')
         .select('*')
-        .eq('id', profileData.ultima_cidade_id)
+        .eq('id', locValidada.cidade_id)
         .single();
-      newLocalizacao.cidade = cidade;
+      newLocalizacao.cidade = data;
     }
 
-    // Buscar dados da empresa
-    if (profileData.ultima_empresa_id) {
-      const { data: empresa } = await supabase
+    if (locValidada.empresa_id) {
+      const { data } = await supabase
         .from('empresas')
         .select('*')
-        .eq('id', profileData.ultima_empresa_id)
+        .eq('id', locValidada.empresa_id)
         .single();
-      newLocalizacao.empresa = empresa;
+      newLocalizacao.empresa = data;
     }
 
-    // Buscar dados da rota
-    if (profileData.ultima_rota_id) {
-      const { data: rota } = await supabase
+    if (locValidada.rota_id) {
+      const { data } = await supabase
         .from('rotas')
         .select('*')
-        .eq('id', profileData.ultima_rota_id)
+        .eq('id', locValidada.rota_id)
         .single();
-      newLocalizacao.rota = rota;
+      newLocalizacao.rota = data;
     }
 
     setLocalizacaoState(newLocalizacao);
   };
 
-  // Atualizar localização e salvar no perfil
   const setLocalizacao = async (loc: Partial<LocalizacaoAtual>) => {
     const newLocalizacao = { ...localizacao, ...loc };
     setLocalizacaoState(newLocalizacao);
 
-    // Salvar no perfil do usuário
     if (user && profile) {
       await supabase
         .from('user_profiles')
@@ -173,7 +225,6 @@ export function UserProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     loadUser();
 
-    // Listener de mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_OUT') {
