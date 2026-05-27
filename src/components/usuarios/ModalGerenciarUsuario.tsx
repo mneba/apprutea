@@ -833,7 +833,8 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                     )}
                   </div>
 
-                  {/* Código de Acesso — inline com olho */}
+                  {/* Código de Acesso — inline com olho — oculto no modo próprio perfil */}
+                  {!modoProprioPerfil && (
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <label className="text-sm font-medium text-gray-700 flex items-center gap-1.5">
@@ -893,13 +894,15 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                       </p>
                     )}
                   </div>
+                  )}
                 </div>
               )}
 
               {/* ABA ACESSO */}
               {activeTab === 'acesso' && (
                 <div className="space-y-6">
-                  {/* Toggle Monitor */}
+                  {/* Toggle Monitor — oculto no modo próprio perfil */}
+                  {!modoProprioPerfil && (
                   <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-200 rounded-xl">
                     <div>
                       <p className="text-sm font-medium text-gray-900">É Monitor</p>
@@ -917,6 +920,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                       <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                     </label>
                   </div>
+                  )}
 
                   {/* Seletor de Tipo — só aparece se não for Monitor, não for SUPER_ADMIN e não for próprio perfil */}
                   {!ehMonitor && usuario.tipo_usuario !== 'SUPER_ADMIN' && !modoProprioPerfil && (
@@ -1029,7 +1033,8 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                     )}
                   </div>
 
-                  {/* Caixa "Adicionar Acesso" */}
+                  {/* Caixa "Adicionar Acesso" — oculta no modo próprio perfil */}
+                  {!modoProprioPerfil && (
                   <div className="space-y-4 p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
                     <div className="flex items-center gap-2">
                       <Plus className="w-4 h-4 text-blue-600" />
@@ -1170,6 +1175,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                       Adicionar à Lista
                     </button>
                   </div>
+                  )}
                 </div>
               )}
 
