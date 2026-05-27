@@ -323,11 +323,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
 
   // === FUNÇÕES ABA CÓDIGO ===
   const gerarCodigo = async () => {
-    if (status !== 'APROVADO') {
-      alert('⚠️ O usuário precisa estar APROVADO para gerar código de acesso.\n\nVá na aba "Dados" e altere o status para "Aprovado" primeiro.');
-      return;
-    }
-
     setGerandoCodigo(true);
     try {
       const novoCodigo = await usuariosService.gerarCodigoAcesso(usuario.user_id);
@@ -335,12 +330,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
       setCopiado(false);
     } catch (err: any) {
       console.error('Erro ao gerar código:', err);
-      const mensagemErro = err?.message || 'Erro desconhecido';
-      if (mensagemErro.toLowerCase().includes('aprovado')) {
-        alert('⚠️ O usuário precisa estar APROVADO para gerar código.\n\nVá na aba "Dados" e altere o status.');
-      } else {
-        alert(`Erro ao gerar código: ${mensagemErro}`);
-      }
+      alert(`Erro ao gerar código: ${err?.message || 'Erro desconhecido'}`);
     } finally {
       setGerandoCodigo(false);
     }
@@ -800,9 +790,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                       </div>
                       <button
                         onClick={gerarCodigo}
-                        disabled={gerandoCodigo || status !== 'APROVADO'}
+                        disabled={gerandoCodigo}
                         className="px-3 py-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title={status !== 'APROVADO' ? 'Aprovação necessária para gerar código' : 'Gerar novo código'}
+                        title="Gerar novo código"
                       >
                         {gerandoCodigo
                           ? <Loader2 className="w-4 h-4 text-gray-600 animate-spin" />
@@ -821,11 +811,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave }: Props) {
                         }
                       </button>
                     </div>
-                    {status !== 'APROVADO' && (
-                      <p className="text-xs text-amber-600 mt-1.5">
-                        Aprove o usuário para gerar ou reger o código.
-                      </p>
-                    )}
                     {codigo && codigo !== usuario.token_acesso && (
                       <p className="text-xs text-green-600 mt-1.5">
                         ✓ Novo código gerado. Clique em Salvar para confirmar.
