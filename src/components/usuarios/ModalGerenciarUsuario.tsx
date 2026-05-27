@@ -35,6 +35,7 @@ interface Props {
   onClose: () => void;
   onSave: () => void;
   onStatusChange?: () => void;
+  modoProprioPerfil?: boolean;
 }
 
 type TabType = 'dados' | 'acesso' | 'permissoes' | 'liberacoes';
@@ -79,7 +80,7 @@ const TODOS_TIPOS = [
   ...TIPOS_SOLICITACAO.OPERACOES,
 ];
 
-export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange }: Props) {
+export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange, modoProprioPerfil = false }: Props) {
   const supabase = createClient();
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(true);
@@ -798,36 +799,38 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                       </span>
                     </div>
 
-                    {/* Botões de ação */}
-                    <div className="flex gap-2">
-                      {status !== 'APROVADO' && (
-                        <button
-                          onClick={() => handleAlterarStatus('APROVADO')}
-                          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 active:bg-green-800 transition-colors shadow-sm"
-                        >
-                          <CheckCircle2 className="w-4 h-4" />
-                          Aprovar
-                        </button>
-                      )}
-                      {status !== 'REJEITADO' && (
-                        <button
-                          onClick={() => handleAlterarStatus('REJEITADO')}
-                          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors shadow-sm"
-                        >
-                          <XCircle className="w-4 h-4" />
-                          Rejeitar
-                        </button>
-                      )}
-                      {status !== 'PENDENTE' && (
-                        <button
-                          onClick={() => handleAlterarStatus('PENDENTE')}
-                          className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-yellow-500 text-white hover:bg-yellow-600 active:bg-yellow-700 transition-colors shadow-sm"
-                        >
-                          <Clock className="w-4 h-4" />
-                          Pendente
-                        </button>
-                      )}
-                    </div>
+                    {/* Botões de ação — ocultos no modo próprio perfil */}
+                    {!modoProprioPerfil && (
+                      <div className="flex gap-2">
+                        {status !== 'APROVADO' && (
+                          <button
+                            onClick={() => handleAlterarStatus('APROVADO')}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-green-600 text-white hover:bg-green-700 active:bg-green-800 transition-colors shadow-sm"
+                          >
+                            <CheckCircle2 className="w-4 h-4" />
+                            Aprovar
+                          </button>
+                        )}
+                        {status !== 'REJEITADO' && (
+                          <button
+                            onClick={() => handleAlterarStatus('REJEITADO')}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 text-white hover:bg-red-700 active:bg-red-800 transition-colors shadow-sm"
+                          >
+                            <XCircle className="w-4 h-4" />
+                            Rejeitar
+                          </button>
+                        )}
+                        {status !== 'PENDENTE' && (
+                          <button
+                            onClick={() => handleAlterarStatus('PENDENTE')}
+                            className="flex items-center justify-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-yellow-500 text-white hover:bg-yellow-600 active:bg-yellow-700 transition-colors shadow-sm"
+                          >
+                            <Clock className="w-4 h-4" />
+                            Pendente
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   {/* Código de Acesso — inline com olho */}
@@ -915,8 +918,8 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                     </label>
                   </div>
 
-                  {/* Seletor de Tipo — só aparece se não for Monitor e não for SUPER_ADMIN */}
-                  {!ehMonitor && usuario.tipo_usuario !== 'SUPER_ADMIN' && (
+                  {/* Seletor de Tipo — só aparece se não for Monitor, não for SUPER_ADMIN e não for próprio perfil */}
+                  {!ehMonitor && usuario.tipo_usuario !== 'SUPER_ADMIN' && !modoProprioPerfil && (
                     <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
                       <div>
                         <p className="text-sm font-medium text-gray-900 mb-1">Tipo de Usuário</p>

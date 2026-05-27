@@ -22,6 +22,7 @@ import { createClient } from '@/lib/supabase/client';
 import { UserProvider, useUser } from '@/contexts/UserContext';
 import { MenuNotificacoes } from '@/components/layout/MenuNotificacoes';
 import { SeletorLocalizacao } from '@/components/layout/SeletorLocalizacao';
+import { ModalGerenciarUsuario } from '@/components/usuarios';
 
 interface MenuItem {
   key: string;
@@ -71,6 +72,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
+  const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
 
   const supabase = createClient();
 
@@ -199,28 +201,36 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
               {/* User Menu */}
               <div className="relative">
-                <button 
+                <button
                   className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                 >
                   <span className="hidden sm:block text-sm text-gray-700">{userEmail}</span>
-                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-                    <User className="w-4 h-4 text-gray-600" />
+                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                    {(profile as any)?.url_foto_usuario ? (
+                      <img src={(profile as any).url_foto_usuario} alt="" className="w-8 h-8 object-cover" />
+                    ) : (
+                      <User className="w-4 h-4 text-gray-600" />
+                    )}
                   </div>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 </button>
 
                 {userMenuOpen && (
                   <>
-                    <div 
-                      className="fixed inset-0 z-40"
-                      onClick={() => setUserMenuOpen(false)}
-                    />
+                    <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
                     <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                       <div className="px-4 py-2 border-b border-gray-100">
                         <p className="text-sm font-medium text-gray-900">{profile?.nome || 'Usuário'}</p>
                         <p className="text-xs text-gray-500">{profile?.tipo_usuario}</p>
                       </div>
+                      <button
+                        onClick={() => { setUserMenuOpen(false); setModalPerfilAberto(true); }}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                      >
+                        <User className="w-4 h-4" />
+                        Meu Perfil
+                      </button>
                       <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -241,6 +251,16 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Modal Próprio Perfil */}
+      {modalPerfilAberto && profile && (
+        <ModalGerenciarUsuario
+          usuario={profile as any}
+          modoProprioPerfil={true}
+          onClose={() => setModalPerfilAberto(false)}
+          onSave={() => setModalPerfilAberto(false)}
+        />
+      )}
     </div>
   );
 }
