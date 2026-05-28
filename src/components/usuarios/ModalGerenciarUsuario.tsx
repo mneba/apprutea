@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { Button, Input } from '@/components/ui';
 import { createClient } from '@/lib/supabase/client';
+import { useUser } from '@/contexts/UserContext';
 import { usuariosService } from '@/services/usuarios';
 import { organizacaoService } from '@/services/organizacao';
 import type { UserProfile, Hierarquia, Cidade, Empresa, Rota, ModuloSistema, UserPermissao } from '@/types/database';
@@ -82,6 +83,12 @@ const TODOS_TIPOS = [
 
 export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange, modoProprioPerfil = false }: Props) {
   const supabase = createClient();
+  const { profile: editorProfile } = useUser();
+  const editorIsSuperAdmin = editorProfile?.tipo_usuario === 'SUPER_ADMIN';
+
+  // Permissões do editor (para calcular teto)
+  const [permissoesEditor, setPermissoesEditor] = useState<Record<string, UserPermissao>>({});
+
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -182,6 +189,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
           rotasData,
           modulosData,
           permissoesData,
+          permissoesEditorData,
         ] = await Promise.all([
           usuariosService.listarHierarquias(),
           organizacaoService.listarTodasCidades(),
@@ -189,6 +197,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
           usuariosService.listarRotas(),
           usuariosService.listarModulos(),
           usuariosService.listarPermissoesUsuario(usuario.user_id),
+          // Permissões do editor — só carrega se não for SUPER_ADMIN
+          editorIsSuperAdmin || !editorProfile?.user_id
+            ? Promise.resolve([])
+            : usuariosService.listarPermissoesUsuario(editorProfile.user_id),
         ]);
 
         // Reduzir CidadeComResumo para Cidade
@@ -205,6 +217,13 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         setTodasEmpresas(empresasData);
         setTodasRotas(rotasData);
         setModulos(modulosData);
+
+        // Permissões do editor
+        if (!editorIsSuperAdmin && permissoesEditorData.length > 0) {
+          const map: Record<string, UserPermissao> = {};
+          permissoesEditorData.forEach((p: UserPermissao) => { map[p.modulo_id] = p; });
+          setPermissoesEditor(map);
+        }
 
         // Extrair DDI do telefone existente
         if (usuario.telefone) {
@@ -1276,8 +1295,8 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
               {activeTab === 'permissoes' && !ehMonitor && (
                 <div className="space-y-4">
 
-                  {/* Aviso para ADMIN */}
-                  {tipoUsuario === 'ADMIN' && (
+                  {/* Aviso para ADMIN — só bloqueia se editor não for SUPER_ADMIN */}
+                  {tipoUsuario === 'ADMIN' && !editorIsSuperAdmin && (
                     <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
                       <Shield className="w-5 h-5 text-blue-600 flex-shrink-0" />
                       <p className="text-sm text-blue-800">
@@ -1296,14 +1315,21 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                           <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
                             <div className="flex flex-col items-center gap-1">
                               <span>Todos</span>
-                              {tipoUsuario !== 'ADMIN' && (
+                              {(tipoUsuario !== 'ADMIN' || editorIsSuperAdmin) && (
                                 <Checkbox
-                                  checked={modulos.length > 0 && modulos.every(m => permissoes[m.id]?.pode_todos)}
+                                  checked={modulos.length > 0 && modulos.every(m => {
+                                    const p = tipoUsuario === 'ADMIN' ? { pode_todos: true } : permissoes[m.id];
+                                    return p?.pode_todos;
+                                  })}
                                   onChange={() => {
                                     const todosAtivos = modulos.every(m => permissoes[m.id]?.pode_todos);
                                     setPermissoes(prev => {
                                       const novo = { ...prev };
                                       modulos.forEach(m => {
+                                        // Respeitar teto do editor
+                                        const editorPerm = permissoesEditor[m.id];
+                                        const podeMarcar = editorIsSuperAdmin || editorPerm?.pode_todos;
+                                        if (!todosAtivos && !podeMarcar) return;
                                         novo[m.id] = {
                                           ...(novo[m.id] || { modulo_id: m.id, user_id: usuario.user_id }),
                                           pode_todos: !todosAtivos,
@@ -1320,15 +1346,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               )}
                             </div>
                           </th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
-                            Guardar
-                          </th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
-                            Buscar
-                          </th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
-                            Eliminar
-                          </th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Guardar</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Buscar</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Eliminar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1340,41 +1360,58 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               </td>
                             </tr>
                             {modulosCategoria.map((modulo) => {
+                              // ADMIN → todos marcados
                               const permissao = tipoUsuario === 'ADMIN'
                                 ? { pode_todos: true, pode_guardar: true, pode_buscar: true, pode_eliminar: true }
                                 : permissoes[modulo.id];
-                              const bloqueado = tipoUsuario === 'ADMIN';
+
+                              // Bloqueio: ADMIN sem ser SUPER_ADMIN, ou editor não tem a permissão
+                              const bloqueadoPorTipo = tipoUsuario === 'ADMIN' && !editorIsSuperAdmin;
+                              const editorPerm = permissoesEditor[modulo.id];
+
+                              const podeTodos    = editorIsSuperAdmin || !!editorPerm?.pode_todos;
+                              const podeGuardar  = editorIsSuperAdmin || !!editorPerm?.pode_guardar;
+                              const podeBuscar   = editorIsSuperAdmin || !!editorPerm?.pode_buscar;
+                              const podeEliminar = editorIsSuperAdmin || !!editorPerm?.pode_eliminar;
+
                               return (
-                                <tr key={modulo.id} className={`${bloqueado ? 'opacity-70' : 'hover:bg-gray-50'}`}>
+                                <tr key={modulo.id} className={`${bloqueadoPorTipo ? 'opacity-70' : 'hover:bg-gray-50'}`}>
                                   <td className="px-4 py-3">
                                     <span className="text-sm text-gray-700">{modulo.nome}</span>
+                                    {!editorIsSuperAdmin && !podeTodos && !podeGuardar && !podeBuscar && !podeEliminar && (
+                                      <span className="ml-2 text-xs text-gray-400">(sem acesso)</span>
+                                    )}
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_todos || false}
-                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_todos')}
-                                      disabled={bloqueado}
+                                      onChange={() => !bloqueadoPorTipo && podeTodos && togglePermissao(modulo.id, 'pode_todos')}
+                                      disabled={bloqueadoPorTipo || !podeTodos}
+                                      title={!podeTodos ? 'Você não tem esta permissão' : undefined}
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_guardar || false}
-                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_guardar')}
-                                      disabled={bloqueado}
+                                      onChange={() => !bloqueadoPorTipo && podeGuardar && togglePermissao(modulo.id, 'pode_guardar')}
+                                      disabled={bloqueadoPorTipo || !podeGuardar}
+                                      title={!podeGuardar ? 'Você não tem esta permissão' : undefined}
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_buscar || false}
-                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_buscar')}
-                                      disabled={bloqueado}
+                                      onChange={() => !bloqueadoPorTipo && podeBuscar && togglePermissao(modulo.id, 'pode_buscar')}
+                                      disabled={bloqueadoPorTipo || !podeBuscar}
+                                      title={!podeBuscar ? 'Você não tem esta permissão' : undefined}
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_eliminar || false}
-                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_eliminar')}
-                                      disabled={bloqueado}
+                                      onChange={() => !bloqueadoPorTipo && podeEliminar && togglePermissao(modulo.id, 'pode_eliminar')}
+                                      disabled={bloqueadoPorTipo || !podeEliminar}
+                                      title={!podeEliminar ? 'Você não tem esta permissão' : undefined}
                                     />
                                   </td>
                                 </tr>
