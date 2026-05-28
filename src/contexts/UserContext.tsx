@@ -131,19 +131,20 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
           // Carregar permissões (SUPER_ADMIN tem tudo, não precisa buscar)
           if (profileData.tipo_usuario !== 'SUPER_ADMIN') {
-            const { data: permissoesData } = await supabase
-              .from('user_permissoes')
-              .select('*, modulo:modulo_id(codigo)')
-              .eq('user_id', user.id);
+            const [{ data: permissoesData }, { data: modulosData }] = await Promise.all([
+              supabase.from('user_permissoes').select('*').eq('user_id', user.id),
+              supabase.from('modulos_sistema').select('id, codigo'),
+            ]);
 
-            const map: Record<string, UserPermissao> = {};
+            // Montar mapa codigo → permissao
+            const moduloMap: Record<string, string> = {};
+            (modulosData || []).forEach((m: any) => { moduloMap[m.id] = m.codigo; });
+
+            const map: Record<string, any> = {};
             (permissoesData || []).forEach((p: any) => {
-              // Indexar pelo código do módulo para lookup fácil
-              if (p.modulo?.codigo) {
-                map[p.modulo.codigo] = p;
-              }
-              // Também por modulo_id para compatibilidade
-              map[p.modulo_id] = p;
+              map[p.modulo_id] = p; // por UUID
+              const codigo = moduloMap[p.modulo_id];
+              if (codigo) map[codigo] = p; // por código
             });
             setPermissoes(map);
           }
