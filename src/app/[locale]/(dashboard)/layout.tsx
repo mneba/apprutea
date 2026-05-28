@@ -59,7 +59,7 @@ const menuGroups: MenuGroup[] = [
   {
     title: 'Administração',
     items: [
-      { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes', roles: ['SUPER_ADMIN', 'ADMIN'] },
+      { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'CENTRAL_LIBERACOES' },
       { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'GESTAO_USUARIOS' },
     ],
   },
