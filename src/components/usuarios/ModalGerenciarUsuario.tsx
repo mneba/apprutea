@@ -1360,13 +1360,14 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               </td>
                             </tr>
                             {modulosCategoria.map((modulo) => {
-                              // ADMIN → todos marcados
-                              const permissao = tipoUsuario === 'ADMIN'
+                              // ADMIN sem SUPER_ADMIN editando → todos marcados (read-only)
+                              // ADMIN com SUPER_ADMIN editando → valores reais editáveis
+                              const permissao = (tipoUsuario === 'ADMIN' && !editorIsSuperAdmin)
                                 ? { pode_todos: true, pode_guardar: true, pode_buscar: true, pode_eliminar: true }
                                 : permissoes[modulo.id];
 
                               // Bloqueio: ADMIN sem ser SUPER_ADMIN, ou editor não tem a permissão
-                              const bloqueadoPorTipo = tipoUsuario === 'ADMIN' && !editorIsSuperAdmin;
+                              const bloqueadoPorTipo = !editorIsSuperAdmin && tipoUsuario === 'ADMIN';
                               const editorPerm = permissoesEditor[modulo.id];
 
                               const podeTodos    = editorIsSuperAdmin || !!editorPerm?.pode_todos;
