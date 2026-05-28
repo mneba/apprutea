@@ -445,6 +445,68 @@ export const usuariosService = {
   },
 
   // ============================================
+  // ADMIN TITULAR DE EMPRESA
+  // ============================================
+
+  async buscarAdminEmpresa(empresaId: string): Promise<{
+    user_id: string;
+    nome: string;
+    url_foto_usuario: string | null;
+  } | null> {
+    const { data, error } = await supabase.rpc('fn_get_admin_empresa', {
+      p_empresa_id: empresaId,
+    });
+    if (error) throw error;
+    return data?.[0] || null;
+  },
+
+  async validarTetoPermissoes(userId: string, empresaId: string): Promise<{
+    valido: boolean;
+    modulos_excedidos: string[];
+  }> {
+    const { data, error } = await supabase.rpc('fn_validar_teto_permissoes', {
+      p_user_id: userId,
+      p_empresa_id: empresaId,
+    });
+    if (error) throw error;
+    return data || { valido: true, modulos_excedidos: [] };
+  },
+
+  async definirAdminEmpresa(userId: string, empresaId: string): Promise<void> {
+    // Remove empresa de qualquer admin atual
+    const { data: adminAtual } = await supabase
+      .from('user_profiles')
+      .select('user_id, admin_empresa_ids')
+      .contains('admin_empresa_ids', [empresaId])
+      .neq('user_id', userId)
+      .single();
+
+    if (adminAtual) {
+      const novasEmpresas = (adminAtual.admin_empresa_ids as string[])
+        .filter((id: string) => id !== empresaId);
+      await supabase
+        .from('user_profiles')
+        .update({ admin_empresa_ids: novasEmpresas })
+        .eq('user_id', adminAtual.user_id);
+    }
+
+    // Adiciona empresa ao novo admin
+    const { data: perfil } = await supabase
+      .from('user_profiles')
+      .select('admin_empresa_ids')
+      .eq('user_id', userId)
+      .single();
+
+    const adminEmpresas = perfil?.admin_empresa_ids || [];
+    if (!adminEmpresas.includes(empresaId)) {
+      await supabase
+        .from('user_profiles')
+        .update({ admin_empresa_ids: [...adminEmpresas, empresaId] })
+        .eq('user_id', userId);
+    }
+  },
+
+  // ============================================
   // LIBERAÇÕES
   // ============================================
 

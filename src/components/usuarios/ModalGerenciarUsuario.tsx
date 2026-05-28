@@ -132,7 +132,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
   const [novaEmpresaId, setNovaEmpresaId] = useState('');
   const [novasRotasIds, setNovasRotasIds] = useState<string[]>([]);
 
-  // === ABA CÓDIGO (agora inline na aba Dados) ===
+  // === ADMIN TITULAR ===
+  const [adminTitular, setAdminTitular] = useState<{ user_id: string; nome: string } | null>(null);
+  const [ehAdminTitular, setEhAdminTitular] = useState(false);
+  const [aviso, setAviso] = useState<string | null>(null);
   const [codigo, setCodigo] = useState(usuario.token_acesso || '');
   const [codigoVisivel, setCodigoVisivel] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -241,6 +244,18 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
             });
           }
         });
+        // Carregar admin titular das empresas do usuário
+        if (selecoesExistentes.length > 0) {
+          const primeiraEmpresa = selecoesExistentes[0].empresa_id;
+          try {
+            const admin = await usuariosService.buscarAdminEmpresa(primeiraEmpresa);
+            setAdminTitular(admin);
+            setEhAdminTitular(admin?.user_id === usuario.user_id);
+          } catch (err) {
+            console.warn('Erro ao buscar admin titular:', err);
+          }
+        }
+
         setSelecoes(selecoesExistentes);
 
         // Carregar liberações — novo formato com escopo empresa/rota
@@ -523,6 +538,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
   // === SALVAR ===
   const handleSalvar = async () => {
     setSaving(true);
+    setAviso(null);
     try {
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
       const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
@@ -534,7 +550,21 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         if (ehMonitor) {
           tipoFinal = 'MONITOR';
         } else {
-          tipoFinal = tipoUsuario; // ADMIN ou USUARIO_PADRAO
+          tipoFinal = tipoUsuario;
+        }
+      }
+
+      // Validar teto de permissões para USUARIO_PADRAO
+      if (tipoFinal === 'USUARIO_PADRAO' && empresasIds.length > 0) {
+        for (const empresaId of empresasIds) {
+          const validacao = await usuariosService.validarTetoPermissoes(usuario.user_id, empresaId);
+          if (!validacao.valido) {
+            setSaving(false);
+            setAviso(
+              `As permissões excedem o limite do Admin titular em: ${validacao.modulos_excedidos.join(', ')}. Ajuste antes de salvar.`
+            );
+            return;
+          }
         }
       }
 
@@ -553,12 +583,15 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         rotas_ids: rotasIds,
       } as any);
 
+      // Se marcado como admin titular, definir na empresa
+      if (ehAdminTitular && empresasIds.length > 0) {
+        await usuariosService.definirAdminEmpresa(usuario.user_id, empresasIds[0]);
+      }
+
       if (!ehMonitor) {
         await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
       }
 
-      // Montar array de liberações com escopo completo
-      // Inclui todas as combinações tipo × coluna, marcadas ou não
       const liberacoesArray = colunasLiberacao.flatMap((col) =>
         TODOS_TIPOS.map((item) => ({
           tipo_solicitacao: item.tipo,
@@ -1046,6 +1079,53 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                     )}
                   </div>
 
+                  {/* Admin Titular da Empresa */}
+                  {selecoes.length > 0 && !modoProprioPerfil && (
+                    <div className={`p-4 rounded-xl border ${ehAdminTitular ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-200'}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium text-gray-900">Admin Titular da Empresa</p>
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {ehAdminTitular
+                              ? 'Este usuário é o admin titular'
+                              : adminTitular
+                                ? `Admin atual: ${adminTitular.nome}`
+                                : 'Nenhum admin titular definido — este usuário será o primeiro'}
+                          </p>
+                        </div>
+                        {!ehAdminTitular && (
+                          <button
+                            onClick={() => setEhAdminTitular(true)}
+                            className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 border border-blue-200 rounded-lg hover:bg-blue-200 transition-colors"
+                          >
+                            Definir como titular
+                          </button>
+                        )}
+                        {ehAdminTitular && adminTitular?.user_id !== usuario.user_id && (
+                          <button
+                            onClick={() => setEhAdminTitular(false)}
+                            className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                      {ehAdminTitular && adminTitular && adminTitular.user_id !== usuario.user_id && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                          ⚠ Ao salvar, <strong>{adminTitular.nome}</strong> deixará de ser o admin titular desta empresa.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Aviso de teto de permissões */}
+                  {aviso && (
+                    <div className="flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-xl">
+                      <AlertCircle className="w-4 h-4 text-red-600 flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-700">{aviso}</p>
+                    </div>
+                  )}
+
                   {/* Caixa "Adicionar Acesso" — oculta no modo próprio perfil */}
                   {!modoProprioPerfil && (
                   <div className="space-y-4 p-4 bg-blue-50/50 border border-blue-200 rounded-xl">
@@ -1416,6 +1496,12 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
               <div className="flex items-center gap-1.5 text-xs text-amber-700">
                 <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
                 <span>Há um acesso preenchido não adicionado à lista.</span>
+              </div>
+            )}
+            {aviso && activeTab !== 'acesso' && (
+              <div className="flex items-center gap-1.5 text-xs text-red-700">
+                <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                <span>{aviso}</span>
               </div>
             )}
           </div>
