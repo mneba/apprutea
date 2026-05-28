@@ -399,6 +399,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         pode_eliminar: false,
       };
 
+      // Marcar Todos → marca os 4
       if (campo === 'pode_todos' && !permissao.pode_todos) {
         return {
           ...prev,
@@ -406,17 +407,29 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         };
       }
 
+      // Desmarcar Todos → desmarca os 4
       if (campo === 'pode_todos' && permissao.pode_todos) {
         return {
           ...prev,
-          [moduloId]: { ...permissao, pode_todos: false },
+          [moduloId]: { ...permissao, pode_todos: false, pode_guardar: false, pode_buscar: false, pode_eliminar: false },
         };
       }
 
-      return {
-        ...prev,
-        [moduloId]: { ...permissao, [campo]: !permissao[campo] },
-      };
+      // Toggle individual — se desmarcar qualquer um, desmarca o pode_todos também
+      const novoValor = !permissao[campo];
+      const novaPermissao = { ...permissao, [campo]: novoValor };
+      if (!novoValor) novaPermissao.pode_todos = false;
+
+      // Se todos os 3 individuais estão marcados, marca pode_todos automaticamente
+      if (
+        (campo !== 'pode_guardar' ? novaPermissao.pode_guardar : novoValor) &&
+        (campo !== 'pode_buscar' ? novaPermissao.pode_buscar : novoValor) &&
+        (campo !== 'pode_eliminar' ? novaPermissao.pode_eliminar : novoValor)
+      ) {
+        novaPermissao.pode_todos = true;
+      }
+
+      return { ...prev, [moduloId]: novaPermissao };
     });
   };
 
@@ -1318,17 +1331,24 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               {(tipoUsuario !== 'ADMIN' || editorIsSuperAdmin) && (
                                 <Checkbox
                                   checked={modulos.length > 0 && modulos.every(m => {
-                                    const p = tipoUsuario === 'ADMIN' ? { pode_todos: true } : permissoes[m.id];
-                                    return p?.pode_todos;
+                                    const p = permissoes[m.id];
+                                    return p?.pode_todos && p?.pode_guardar && p?.pode_buscar && p?.pode_eliminar;
                                   })}
                                   onChange={() => {
-                                    const todosAtivos = modulos.every(m => permissoes[m.id]?.pode_todos);
+                                    const todosAtivos = modulos.every(m => {
+                                      const p = permissoes[m.id];
+                                      return p?.pode_todos && p?.pode_guardar && p?.pode_buscar && p?.pode_eliminar;
+                                    });
                                     setPermissoes(prev => {
                                       const novo = { ...prev };
                                       modulos.forEach(m => {
-                                        // Respeitar teto do editor
                                         const editorPerm = permissoesEditor[m.id];
-                                        const podeMarcar = editorIsSuperAdmin || editorPerm?.pode_todos;
+                                        const podeMarcar = editorIsSuperAdmin || (
+                                          editorPerm?.pode_todos &&
+                                          editorPerm?.pode_guardar &&
+                                          editorPerm?.pode_buscar &&
+                                          editorPerm?.pode_eliminar
+                                        );
                                         if (!todosAtivos && !podeMarcar) return;
                                         novo[m.id] = {
                                           ...(novo[m.id] || { modulo_id: m.id, user_id: usuario.user_id }),
