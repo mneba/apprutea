@@ -490,21 +490,19 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
   const handleMudarTipoUsuario = async (novoTipo: 'ADMIN' | 'USUARIO_PADRAO') => {
     setTipoUsuario(novoTipo);
 
-    // Ao classificar como ADMIN, copiar permissões + liberações do admin logado
     if (novoTipo === 'ADMIN') {
+      // Copiar permissões + liberações do admin logado
       setCopiandoPermissoes(true);
       try {
         const { permissoes: permissoesCopias, liberacoes: liberacoesCopias } =
           await usuariosService.copiarPermissoesParaAdmin(usuario.user_id);
 
-        // Montar mapa de permissões
         const permissoesMap: Record<string, UserPermissao> = {};
         permissoesCopias.forEach((p) => {
           permissoesMap[p.modulo_id] = p;
         });
         setPermissoes(permissoesMap);
 
-        // Montar mapa de liberações
         const liberacoesMap: Record<LiberacaoKey, boolean> = {};
         liberacoesCopias.forEach((l) => {
           liberacoesMap[makeLiberacaoKey(l.tipo_solicitacao, l.empresa_id, l.rota_id)] = l.pode_liberar;
@@ -515,6 +513,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       } finally {
         setCopiandoPermissoes(false);
       }
+    } else {
+      // Usuário Padrão — limpar todas as permissões para configuração manual
+      setPermissoes({});
+      setLiberacoes({});
     }
   };
 
@@ -1192,7 +1194,18 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
 
               {/* ABA PERMISSÕES */}
               {activeTab === 'permissoes' && !ehMonitor && (
-                <div>
+                <div className="space-y-4">
+
+                  {/* Aviso para ADMIN */}
+                  {tipoUsuario === 'ADMIN' && (
+                    <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
+                      <Shield className="w-5 h-5 text-blue-600 flex-shrink-0" />
+                      <p className="text-sm text-blue-800">
+                        Admins têm acesso completo a todos os módulos. As permissões não podem ser editadas para este tipo de usuário.
+                      </p>
+                    </div>
+                  )}
+
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <table className="w-full">
                       <thead className="bg-gray-50">
@@ -1201,7 +1214,31 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                             Módulo
                           </th>
                           <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
-                            Todos
+                            <div className="flex flex-col items-center gap-1">
+                              <span>Todos</span>
+                              {tipoUsuario !== 'ADMIN' && (
+                                <Checkbox
+                                  checked={modulos.length > 0 && modulos.every(m => permissoes[m.id]?.pode_todos)}
+                                  onChange={() => {
+                                    const todosAtivos = modulos.every(m => permissoes[m.id]?.pode_todos);
+                                    setPermissoes(prev => {
+                                      const novo = { ...prev };
+                                      modulos.forEach(m => {
+                                        novo[m.id] = {
+                                          ...(novo[m.id] || { modulo_id: m.id, user_id: usuario.user_id }),
+                                          pode_todos: !todosAtivos,
+                                          pode_guardar: !todosAtivos,
+                                          pode_buscar: !todosAtivos,
+                                          pode_eliminar: !todosAtivos,
+                                        } as UserPermissao;
+                                      });
+                                      return novo;
+                                    });
+                                  }}
+                                  title="Marcar/desmarcar todos"
+                                />
+                              )}
+                            </div>
                           </th>
                           <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
                             Guardar
@@ -1223,34 +1260,41 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               </td>
                             </tr>
                             {modulosCategoria.map((modulo) => {
-                              const permissao = permissoes[modulo.id];
+                              const permissao = tipoUsuario === 'ADMIN'
+                                ? { pode_todos: true, pode_guardar: true, pode_buscar: true, pode_eliminar: true }
+                                : permissoes[modulo.id];
+                              const bloqueado = tipoUsuario === 'ADMIN';
                               return (
-                                <tr key={modulo.id} className="hover:bg-gray-50">
+                                <tr key={modulo.id} className={`${bloqueado ? 'opacity-70' : 'hover:bg-gray-50'}`}>
                                   <td className="px-4 py-3">
                                     <span className="text-sm text-gray-700">{modulo.nome}</span>
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_todos || false}
-                                      onChange={() => togglePermissao(modulo.id, 'pode_todos')}
+                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_todos')}
+                                      disabled={bloqueado}
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_guardar || false}
-                                      onChange={() => togglePermissao(modulo.id, 'pode_guardar')}
+                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_guardar')}
+                                      disabled={bloqueado}
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_buscar || false}
-                                      onChange={() => togglePermissao(modulo.id, 'pode_buscar')}
+                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_buscar')}
+                                      disabled={bloqueado}
                                     />
                                   </td>
                                   <td className="px-4 py-3 text-center">
                                     <Checkbox
                                       checked={permissao?.pode_eliminar || false}
-                                      onChange={() => togglePermissao(modulo.id, 'pode_eliminar')}
+                                      onChange={() => !bloqueado && togglePermissao(modulo.id, 'pode_eliminar')}
+                                      disabled={bloqueado}
                                     />
                                   </td>
                                 </tr>
@@ -1397,15 +1441,26 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
   );
 }
 
-function Checkbox({ checked, onChange }: { checked: boolean; onChange: () => void }) {
+function Checkbox({ checked, onChange, disabled = false, title }: {
+  checked: boolean;
+  onChange: () => void;
+  disabled?: boolean;
+  title?: string;
+}) {
   return (
     <button
       onClick={onChange}
+      disabled={disabled}
+      title={title}
       className={`
         w-6 h-6 rounded border-2 flex items-center justify-center transition-all
-        ${checked
-          ? 'bg-blue-600 border-blue-600 text-white'
-          : 'bg-white border-gray-300 hover:border-blue-400'}
+        ${disabled
+          ? 'opacity-60 cursor-not-allowed bg-gray-100 border-gray-300'
+          : checked
+            ? 'bg-blue-600 border-blue-600 text-white hover:bg-blue-700'
+            : 'bg-white border-gray-300 hover:border-blue-400'
+        }
+        ${!disabled && checked ? 'text-white' : ''}
       `}
     >
       {checked && <Check className="w-4 h-4" />}

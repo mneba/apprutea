@@ -30,6 +30,7 @@ interface MenuItem {
   icon: React.ReactNode;
   href: string;
   sempreAtivo?: boolean;
+  roles?: string[];
 }
 
 interface MenuGroup {
@@ -58,7 +59,7 @@ const menuGroups: MenuGroup[] = [
     title: 'Administração',
     items: [
       { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes' },
-      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios' },
+      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', roles: ['SUPER_ADMIN', 'ADMIN'] },
     ],
   },
 ];
@@ -134,7 +135,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 </span>
               </div>
               <ul className="space-y-1 px-2">
-                {group.items.map((item) => {
+                {group.items.filter(item => !item.roles || item.roles.includes(profile?.tipo_usuario || '')).map((item) => {
                   const habilitado = temLocalizacao || item.sempreAtivo;
                   const ativo = isActive(item.href);
 
