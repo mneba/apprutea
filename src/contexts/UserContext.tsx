@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import type { UserProfile, Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
+import type { UserProfile, Hierarquia, Cidade, Empresa, Rota, UserPermissao } from '@/types/database';
 
 interface LocalizacaoAtual {
   hierarquia_id: string | null;
@@ -20,6 +20,8 @@ interface UserContextType {
   profile: UserProfile | null;
   loading: boolean;
   isSuperAdmin: boolean;
+  permissoes: Record<string, UserPermissao>;
+  temPermissao: (modulo: string) => boolean;
   localizacao: LocalizacaoAtual;
   setLocalizacao: (loc: Partial<LocalizacaoAtual>) => void;
   refreshProfile: () => Promise<void>;
@@ -80,6 +82,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [permissoes, setPermissoes] = useState<Record<string, UserPermissao>>({});
   const [localizacao, setLocalizacaoState] = useState<LocalizacaoAtual>({
     hierarquia_id: null,
     hierarquia: null,
@@ -93,6 +96,16 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const supabase = createClient();
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+  const isAdmin = profile?.tipo_usuario === 'ADMIN';
+
+  // Verifica se usuário tem alguma permissão em um módulo pelo código
+  // SUPER_ADMIN e ADMIN sempre têm acesso
+  const temPermissao = (codigoModulo: string): boolean => {
+    if (isSuperAdmin || isAdmin) return true;
+    const p = permissoes[codigoModulo];
+    if (!p) return false;
+    return !!(p.pode_todos || p.pode_guardar || p.pode_buscar || p.pode_eliminar);
+  };
 
   const loadUser = async () => {
     log('Iniciando carregamento do usuário...');
@@ -115,6 +128,25 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
         if (profileData) {
           await loadLocalizacaoSalva(profileData);
+
+          // Carregar permissões (SUPER_ADMIN tem tudo, não precisa buscar)
+          if (profileData.tipo_usuario !== 'SUPER_ADMIN') {
+            const { data: permissoesData } = await supabase
+              .from('user_permissoes')
+              .select('*, modulo:modulo_id(codigo)')
+              .eq('user_id', user.id);
+
+            const map: Record<string, UserPermissao> = {};
+            (permissoesData || []).forEach((p: any) => {
+              // Indexar pelo código do módulo para lookup fácil
+              if (p.modulo?.codigo) {
+                map[p.modulo.codigo] = p;
+              }
+              // Também por modulo_id para compatibilidade
+              map[p.modulo_id] = p;
+            });
+            setPermissoes(map);
+          }
         }
       }
     } catch (err) {
@@ -247,6 +279,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         isSuperAdmin,
+        permissoes,
+        temPermissao,
         localizacao,
         setLocalizacao,
         refreshProfile,

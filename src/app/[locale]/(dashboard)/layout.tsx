@@ -31,6 +31,7 @@ interface MenuItem {
   href: string;
   sempreAtivo?: boolean;
   roles?: string[];
+  modulo?: string; // código do módulo para verificar permissão
 }
 
 interface MenuGroup {
@@ -43,23 +44,23 @@ const menuGroups: MenuGroup[] = [
     title: 'Operações',
     items: [
       { key: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, href: '/dashboard', sempreAtivo: true },
-      { key: 'liquidacao', label: 'Liquidação Diária', icon: <FileText className="w-5 h-5" />, href: '/liquidacao' },
-      { key: 'clientes', label: 'Clientes', icon: <Users className="w-5 h-5" />, href: '/clientes' },
-      { key: 'financeiro', label: 'Financeiro', icon: <DollarSign className="w-5 h-5" />, href: '/financeiro' },
+      { key: 'liquidacao', label: 'Liquidação Diária', icon: <FileText className="w-5 h-5" />, href: '/liquidacao', modulo: 'LIQUIDACAO_DIARIA' },
+      { key: 'clientes', label: 'Clientes', icon: <Users className="w-5 h-5" />, href: '/clientes', modulo: 'GESTAO_CLIENTES' },
+      { key: 'financeiro', label: 'Financeiro', icon: <DollarSign className="w-5 h-5" />, href: '/financeiro', modulo: 'FINANCEIRO' },
     ],
   },
   {
     title: 'Estrutura',
     items: [
-      { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores' },
-      { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao' },
+      { key: 'vendedores', label: 'Vendedores', icon: <UserCog className="w-5 h-5" />, href: '/vendedores', modulo: 'GESTAO_VENDEDORES' },
+      { key: 'organizacao', label: 'Organização', icon: <Building2 className="w-5 h-5" />, href: '/organizacao', modulo: 'ORGANIZACAO' },
     ],
   },
   {
     title: 'Administração',
     items: [
       { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes' },
-      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', roles: ['SUPER_ADMIN', 'ADMIN'] },
+      { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'GESTAO_USUARIOS' },
     ],
   },
 ];
@@ -68,7 +69,7 @@ const menuGroups: MenuGroup[] = [
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, profile, localizacao } = useUser();
+  const { user, profile, localizacao, temPermissao } = useUser();
   const temLocalizacao = !!localizacao.empresa_id;
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
@@ -136,7 +137,8 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               </div>
               <ul className="space-y-1 px-2">
                 {group.items.filter(item => !item.roles || item.roles.includes(profile?.tipo_usuario || '')).map((item) => {
-                  const habilitado = temLocalizacao || item.sempreAtivo;
+                  const habilitado = (temLocalizacao || item.sempreAtivo) &&
+                    (!item.modulo || temPermissao(item.modulo));
                   const ativo = isActive(item.href);
 
                   if (!habilitado) {
