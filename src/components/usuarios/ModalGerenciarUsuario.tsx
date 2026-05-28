@@ -1308,15 +1308,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
               {activeTab === 'permissoes' && !ehMonitor && (
                 <div className="space-y-4">
 
-                  {/* Aviso para ADMIN — só bloqueia se editor não for SUPER_ADMIN */}
-                  {tipoUsuario === 'ADMIN' && !editorIsSuperAdmin && (
-                    <div className="flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl">
-                      <Shield className="w-5 h-5 text-blue-600 flex-shrink-0" />
-                      <p className="text-sm text-blue-800">
-                        Admins têm acesso completo a todos os módulos. As permissões não podem ser editadas para este tipo de usuário.
-                      </p>
-                    </div>
-                  )}
+                  {/* Aviso para ADMIN sendo editado por não-SUPER_ADMIN — não acontece mais */}
 
                   <div className="border border-gray-200 rounded-xl overflow-hidden">
                     <table className="w-full">
@@ -1386,8 +1378,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                                 ? { pode_todos: true, pode_guardar: true, pode_buscar: true, pode_eliminar: true }
                                 : permissoes[modulo.id];
 
-                              // Bloqueio: ADMIN sem ser SUPER_ADMIN, ou editor não tem a permissão
-                              const bloqueadoPorTipo = !editorIsSuperAdmin && tipoUsuario === 'ADMIN';
+                              const bloqueadoPorTipo = false; // ADMIN não é mais bloqueado
                               const editorPerm = permissoesEditor[modulo.id];
 
                               const podeTodos    = editorIsSuperAdmin || !!editorPerm?.pode_todos;

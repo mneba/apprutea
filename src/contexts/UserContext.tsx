@@ -99,9 +99,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   const isAdmin = profile?.tipo_usuario === 'ADMIN';
 
   // Verifica se usuário tem alguma permissão em um módulo pelo código
-  // SUPER_ADMIN e ADMIN sempre têm acesso
+  // Só SUPER_ADMIN tem acesso irrestrito
   const temPermissao = (codigoModulo: string): boolean => {
-    if (isSuperAdmin || isAdmin) return true;
+    if (isSuperAdmin) return true;
     const p = permissoes[codigoModulo];
     if (!p) return false;
     return !!(p.pode_todos || p.pode_guardar || p.pode_buscar || p.pode_eliminar);
