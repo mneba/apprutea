@@ -998,50 +998,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                   </div>
                   )}
 
-                  {/* Seletor de Tipo — só aparece se não for Monitor, não for SUPER_ADMIN e não for próprio perfil */}
-                  {!ehMonitor && usuario.tipo_usuario !== 'SUPER_ADMIN' && !modoProprioPerfil && (
-                    <div className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3">
-                      <div>
-                        <p className="text-sm font-medium text-gray-900 mb-1">Tipo de Usuário</p>
-                        <p className="text-xs text-gray-500">
-                          Admin herda suas permissões e liberações como ponto de partida
-                        </p>
-                      </div>
-                      <div className="flex gap-3">
-                        <button
-                          onClick={() => handleMudarTipoUsuario('USUARIO_PADRAO')}
-                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all ${
-                            tipoUsuario === 'USUARIO_PADRAO'
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          Usuário Padrão
-                        </button>
-                        <button
-                          onClick={() => handleMudarTipoUsuario('ADMIN')}
-                          disabled={copiandoPermissoes}
-                          className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium border transition-all disabled:opacity-50 ${
-                            tipoUsuario === 'ADMIN'
-                              ? 'bg-blue-600 text-white border-blue-600'
-                              : 'bg-white text-gray-700 border-gray-200 hover:border-gray-300'
-                          }`}
-                        >
-                          {copiandoPermissoes ? (
-                            <span className="flex items-center justify-center gap-1.5">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              Copiando...
-                            </span>
-                          ) : 'Admin'}
-                        </button>
-                      </div>
-                      {tipoUsuario === 'ADMIN' && !copiandoPermissoes && (
-                        <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                          ✓ Permissões e liberações copiadas do seu perfil. Ajuste nas abas correspondentes se necessário.
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  {/* Seletor de Tipo removido — admin é definido no cadastro da empresa */}
 
                   {/* Lista de acessos configurados */}
                   <div className="space-y-3">

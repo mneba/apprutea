@@ -23,9 +23,11 @@ import {
   GripVertical,
   Search,
   Save,
+  Shield,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { organizacaoService } from '@/services/organizacao';
+import { usuariosService } from '@/services/usuarios';
 import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio, Cidade } from '@/types/organizacao';
 import ModalGerenciarCidades from '@/components/organizacao/ModalGerenciarCidades';
 
@@ -72,6 +74,8 @@ export default function OrganizacaoPage() {
   const [enderecoEmpresa, setEnderecoEmpresa] = useState('');
   const [sociosEmpresa, setSociosEmpresa] = useState<Socio[]>([]);
   const [salvandoEmpresa, setSalvandoEmpresa] = useState(false);
+  const [adminEmpresaId, setAdminEmpresaId] = useState('');
+  const [usuariosEmpresa, setUsuariosEmpresa] = useState<{ user_id: string; nome: string }[]>([]);
 
   // Novo sócio inline
   const [novoSocioNome, setNovoSocioNome] = useState('');
@@ -798,6 +802,8 @@ export default function OrganizacaoPage() {
     setEmailEmpresa('');
     setEnderecoEmpresa('');
     setSociosEmpresa([]);
+    setAdminEmpresaId('');
+    setUsuariosEmpresa([]);
     setHierarquiaIdEmpresa(hierarquiaId || '');
     setCidadeIdEmpresa('');
     
@@ -830,6 +836,26 @@ export default function OrganizacaoPage() {
     // Carregar sócios
     const socios = await organizacaoService.listarSocios(empresa.id);
     setSociosEmpresa(socios);
+
+    // Carregar admin atual e usuários aprovados da empresa
+    try {
+      const adminAtual = await usuariosService.buscarAdminEmpresa(empresa.id);
+      setAdminEmpresaId(adminAtual?.user_id || '');
+
+      const usuarios = await usuariosService.listarUsuarios({
+        empresaId: empresa.id,
+        isSuperAdmin: false,
+      });
+      setUsuariosEmpresa(
+        usuarios
+          .filter((u) => u.status === 'APROVADO')
+          .map((u) => ({ user_id: u.user_id, nome: u.nome }))
+      );
+    } catch (err) {
+      console.warn('Erro ao carregar admin/usuários da empresa:', err);
+      setAdminEmpresaId('');
+      setUsuariosEmpresa([]);
+    }
     
     setModalEmpresa(true);
   };
@@ -906,12 +932,16 @@ export default function OrganizacaoPage() {
         // Salvar sócios
         for (const socio of sociosEmpresa) {
           if (!socio.id) {
-            // Novo sócio
             await organizacaoService.salvarSocio({
               ...socio,
               empresa_id: empresaEditando.id,
             });
           }
+        }
+
+        // Definir admin da empresa se foi selecionado
+        if (adminEmpresaId) {
+          await usuariosService.definirAdminEmpresa(adminEmpresaId, empresaEditando.id);
         }
       } else {
         // Criar empresa
@@ -1798,6 +1828,37 @@ export default function OrganizacaoPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Admin da Empresa — só ao editar */}
+              {empresaEditando && (
+                <div className="pt-4 border-t border-gray-200">
+                  <h4 className="font-medium text-gray-900 flex items-center gap-2 mb-3">
+                    <Shield className="w-5 h-5 text-gray-500" />
+                    Admin da Empresa
+                  </h4>
+                  {usuariosEmpresa.length === 0 ? (
+                    <p className="text-sm text-gray-400 bg-gray-50 rounded-xl p-3">
+                      Nenhum usuário aprovado vinculado a esta empresa ainda.
+                    </p>
+                  ) : (
+                    <select
+                      value={adminEmpresaId}
+                      onChange={(e) => setAdminEmpresaId(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 bg-white"
+                    >
+                      <option value="">Selecione o admin...</option>
+                      {usuariosEmpresa.map((u) => (
+                        <option key={u.user_id} value={u.user_id}>
+                          {u.nome}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  <p className="text-xs text-gray-400 mt-1.5">
+                    O admin pode gerenciar usuários e definir permissões dentro desta empresa.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
