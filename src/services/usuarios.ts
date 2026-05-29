@@ -473,37 +473,44 @@ export const usuariosService = {
   },
 
   async definirAdminEmpresa(userId: string, empresaId: string): Promise<void> {
-    // Remove empresa de qualquer admin atual
+    // Remove empresa do admin atual (se houver)
     const { data: adminAtual } = await supabase
       .from('user_profiles')
-      .select('user_id, admin_empresa_ids')
+      .select('user_id, admin_empresa_ids, tipo_usuario')
       .contains('admin_empresa_ids', [empresaId])
       .neq('user_id', userId)
-      .single();
+      .maybeSingle();
 
     if (adminAtual) {
       const novasEmpresas = (adminAtual.admin_empresa_ids as string[])
         .filter((id: string) => id !== empresaId);
+      // Se não sobrou nenhuma empresa como admin, rebaixa para USUARIO_PADRAO
+      const novoTipo = novasEmpresas.length === 0 ? 'USUARIO_PADRAO' : adminAtual.tipo_usuario;
       await supabase
         .from('user_profiles')
-        .update({ admin_empresa_ids: novasEmpresas })
+        .update({ admin_empresa_ids: novasEmpresas, tipo_usuario: novoTipo })
         .eq('user_id', adminAtual.user_id);
     }
 
-    // Adiciona empresa ao novo admin
+    // Adiciona empresa ao novo admin e promove para ADMIN
     const { data: perfil } = await supabase
       .from('user_profiles')
       .select('admin_empresa_ids')
       .eq('user_id', userId)
       .single();
 
-    const adminEmpresas = perfil?.admin_empresa_ids || [];
-    if (!adminEmpresas.includes(empresaId)) {
-      await supabase
-        .from('user_profiles')
-        .update({ admin_empresa_ids: [...adminEmpresas, empresaId] })
-        .eq('user_id', userId);
-    }
+    const adminEmpresas = (perfil?.admin_empresa_ids as string[]) || [];
+    const novasEmpresas = adminEmpresas.includes(empresaId)
+      ? adminEmpresas
+      : [...adminEmpresas, empresaId];
+
+    await supabase
+      .from('user_profiles')
+      .update({
+        admin_empresa_ids: novasEmpresas,
+        tipo_usuario: 'ADMIN',
+      })
+      .eq('user_id', userId);
   },
 
   // ============================================
