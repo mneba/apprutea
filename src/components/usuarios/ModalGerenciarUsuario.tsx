@@ -533,7 +533,21 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     }
   };
 
-  // === MUDANÇA DE TIPO DE USUÁRIO ===
+  const handleDefinirAdminTitular = async () => {
+    if (selecoes.length === 0) return;
+    const empresaId = selecoes[0].empresa_id;
+    try {
+      await usuariosService.definirAdminEmpresa(usuario.user_id, empresaId);
+      setEhAdminTitular(true);
+      // Atualizar adminTitular local
+      setAdminTitular({ user_id: usuario.user_id, nome: usuario.nome });
+      showToast('✓ Usuário definido como admin titular');
+      onStatusChange?.();
+    } catch (err) {
+      console.error('Erro ao definir admin titular:', err);
+      alert('Erro ao definir admin titular. Tente novamente.');
+    }
+  };
   const handleMudarTipoUsuario = async (novoTipo: 'ADMIN' | 'USUARIO_PADRAO') => {
     setTipoUsuario(novoTipo);
 
@@ -614,11 +628,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         cidades_ids: cidadesIds,
         rotas_ids: rotasIds,
       } as any);
-
-      // Se marcado como admin titular, definir na empresa
-      if (ehAdminTitular && empresasIds.length > 0) {
-        await usuariosService.definirAdminEmpresa(usuario.user_id, empresasIds[0]);
-      }
 
       if (!ehMonitor) {
         await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
@@ -1084,7 +1093,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                         </div>
                         {!ehAdminTitular && (
                           <button
-                            onClick={() => setEhAdminTitular(true)}
+                            onClick={handleDefinirAdminTitular}
                             className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-100 border border-blue-200 rounded-lg hover:bg-blue-200 transition-colors"
                           >
                             Definir como titular
