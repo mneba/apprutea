@@ -17,10 +17,7 @@ export const usuariosService = {
     
     let query = supabase
       .from('user_profiles')
-      .select(`
-        *,
-        auth_user:user_id(email)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
 
     // Excluir o próprio usuário logado da lista — apenas para não-SUPER_ADMIN
