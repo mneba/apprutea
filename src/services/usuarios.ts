@@ -24,7 +24,7 @@ export const usuariosService = {
     // Outros usuários só veem os da sua empresa
     if (filtros?.isSuperAdmin !== true && filtros?.empresaId) {
       console.log('📌 Aplicando filtro por empresa:', filtros.empresaId);
-      query = query.contains('empresas_ids', [filtros.empresaId]);
+      query = query.filter('empresas_ids', 'cs', JSON.stringify([filtros.empresaId]));
     } else {
       console.log('👑 SUPER_ADMIN ou sem filtro - mostrando todos');
     }

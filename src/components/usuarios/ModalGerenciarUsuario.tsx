@@ -88,6 +88,8 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
 
   // Permissões do editor (para calcular teto)
   const [permissoesEditor, setPermissoesEditor] = useState<Record<string, UserPermissao>>({});
+  // Liberações do editor: chave = "tipo|empresa_id|rota_id"
+  const [liberacoesEditor, setLiberacoesEditor] = useState<Record<LiberacaoKey, boolean>>({});
 
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(true);
@@ -190,6 +192,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
           modulosData,
           permissoesData,
           permissoesEditorData,
+          liberacoesEditorData,
         ] = await Promise.all([
           usuariosService.listarHierarquias(),
           organizacaoService.listarTodasCidades(),
@@ -197,10 +200,12 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
           usuariosService.listarRotas(),
           usuariosService.listarModulos(),
           usuariosService.listarPermissoesUsuario(usuario.user_id),
-          // Permissões do editor — só carrega se não for SUPER_ADMIN
           editorIsSuperAdmin || !editorProfile?.user_id
             ? Promise.resolve([])
             : usuariosService.listarPermissoesUsuario(editorProfile.user_id),
+          editorIsSuperAdmin || !editorProfile?.user_id
+            ? Promise.resolve([])
+            : usuariosService.listarLiberacoesUsuario(editorProfile.user_id),
         ]);
 
         // Reduzir CidadeComResumo para Cidade
@@ -223,6 +228,15 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
           const map: Record<string, UserPermissao> = {};
           permissoesEditorData.forEach((p: UserPermissao) => { map[p.modulo_id] = p; });
           setPermissoesEditor(map);
+        }
+
+        // Liberações do editor
+        if (!editorIsSuperAdmin && liberacoesEditorData.length > 0) {
+          const map: Record<LiberacaoKey, boolean> = {};
+          liberacoesEditorData.forEach((l: any) => {
+            map[makeLiberacaoKey(l.tipo_solicitacao, l.empresa_id, l.rota_id)] = l.pode_liberar;
+          });
+          setLiberacoesEditor(map);
         }
 
         // Extrair DDI do telefone existente
@@ -451,7 +465,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     setLiberacoes((prev) => {
       const novas = { ...prev };
       TIPOS_SOLICITACAO[categoria].forEach((item) => {
-        novas[makeLiberacaoKey(item.tipo, empresaId, rotaId)] = marcar;
+        const key = makeLiberacaoKey(item.tipo, empresaId, rotaId);
+        const editorPode = editorIsSuperAdmin || liberacoesEditor[key] === true;
+        if (marcar && !editorPode) return;
+        novas[key] = marcar;
       });
       return novas;
     });
@@ -462,7 +479,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     setLiberacoes((prev) => {
       const novas = { ...prev };
       TODOS_TIPOS.forEach((item) => {
-        novas[makeLiberacaoKey(item.tipo, empresaId, rotaId)] = marcar;
+        const key = makeLiberacaoKey(item.tipo, empresaId, rotaId);
+        const editorPode = editorIsSuperAdmin || liberacoesEditor[key] === true;
+        if (marcar && !editorPode) return;
+        novas[key] = marcar;
       });
       return novas;
     });
@@ -1487,14 +1507,22 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                                         <p className="text-xs text-gray-400">{item.descricao}</p>
                                       </div>
                                     </td>
-                                    {colunasLiberacao.map((col, idx) => (
-                                      <td key={idx} className="px-3 py-3 text-left">
-                                        <Checkbox
-                                          checked={liberacoes[makeLiberacaoKey(item.tipo, col.empresaId, col.rotaId)] ?? false}
-                                          onChange={() => toggleLiberacao(item.tipo, col.empresaId, col.rotaId)}
-                                        />
-                                      </td>
-                                    ))}
+                                    {colunasLiberacao.map((col, idx) => {
+                                      const editorPodeLiberarEste = editorIsSuperAdmin ||
+                                        liberacoesEditor[makeLiberacaoKey(item.tipo, col.empresaId, col.rotaId)] === true;
+                                      return (
+                                        <td key={idx} className="px-3 py-3 text-left">
+                                          {editorPodeLiberarEste ? (
+                                            <Checkbox
+                                              checked={liberacoes[makeLiberacaoKey(item.tipo, col.empresaId, col.rotaId)] ?? false}
+                                              onChange={() => toggleLiberacao(item.tipo, col.empresaId, col.rotaId)}
+                                            />
+                                          ) : (
+                                            <span className="text-gray-300 text-lg font-light select-none">—</span>
+                                          )}
+                                        </td>
+                                      );
+                                    })}
                                   </tr>
                                 ))}
                               </Fragment>

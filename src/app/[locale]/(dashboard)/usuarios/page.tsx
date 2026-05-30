@@ -112,7 +112,9 @@ export default function UsuariosPage() {
       const [usuariosData, empresasData] = await Promise.all([
         usuariosService.listarUsuarios({
           isSuperAdmin: ehSuperAdmin,
-          empresaId: ehSuperAdmin ? undefined : (localizacao.empresa_id || undefined),
+          empresaId: ehSuperAdmin
+            ? undefined
+            : (localizacao.empresa_id || profile?.empresas_ids?.[0] || undefined),
         }),
         usuariosService.listarEmpresas(),
       ]);
