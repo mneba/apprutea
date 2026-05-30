@@ -716,11 +716,45 @@ export default function LiquidacaoDiariaPage() {
       setEmprestimos(emps);
 
       const supabase = (await import('@/lib/supabase/client')).createClient();
-      const { data: empsLista } = await supabase
+      
+      // 1. Empréstimos CRIADOS nesta liquidação (novos, renovações, renegociações)
+      const { data: empsNovos } = await supabase
         .from('emprestimos')
         .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
         .eq('liquidacao_id', liq.id);
-      setEmprestimosDoDia((empsLista || []) as any);
+
+      // 2. Empréstimos QUITADOS nesta liquidação (via RPC)
+      const { data: statusClientes } = await supabase.rpc('fn_clientes_parcela_status_liquidacao', {
+        p_liquidacao_id: liq.id
+      });
+
+      // Identificar clientes que quitaram
+      const clientesQuitados = new Set(
+        (statusClientes || [])
+          .filter((s: any) => s.parcela_status === 'QUITADO')
+          .map((s: any) => s.cliente_id)
+      );
+
+      // Se há clientes quitados, buscar os empréstimos deles
+      let empsQuitados: any[] = [];
+      if (clientesQuitados.size > 0) {
+        const { data: quitados } = await supabase
+          .from('emprestimos')
+          .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
+          .in('cliente_id', Array.from(clientesQuitados))
+          .eq('status', 'QUITADO');
+        empsQuitados = quitados || [];
+      }
+
+      // Combinar ambas as listas (sem duplicatas)
+      const empsTodos = [...(empsNovos || [])];
+      for (const eq of empsQuitados) {
+        if (!empsTodos.find(e => e.id === eq.id)) {
+          empsTodos.push(eq);
+        }
+      }
+
+      setEmprestimosDoDia(empsTodos as any);
 
       // Buscar ordem dos clientes na rota (ordem_rota_cliente)
       const { data: ordemData } = await supabase

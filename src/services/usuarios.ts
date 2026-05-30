@@ -23,9 +23,9 @@ export const usuariosService = {
       `)
       .order('created_at', { ascending: false });
 
-    // Excluir o próprio usuário logado da lista
+    // Excluir o próprio usuário logado da lista — apenas para não-SUPER_ADMIN
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser) {
+    if (currentUser && filtros?.isSuperAdmin !== true) {
       query = query.neq('user_id', currentUser.id);
     }
 
