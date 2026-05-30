@@ -17,8 +17,17 @@ export const usuariosService = {
     
     let query = supabase
       .from('user_profiles')
-      .select('*')
+      .select(`
+        *,
+        auth_user:user_id(email)
+      `)
       .order('created_at', { ascending: false });
+
+    // Excluir o próprio usuário logado da lista
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (currentUser) {
+      query = query.neq('user_id', currentUser.id);
+    }
 
     // SUPER_ADMIN vê TODOS os usuários (não aplica filtro)
     // Outros usuários só veem os da sua empresa

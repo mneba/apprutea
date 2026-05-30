@@ -83,8 +83,7 @@ const TODOS_TIPOS = [
 
 export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange, modoProprioPerfil = false }: Props) {
   const supabase = createClient();
-  const { profile: editorProfile } = useUser();
-  const editorIsSuperAdmin = editorProfile?.tipo_usuario === 'SUPER_ADMIN';
+  const { profile: editorProfile, isSuperAdmin: editorIsSuperAdmin, user } = useUser();
 
   // Permissões do editor (para calcular teto)
   const [permissoesEditor, setPermissoesEditor] = useState<Record<string, UserPermissao>>({});
@@ -844,6 +843,19 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
               {/* ABA DADOS */}
               {activeTab === 'dados' && (
                 <div className="space-y-4">
+                  {/* Email — só leitura, vem do auth */}
+                  {modoProprioPerfil && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">E-mail</label>
+                      <input
+                        type="text"
+                        value={editorProfile ? (user?.email || '') : ''}
+                        readOnly
+                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 cursor-default"
+                      />
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Nome</label>
                     <input
