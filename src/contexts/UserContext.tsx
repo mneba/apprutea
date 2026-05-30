@@ -159,9 +159,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
   };
 
   const loadLocalizacaoSalva = async (profileData: UserProfile) => {
-    // Se não tem ultima_empresa_id mas tem empresas_ids, usar a primeira
+    const empresasIds: string[] = profileData.empresas_ids || [];
     const empresaIdInicial = profileData.ultima_empresa_id ||
-      (profileData.empresas_ids?.length > 0 ? profileData.empresas_ids[0] : null);
+      (empresasIds.length > 0 ? empresasIds[0] : null);
 
     const locBruta: LocalizacaoAtual = {
       hierarquia_id: profileData.ultima_hierarquia_id || null,
