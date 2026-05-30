@@ -536,10 +536,24 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
   const handleDefinirAdminTitular = async () => {
     if (selecoes.length === 0) return;
     const empresaId = selecoes[0].empresa_id;
+
+    // Verificar se há permissões configuradas
+    const temPermissoesConfiguradas = Object.values(permissoes).some(p =>
+      p.pode_todos || p.pode_guardar || p.pode_buscar || p.pode_eliminar
+    );
+
+    if (!temPermissoesConfiguradas) {
+      alert('Configure as permissões do usuário na aba Permissões antes de defini-lo como admin titular.');
+      return;
+    }
+
     try {
+      // Salvar permissões atuais antes de definir como titular
+      await usuariosService.salvarPermissoes(usuario.user_id, Object.values(permissoes));
+
+      // Definir como admin titular
       await usuariosService.definirAdminEmpresa(usuario.user_id, empresaId);
       setEhAdminTitular(true);
-      // Atualizar adminTitular local
       setAdminTitular({ user_id: usuario.user_id, nome: usuario.nome });
       showToast('✓ Usuário definido como admin titular');
       onStatusChange?.();
