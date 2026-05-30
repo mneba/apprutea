@@ -325,7 +325,7 @@ export default function UsuariosPage() {
                             <div>
                               <p className="font-medium text-gray-900">{usuario.nome}</p>
                               <p className="text-xs text-gray-500">
-                                {(usuario as any).auth_user?.email || usuario.telefone}
+                                {(usuario as any).email || usuario.telefone}
                               </p>
                             </div>
                           </div>

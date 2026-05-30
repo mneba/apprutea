@@ -14,34 +14,20 @@ export const usuariosService = {
     isSuperAdmin?: boolean;
   }): Promise<UserProfile[]> {
     console.log('🔍 Service listarUsuarios:', filtros);
-    
-    let query = supabase
-      .from('user_profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
 
-    // Excluir o próprio usuário logado da lista — apenas para não-SUPER_ADMIN
     const { data: { user: currentUser } } = await supabase.auth.getUser();
-    if (currentUser && filtros?.isSuperAdmin !== true) {
-      query = query.neq('user_id', currentUser.id);
-    }
 
-    // SUPER_ADMIN vê TODOS os usuários (não aplica filtro)
-    // Outros usuários só veem os da sua empresa
-    if (filtros?.isSuperAdmin !== true && filtros?.empresaId) {
-      console.log('📌 Aplicando filtro por empresa:', filtros.empresaId);
-      query = query.filter('empresas_ids', 'cs', JSON.stringify([filtros.empresaId]));
-    } else {
-      console.log('👑 SUPER_ADMIN ou sem filtro - mostrando todos');
-    }
+    const { data, error } = await supabase.rpc('fn_listar_usuarios_com_email', {
+      p_empresa_id: filtros?.isSuperAdmin ? null : (filtros?.empresaId || null),
+      p_is_super_admin: filtros?.isSuperAdmin || false,
+      p_current_user_id: currentUser?.id || null,
+    });
 
-    const { data, error } = await query;
-    
     if (error) {
       console.error('❌ Erro ao listar usuários:', error);
       throw error;
     }
-    
+
     console.log('✅ Usuários retornados:', data?.length);
     return data || [];
   },
