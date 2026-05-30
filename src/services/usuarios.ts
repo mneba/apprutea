@@ -473,11 +473,11 @@ export const usuariosService = {
   },
 
   async definirAdminEmpresa(userId: string, empresaId: string): Promise<void> {
-    // Remove empresa do admin atual (se houver)
+    // Remove empresa do admin atual (se houver) — usando filter manual pois .contains() tem limitações
     const { data: adminAtual } = await supabase
       .from('user_profiles')
       .select('user_id, admin_empresa_ids, tipo_usuario')
-      .contains('admin_empresa_ids', [empresaId])
+      .filter('admin_empresa_ids', 'cs', JSON.stringify([empresaId]))
       .neq('user_id', userId)
       .maybeSingle();
 
