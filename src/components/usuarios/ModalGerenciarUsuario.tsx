@@ -1367,44 +1367,36 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               const podeEliminar = editorIsSuperAdmin || !!editorPerm?.pode_eliminar;
 
                               return (
-                                <tr key={modulo.id} className={`${bloqueadoPorTipo ? 'opacity-70' : 'hover:bg-gray-50'}`}>
+                                <tr key={modulo.id} className="hover:bg-gray-50">
                                   <td className="px-4 py-3">
                                     <span className="text-sm text-gray-700">{modulo.nome}</span>
                                     {!editorIsSuperAdmin && !podeTodos && !podeGuardar && !podeBuscar && !podeEliminar && (
-                                      <span className="ml-2 text-xs text-gray-400">(sem acesso)</span>
+                                      <span className="ml-2 text-xs text-red-400">(sem acesso)</span>
                                     )}
                                   </td>
                                   <td className="px-4 py-3 text-center">
-                                    <Checkbox
-                                      checked={permissao?.pode_todos || false}
-                                      onChange={() => !bloqueadoPorTipo && podeTodos && togglePermissao(modulo.id, 'pode_todos')}
-                                      disabled={bloqueadoPorTipo || !podeTodos}
-                                      title={!podeTodos ? 'Você não tem esta permissão' : undefined}
-                                    />
+                                    {podeTodos || bloqueadoPorTipo
+                                      ? <Checkbox checked={permissao?.pode_todos || false} onChange={() => !bloqueadoPorTipo && togglePermissao(modulo.id, 'pode_todos')} disabled={bloqueadoPorTipo} />
+                                      : <span className="text-gray-300 text-lg font-light select-none">—</span>
+                                    }
                                   </td>
                                   <td className="px-4 py-3 text-center">
-                                    <Checkbox
-                                      checked={permissao?.pode_guardar || false}
-                                      onChange={() => !bloqueadoPorTipo && podeGuardar && togglePermissao(modulo.id, 'pode_guardar')}
-                                      disabled={bloqueadoPorTipo || !podeGuardar}
-                                      title={!podeGuardar ? 'Você não tem esta permissão' : undefined}
-                                    />
+                                    {podeGuardar || bloqueadoPorTipo
+                                      ? <Checkbox checked={permissao?.pode_guardar || false} onChange={() => !bloqueadoPorTipo && togglePermissao(modulo.id, 'pode_guardar')} disabled={bloqueadoPorTipo} />
+                                      : <span className="text-gray-300 text-lg font-light select-none">—</span>
+                                    }
                                   </td>
                                   <td className="px-4 py-3 text-center">
-                                    <Checkbox
-                                      checked={permissao?.pode_buscar || false}
-                                      onChange={() => !bloqueadoPorTipo && podeBuscar && togglePermissao(modulo.id, 'pode_buscar')}
-                                      disabled={bloqueadoPorTipo || !podeBuscar}
-                                      title={!podeBuscar ? 'Você não tem esta permissão' : undefined}
-                                    />
+                                    {podeBuscar || bloqueadoPorTipo
+                                      ? <Checkbox checked={permissao?.pode_buscar || false} onChange={() => !bloqueadoPorTipo && togglePermissao(modulo.id, 'pode_buscar')} disabled={bloqueadoPorTipo} />
+                                      : <span className="text-gray-300 text-lg font-light select-none">—</span>
+                                    }
                                   </td>
                                   <td className="px-4 py-3 text-center">
-                                    <Checkbox
-                                      checked={permissao?.pode_eliminar || false}
-                                      onChange={() => !bloqueadoPorTipo && podeEliminar && togglePermissao(modulo.id, 'pode_eliminar')}
-                                      disabled={bloqueadoPorTipo || !podeEliminar}
-                                      title={!podeEliminar ? 'Você não tem esta permissão' : undefined}
-                                    />
+                                    {podeEliminar || bloqueadoPorTipo
+                                      ? <Checkbox checked={permissao?.pode_eliminar || false} onChange={() => !bloqueadoPorTipo && togglePermissao(modulo.id, 'pode_eliminar')} disabled={bloqueadoPorTipo} />
+                                      : <span className="text-gray-300 text-lg font-light select-none">—</span>
+                                    }
                                   </td>
                                 </tr>
                               );
