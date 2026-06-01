@@ -17,6 +17,7 @@ import {
   Check,
   Link,
   ChevronDown,
+  AlertCircle,
 } from 'lucide-react';
 import { usuariosService } from '@/services/usuarios';
 import { useUser } from '@/contexts/UserContext';
@@ -97,8 +98,10 @@ export default function UsuariosPage() {
   const [modalConviteAberto, setModalConviteAberto] = useState(false);
   const [conviteEmail, setConviteEmail] = useState('');
   const [conviteEmpresaId, setConviteEmpresaId] = useState('');
-  const [linkGerado, setLinkGerado] = useState('');
-  const [linkCopiado, setLinkCopiado] = useState(false);
+  const [enviandoConvite, setEnviandoConvite] = useState(false);
+  const [conviteEnviado, setConviteEnviado] = useState(false);
+  const [conviteStatus, setConviteStatus] = useState<string | null>(null);
+  const [confirmarRenovacao, setConfirmarRenovacao] = useState(false);
 
   const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
 
@@ -164,25 +167,50 @@ export default function UsuariosPage() {
 
   const handleAbrirConvite = () => {
     setConviteEmail('');
-    setConviteEmpresaId(ehSuperAdmin ? '' : (localizacao.empresa_id || ''));
-    setLinkGerado('');
-    setLinkCopiado(false);
+    setConviteEmpresaId(ehSuperAdmin ? (localizacao.empresa_id || '') : (localizacao.empresa_id || ''));
+    setConviteEnviado(false);
+    setConviteStatus(null);
+    setConfirmarRenovacao(false);
     setModalConviteAberto(true);
   };
 
-  const handleGerarLink = () => {
+  const handleEnviarConvite = async (forcarRenovacao = false) => {
     if (!conviteEmpresaId) { alert('Selecione uma empresa.'); return; }
-    const base = typeof window !== 'undefined' ? window.location.origin : '';
-    setLinkGerado(`${base}/cadastro?empresa_id=${conviteEmpresaId}`);
-    setLinkCopiado(false);
-  };
+    if (!conviteEmail) { alert('Informe o e-mail do convidado.'); return; }
 
-  const handleCopiarLink = async () => {
+    setEnviandoConvite(true);
+    setConviteStatus(null);
     try {
-      await navigator.clipboard.writeText(linkGerado);
-      setLinkCopiado(true);
-      setTimeout(() => setLinkCopiado(false), 2000);
-    } catch { alert('Copie manualmente.'); }
+      const resp = await fetch('/api/convites/enviar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: conviteEmail,
+          empresaId: conviteEmpresaId,
+          forcarRenovacao,
+        }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok) throw new Error(data.erro || 'Erro ao enviar convite');
+
+      if (!data.sucesso && data.status === 'PENDENTE_ATIVO') {
+        setConviteStatus('PENDENTE_ATIVO');
+        return;
+      }
+
+      if (!data.sucesso && data.status === 'EXPIRADO') {
+        setConfirmarRenovacao(true);
+        return;
+      }
+
+      setConviteEnviado(true);
+      setConviteStatus(data.status);
+    } catch (err: any) {
+      alert(err.message || 'Erro ao enviar convite.');
+    } finally {
+      setEnviandoConvite(false);
+    }
   };
 
   if (loadingUser) {
@@ -410,7 +438,7 @@ export default function UsuariosPage() {
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900">Convidar Usuário</h2>
-                  <p className="text-xs text-gray-500">Gere um link de cadastro para enviar</p>
+                  <p className="text-xs text-gray-500">Envie um convite por e-mail</p>
                 </div>
               </div>
               <button onClick={() => setModalConviteAberto(false)} className="p-2 hover:bg-gray-100 rounded-lg">
@@ -419,84 +447,132 @@ export default function UsuariosPage() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  E-mail do convidado
-                  <span className="ml-2 text-xs text-gray-400 font-normal">(opcional por enquanto)</span>
-                </label>
-                <input
-                  type="email"
-                  value={conviteEmail}
-                  onChange={(e) => setConviteEmail(e.target.value)}
-                  placeholder="usuario@exemplo.com"
-                  className="w-full pl-4 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
 
-              {ehSuperAdmin ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    Empresa <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      value={conviteEmpresaId}
-                      onChange={(e) => { setConviteEmpresaId(e.target.value); setLinkGerado(''); }}
-                      className="appearance-none w-full pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
-                    >
-                      <option value="">Selecione uma empresa...</option>
-                      {empresas.map((e) => (
-                        <option key={e.id} value={e.id}>{e.nome}</option>
-                      ))}
-                    </select>
-                    <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+              {/* Sucesso */}
+              {conviteEnviado ? (
+                <div className="text-center py-4">
+                  <div className="w-14 h-14 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-3">
+                    <Check className="w-7 h-7 text-green-600" />
                   </div>
+                  <p className="font-medium text-gray-900">
+                    {conviteStatus === 'RENOVADO' ? 'Convite renovado e reenviado!' : 'Convite enviado com sucesso!'}
+                  </p>
+                  <p className="text-sm text-gray-500 mt-1">
+                    Um e-mail foi enviado para <strong>{conviteEmail}</strong>
+                  </p>
+                  <button
+                    onClick={() => setModalConviteAberto(false)}
+                    className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700"
+                  >
+                    Fechar
+                  </button>
                 </div>
-              ) : (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Empresa</label>
-                  <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700">
-                    <Building2 className="w-4 h-4 text-gray-400" />
-                    {empresas.find((e) => e.id === conviteEmpresaId)?.nome || '-'}
+              ) : confirmarRenovacao ? (
+                /* Confirmar renovação de convite expirado */
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-amber-800">
+                      O convite anterior para <strong>{conviteEmail}</strong> expirou. Deseja renovar e reenviar o e-mail?
+                    </p>
                   </div>
-                </div>
-              )}
-
-              {linkGerado && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Link de Cadastro</label>
-                  <div className="flex gap-2">
-                    <div className="flex-1 px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs font-mono text-gray-600 truncate">
-                      {linkGerado}
-                    </div>
+                  <div className="flex gap-3">
                     <button
-                      onClick={handleCopiarLink}
-                      className="px-3 py-2.5 border border-gray-200 rounded-xl hover:bg-gray-50 transition-colors flex-shrink-0"
-                      title="Copiar link"
+                      onClick={() => setConfirmarRenovacao(false)}
+                      className="flex-1 px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
                     >
-                      {linkCopiado ? <Check className="w-4 h-4 text-green-600" /> : <Copy className="w-4 h-4 text-gray-500" />}
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={() => { setConfirmarRenovacao(false); handleEnviarConvite(true); }}
+                      disabled={enviandoConvite}
+                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {enviandoConvite ? 'Enviando...' : 'Renovar e Reenviar'}
                     </button>
                   </div>
-                  <p className="text-xs text-amber-600">
-                    ⚠ Envio automático por e-mail ainda não implementado. Copie o link e envie manualmente.
-                  </p>
                 </div>
+              ) : conviteStatus === 'PENDENTE_ATIVO' ? (
+                /* Convite já existe e está ativo */
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                    <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                    <p className="text-sm text-blue-800">
+                      Já existe um convite pendente para <strong>{conviteEmail}</strong>. O link anterior ainda é válido.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setConviteStatus(null)}
+                    className="w-full px-4 py-2 border border-gray-200 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Voltar
+                  </button>
+                </div>
+              ) : (
+                /* Formulário normal */
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      E-mail do convidado <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="email"
+                      value={conviteEmail}
+                      onChange={(e) => setConviteEmail(e.target.value)}
+                      placeholder="usuario@exemplo.com"
+                      className="w-full pl-4 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+
+                  {ehSuperAdmin ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        Empresa <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <select
+                          value={conviteEmpresaId}
+                          onChange={(e) => setConviteEmpresaId(e.target.value)}
+                          className="appearance-none w-full pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                        >
+                          <option value="">Selecione uma empresa...</option>
+                          {empresas.map((e) => (
+                            <option key={e.id} value={e.id}>{e.nome}</option>
+                          ))}
+                        </select>
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Empresa</label>
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700">
+                        <Building2 className="w-4 h-4 text-gray-400" />
+                        {empresas.find((e) => e.id === conviteEmpresaId)?.nome || '-'}
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
-              <button onClick={() => setModalConviteAberto(false)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm">
-                Cancelar
-              </button>
-              <button
-                onClick={handleGerarLink}
-                disabled={!conviteEmpresaId}
-                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium"
-              >
-                <Link className="w-4 h-4" />
-                Gerar Link
-              </button>
-            </div>
+            {!conviteEnviado && !confirmarRenovacao && conviteStatus !== 'PENDENTE_ATIVO' && (
+              <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+                <button onClick={() => setModalConviteAberto(false)} className="px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors text-sm">
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleEnviarConvite(false)}
+                  disabled={enviandoConvite || !conviteEmail || !conviteEmpresaId}
+                  className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm font-medium"
+                >
+                  {enviandoConvite
+                    ? <><Loader2 className="w-4 h-4 animate-spin" /> Enviando...</>
+                    : <><Link className="w-4 h-4" /> Enviar Convite</>
+                  }
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
