@@ -4,7 +4,10 @@ import { createClient as createServerClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, empresaId, forcarRenovacao = false } = await request.json();
+    console.log('🚀 Iniciando envio de convite');
+    const body = await request.json();
+    console.log('📦 Body recebido:', { email: body.email, empresaId: body.empresaId });
+    const { email, empresaId, forcarRenovacao = false } = body;
 
     if (!email || !empresaId) {
       return NextResponse.json({ erro: 'E-mail e empresa são obrigatórios' }, { status: 400 });
@@ -129,7 +132,11 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (err: any) {
-    console.error('Erro ao enviar convite:', err);
+    console.error('Erro ao enviar convite - detalhes:', {
+      message: err.message,
+      stack: err.stack,
+      name: err.name,
+    });
     return NextResponse.json({ erro: err.message || 'Erro interno' }, { status: 500 });
   }
 }
