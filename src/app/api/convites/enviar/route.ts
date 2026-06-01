@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = createClient();
+    const supabase = await createClient();
 
     // Verificar se usuário logado é ADMIN ou SUPER_ADMIN
     const { data: { user } } = await supabase.auth.getUser();
