@@ -50,19 +50,46 @@ export const authService = {
 
     if (profileError) throw profileError;
 
-    // Buscar SUPER_ADMIN para enviar mensagem
-    const { data: superAdmins } = await supabase
-      .from('user_profiles')
-      .select('user_id')
-      .eq('tipo_usuario', 'SUPER_ADMIN')
-      .eq('status', 'APROVADO');
+    // Determinar destinatários da notificação:
+    // - Se veio de convite (empresa_id definida): admin titular da empresa
+    // - Caso contrário: todos os SUPER_ADMINs
+    let destinatarios: { user_id: string }[] = [];
 
-    // Criar mensagem para cada SUPER_ADMIN
-    if (superAdmins && superAdmins.length > 0) {
-      const mensagens = superAdmins.map((admin) => ({
+    if (dados.empresa_id) {
+      // Buscar admin titular da empresa
+      const { data: adminTitular } = await supabase
+        .from('user_profiles')
+        .select('user_id')
+        .filter('admin_empresa_ids', 'cs', JSON.stringify([dados.empresa_id]))
+        .eq('status', 'APROVADO')
+        .limit(1);
+
+      if (adminTitular && adminTitular.length > 0) {
+        destinatarios = adminTitular;
+      } else {
+        // Fallback para SUPER_ADMIN se não houver admin titular
+        const { data: superAdmins } = await supabase
+          .from('user_profiles')
+          .select('user_id')
+          .eq('tipo_usuario', 'SUPER_ADMIN')
+          .eq('status', 'APROVADO');
+        destinatarios = superAdmins || [];
+      }
+    } else {
+      // Sem empresa — notificar SUPER_ADMINs
+      const { data: superAdmins } = await supabase
+        .from('user_profiles')
+        .select('user_id')
+        .eq('tipo_usuario', 'SUPER_ADMIN')
+        .eq('status', 'APROVADO');
+      destinatarios = superAdmins || [];
+    }
+
+    if (destinatarios.length > 0) {
+      const mensagens = destinatarios.map((admin) => ({
         usuario_origem_id: userId,
         usuario_destino_id: admin.user_id,
-        mensagem: `🆕 Nova solicitação de acesso!\n\n👤 Nome: ${dados.nome}\n📱 Telefone: ${dados.telefone}\n🏢 Empresa Pretendida: ${dados.empresa_pretendida}\n\n⏳ Aguardando configuração de acesso e geração de código.`,
+        mensagem: `🆕 Nova solicitação de acesso!\n\n👤 Nome: ${dados.nome}\n📱 Telefone: ${dados.telefone}\n🏢 Empresa: ${dados.empresa_pretendida}\n\n⏳ Aguardando aprovação e geração de código de acesso.`,
         lido: false,
       }));
 
