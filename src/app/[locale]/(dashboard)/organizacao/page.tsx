@@ -176,9 +176,14 @@ export default function OrganizacaoPage() {
 
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+  const isAdmin = profile?.tipo_usuario === 'ADMIN';
+  const podeGerenciarEmpresa = isSuperAdmin || isAdmin;
   const hierarquiaId = localizacao?.hierarquia_id;
   const empresaIdSelecionada = localizacao?.empresa_id;
   const rotaIdSelecionada = localizacao?.rota_id;
+  
+  // Esconder cards se admin tem apenas 1 empresa e 1 rota
+  const mostrarCards = isSuperAdmin || resumoGeral.total_empresas > 1 || resumoGeral.total_rotas_ativas > 1;
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -1062,80 +1067,89 @@ export default function OrganizacaoPage() {
           )}
         </div>
         
-        {/* Botões de ação - SUPER_ADMIN sempre pode adicionar empresa */}
-        {isSuperAdmin && (
-          <div className="flex items-center gap-2">
-            {viewMode === 'rotas' && empresaSelecionada && (
-              <button
-                onClick={() => handleAbrirModalEditarEmpresa(empresaSelecionada)}
-                className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-              >
-                <Edit className="w-5 h-5" />
-                Gerenciar Empresa
-              </button>
-            )}
-
-            {/* Botão Cidades - apenas SUPER_ADMIN */}
+        {/* Botões de ação */}
+        <div className="flex items-center gap-2">
+          {/* Gerenciar Empresa - SUPER_ADMIN e ADMIN */}
+          {podeGerenciarEmpresa && viewMode === 'rotas' && empresaSelecionada && (
             <button
-              onClick={() => setModalCidades(true)}
+              onClick={() => handleAbrirModalEditarEmpresa(empresaSelecionada)}
               className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
-              title="Gerenciar cidades disponíveis"
             >
-              <MapPin className="w-5 h-5" />
-              Cidades
+              <Edit className="w-5 h-5" />
+              Gerenciar Empresa
             </button>
+          )}
 
-            {viewMode === 'rotas' && empresaSelecionada && (
+          {/* Botões exclusivos SUPER_ADMIN */}
+          {isSuperAdmin && (
+            <>
+              {/* Botão Cidades */}
               <button
-                onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                onClick={() => setModalCidades(true)}
+                className="flex items-center gap-2 px-4 py-2.5 text-gray-700 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors font-medium"
+                title="Gerenciar cidades disponíveis"
               >
-                <Plus className="w-5 h-5" />
-                Nova Rota
+                <MapPin className="w-5 h-5" />
+                Cidades
               </button>
-            )}
-            <button
-              onClick={handleAbrirModalNovaEmpresa}
-              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
-            >
-              <Building2 className="w-5 h-5" />
-              Nova Empresa
-            </button>
-          </div>
-        )}
+
+              {/* Nova Rota */}
+              {viewMode === 'rotas' && empresaSelecionada && (
+                <button
+                  onClick={() => handleAbrirModalNovaRota(empresaSelecionada)}
+                  className="flex items-center gap-2 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors font-medium"
+                >
+                  <Plus className="w-5 h-5" />
+                  Nova Rota
+                </button>
+              )}
+
+              {/* Nova Empresa */}
+              <button
+                onClick={handleAbrirModalNovaEmpresa}
+                className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-colors font-medium"
+              >
+                <Building2 className="w-5 h-5" />
+                Nova Empresa
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Cards de Resumo */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <CardEstatistica
-          titulo="Total de Empresas"
-          valor={resumoGeral.total_empresas}
-          icone={Building2}
-          corIcone="text-blue-600"
-          corFundo="bg-blue-100"
-        />
-        <CardEstatistica
-          titulo="Rotas Ativas"
-          valor={resumoGeral.total_rotas_ativas}
-          icone={MapPin}
-          corIcone="text-green-600"
-          corFundo="bg-green-100"
-        />
-        <CardEstatistica
-          titulo="Total de Clientes"
-          valor={resumoGeral.total_clientes}
-          icone={Users}
-          corIcone="text-purple-600"
-          corFundo="bg-purple-100"
-        />
-        <CardEstatistica
-          titulo="Empréstimos Ativos"
-          valor={resumoGeral.total_emprestimos_ativos}
-          icone={CreditCard}
-          corIcone="text-amber-600"
-          corFundo="bg-amber-100"
-        />
-      </div>
+      {/* Cards de Resumo - esconder se admin tem apenas 1 empresa e 1 rota */}
+      {mostrarCards && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <CardEstatistica
+            titulo="Total de Empresas"
+            valor={resumoGeral.total_empresas}
+            icone={Building2}
+            corIcone="text-blue-600"
+            corFundo="bg-blue-100"
+          />
+          <CardEstatistica
+            titulo="Rotas Ativas"
+            valor={resumoGeral.total_rotas_ativas}
+            icone={MapPin}
+            corIcone="text-green-600"
+            corFundo="bg-green-100"
+          />
+          <CardEstatistica
+            titulo="Total de Clientes"
+            valor={resumoGeral.total_clientes}
+            icone={Users}
+            corIcone="text-purple-600"
+            corFundo="bg-purple-100"
+          />
+          <CardEstatistica
+            titulo="Empréstimos Ativos"
+            valor={resumoGeral.total_emprestimos_ativos}
+            icone={CreditCard}
+            corIcone="text-amber-600"
+            corFundo="bg-amber-100"
+          />
+        </div>
+      )}
 
       {/* Conteúdo Principal */}
       {viewMode === 'empresas' ? (
@@ -1170,7 +1184,7 @@ export default function OrganizacaoPage() {
                     <h3 className="text-lg font-semibold text-gray-900">
                       {empresa.nome}
                     </h3>
-                    {isSuperAdmin && (
+                    {podeGerenciarEmpresa && (
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1199,17 +1213,19 @@ export default function OrganizacaoPage() {
                     </div>
                   </div>
 
-                  {/* Botão Adicionar Rota */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleAbrirModalNovaRota(empresa);
-                    }}
-                    className="mt-4 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors w-full justify-center"
-                  >
-                    <Plus className="w-4 h-4" />
-                    Adicionar nova Rota
-                  </button>
+                  {/* Botão Adicionar Rota - apenas SUPER_ADMIN */}
+                  {isSuperAdmin && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAbrirModalNovaRota(empresa);
+                      }}
+                      className="mt-4 flex items-center gap-2 px-3 py-2 text-sm text-blue-600 border border-blue-200 rounded-lg hover:bg-blue-50 transition-colors w-full justify-center"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar nova Rota
+                    </button>
+                  )}
                 </div>
               ))
             )}
