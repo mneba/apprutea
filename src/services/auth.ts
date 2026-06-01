@@ -40,7 +40,7 @@ export const authService = {
         empresa_pretendida: dados.empresa_pretendida,
         status: 'PENDENTE',
         tipo_usuario: 'USUARIO_PADRAO',
-        empresas_ids: [],
+        empresas_ids: dados.empresa_id ? [dados.empresa_id] : [],
         hierarquias_ids: [],
         cidades_ids: [],
         rotas_ids: [],

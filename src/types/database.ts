@@ -198,6 +198,7 @@ export interface RegistroEtapa2 {
   nome: string;
   telefone: string;
   empresa_pretendida: string;
+  empresa_id?: string; // Preenchido quando o cadastro vem de um convite
   /**
    * @deprecated Cadastro não pede mais localização — admin define
    * acesso depois via ModalGerenciarUsuario. Campo opcional só para
