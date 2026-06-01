@@ -257,8 +257,21 @@ export function SeletorLocalizacao() {
 
   const breadcrumb = getBreadcrumb();
 
-  // Ocultar seletor para usuários com 1 empresa e no máximo 1 rota
-  if (deveOcultarSeletor) return null;
+  // Para usuários com 1 empresa e no máximo 1 rota: badge estático sem dropdown
+  if (deveOcultarSeletor) {
+    return (
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+        <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0" />
+        {breadcrumb.length > 0 ? (
+          <span className="text-sm text-gray-700 font-medium truncate max-w-[240px]">
+            {breadcrumb.join(' › ')}
+          </span>
+        ) : (
+          <span className="text-sm text-gray-400">Carregando...</span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>
