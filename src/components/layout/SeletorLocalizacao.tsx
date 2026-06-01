@@ -259,12 +259,16 @@ export function SeletorLocalizacao() {
 
   // Para usuários com 1 empresa e no máximo 1 rota: badge estático sem dropdown
   if (deveOcultarSeletor) {
+    const nomeEmpresa = localizacao.empresa?.nome || '';
+    const nomeCidade = localizacao.cidade?.nome || '';
+    const label = [nomeCidade, nomeEmpresa].filter(Boolean).join(' › ');
+
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
         <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0" />
-        {breadcrumb.length > 0 ? (
+        {label ? (
           <span className="text-sm text-gray-700 font-medium truncate max-w-[240px]">
-            {breadcrumb.join(' › ')}
+            {label}
           </span>
         ) : (
           <span className="text-sm text-gray-400">Carregando...</span>
