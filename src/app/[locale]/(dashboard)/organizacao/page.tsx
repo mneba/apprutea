@@ -187,10 +187,11 @@ export default function OrganizacaoPage() {
   const empresaIdDoUsuario = profile?.empresas_ids?.[0];
   
   // Cards:
-  // - SUPER_ADMIN: sempre vê
-  // - ADMIN: vê, exceto se tem apenas 1 empresa e 1 rota
-  // - Usuário padrão: nunca vê
-  const mostrarCards = isSuperAdmin || (isAdmin && (resumoGeral.total_empresas > 1 || resumoGeral.total_rotas_ativas > 1));
+  // - Usuário padrão: nunca vê cards
+  // - ADMIN com 1 empresa e 1 rota: esconde apenas cards de Empresas e Rotas
+  // - SUPER_ADMIN / ADMIN com múltiplas: vê todos os cards
+  const mostrarCardsEmpresaRota = isSuperAdmin || (isAdmin && (resumoGeral.total_empresas > 1 || resumoGeral.total_rotas_ativas > 1));
+  const mostrarCardsClientesEmprestimos = isSuperAdmin || isAdmin;
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -1128,23 +1129,29 @@ export default function OrganizacaoPage() {
         </div>
       </div>
 
-      {/* Cards de Resumo - esconder se admin tem apenas 1 empresa e 1 rota */}
-      {mostrarCards && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <CardEstatistica
-            titulo="Total de Empresas"
-            valor={resumoGeral.total_empresas}
-            icone={Building2}
-            corIcone="text-blue-600"
-            corFundo="bg-blue-100"
-          />
-          <CardEstatistica
-            titulo="Rotas Ativas"
-            valor={resumoGeral.total_rotas_ativas}
-            icone={MapPin}
-            corIcone="text-green-600"
-            corFundo="bg-green-100"
-          />
+      {/* Cards de Resumo */}
+      {mostrarCardsClientesEmprestimos && (
+        <div className={`grid grid-cols-1 sm:grid-cols-2 ${mostrarCardsEmpresaRota ? 'lg:grid-cols-4' : 'lg:grid-cols-2'} gap-4`}>
+          {/* Cards de Empresas e Rotas - apenas se múltiplas */}
+          {mostrarCardsEmpresaRota && (
+            <>
+              <CardEstatistica
+                titulo="Total de Empresas"
+                valor={resumoGeral.total_empresas}
+                icone={Building2}
+                corIcone="text-blue-600"
+                corFundo="bg-blue-100"
+              />
+              <CardEstatistica
+                titulo="Rotas Ativas"
+                valor={resumoGeral.total_rotas_ativas}
+                icone={MapPin}
+                corIcone="text-green-600"
+                corFundo="bg-green-100"
+              />
+            </>
+          )}
+          {/* Cards de Clientes e Empréstimos - sempre para ADMIN+ */}
           <CardEstatistica
             titulo="Total de Clientes"
             valor={resumoGeral.total_clientes}
