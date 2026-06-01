@@ -33,6 +33,38 @@ import ModalGerenciarCidades from '@/components/organizacao/ModalGerenciarCidade
 
 type ViewMode = 'empresas' | 'rotas';
 
+// =====================================================
+// COMPONENTES AUXILIARES
+// =====================================================
+
+function CardEstatistica({
+  titulo,
+  valor,
+  icone: Icone,
+  corIcone,
+  corFundo,
+}: {
+  titulo: string;
+  valor: number;
+  icone: React.ElementType;
+  corIcone: string;
+  corFundo: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-3">
+      <div className="flex items-center gap-3">
+        <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`w-5 h-5 ${corIcone}`} />
+        </div>
+        <div className="min-w-0">
+          <p className="text-xl font-bold text-gray-900">{valor}</p>
+          <p className="text-xs text-gray-500 truncate">{titulo}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function OrganizacaoPage() {
   const { profile, localizacao, setLocalizacao, loading: loadingUser } = useUser();
   
@@ -1075,37 +1107,34 @@ export default function OrganizacaoPage() {
 
       {/* Cards de Resumo */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Total de Empresas</span>
-            <Building2 className="w-5 h-5 text-gray-400" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{resumoGeral.total_empresas}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Rotas Ativas</span>
-            <MapPin className="w-5 h-5 text-gray-400" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{resumoGeral.total_rotas_ativas}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Total de Clientes</span>
-            <Users className="w-5 h-5 text-gray-400" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{resumoGeral.total_clientes}</p>
-        </div>
-
-        <div className="bg-white rounded-xl p-4 border border-gray-200">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-gray-500">Empréstimos Ativos</span>
-            <CreditCard className="w-5 h-5 text-gray-400" />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">{resumoGeral.total_emprestimos_ativos}</p>
-        </div>
+        <CardEstatistica
+          titulo="Total de Empresas"
+          valor={resumoGeral.total_empresas}
+          icone={Building2}
+          corIcone="text-blue-600"
+          corFundo="bg-blue-100"
+        />
+        <CardEstatistica
+          titulo="Rotas Ativas"
+          valor={resumoGeral.total_rotas_ativas}
+          icone={MapPin}
+          corIcone="text-green-600"
+          corFundo="bg-green-100"
+        />
+        <CardEstatistica
+          titulo="Total de Clientes"
+          valor={resumoGeral.total_clientes}
+          icone={Users}
+          corIcone="text-purple-600"
+          corFundo="bg-purple-100"
+        />
+        <CardEstatistica
+          titulo="Empréstimos Ativos"
+          valor={resumoGeral.total_emprestimos_ativos}
+          icone={CreditCard}
+          corIcone="text-amber-600"
+          corFundo="bg-amber-100"
+        />
       </div>
 
       {/* Conteúdo Principal */}
