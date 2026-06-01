@@ -16,11 +16,50 @@ export const organizacaoService = {
   // RESUMO GERAL
   // ============================================
 
-  async buscarResumoGeral(hierarquiaId?: string): Promise<ResumoGeral> {
+  async buscarResumoGeral(hierarquiaId?: string, empresaId?: string): Promise<ResumoGeral> {
     let totalEmpresas = 0;
     let totalRotas = 0;
     let totalClientes = 0;
     let totalEmprestimos = 0;
+
+    // ========================================
+    // Se tem empresaId específico (ADMIN/usuário comum), filtrar apenas por essa empresa
+    // ========================================
+    if (empresaId) {
+      totalEmpresas = 1;
+
+      const { count: countRotas } = await supabase
+        .from('rotas')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', empresaId)
+        .eq('status', 'ATIVA');
+      totalRotas = countRotas || 0;
+
+      const { count: countClientes } = await supabase
+        .from('clientes')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', empresaId)
+        .eq('status', 'ATIVO');
+      totalClientes = countClientes || 0;
+
+      const { count: countEmprestimos } = await supabase
+        .from('emprestimos')
+        .select('id', { count: 'exact', head: true })
+        .eq('empresa_id', empresaId)
+        .eq('status', 'ATIVO');
+      totalEmprestimos = countEmprestimos || 0;
+
+      return {
+        total_empresas: totalEmpresas,
+        total_rotas_ativas: totalRotas,
+        total_clientes: totalClientes,
+        total_emprestimos_ativos: totalEmprestimos,
+      };
+    }
+
+    // ========================================
+    // Comportamento original (SUPER_ADMIN sem empresaId)
+    // ========================================
 
     // Total de empresas
     let queryEmpresas = supabase
@@ -56,12 +95,24 @@ export const organizacaoService = {
     const { count: countRotas } = await queryRotas;
     totalRotas = countRotas || 0;
 
-    // Total de clientes (tabela clientes não tem empresa_id, contar todos ativos)
-    const { count: countClientes } = await supabase
+    // Total de clientes
+    let queryClientes = supabase
       .from('clientes')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'ATIVO');
 
+    if (hierarquiaId) {
+      const { data: empresasIds } = await supabase
+        .from('empresas')
+        .select('id')
+        .eq('hierarquia_id', hierarquiaId);
+      
+      if (empresasIds && empresasIds.length > 0) {
+        queryClientes = queryClientes.in('empresa_id', empresasIds.map(e => e.id));
+      }
+    }
+
+    const { count: countClientes } = await queryClientes;
     totalClientes = countClientes || 0;
 
     // Total de empréstimos ativos

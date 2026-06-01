@@ -182,8 +182,11 @@ export default function OrganizacaoPage() {
   const empresaIdSelecionada = localizacao?.empresa_id;
   const rotaIdSelecionada = localizacao?.rota_id;
   
-  // Esconder cards se admin tem apenas 1 empresa e 1 rota
-  const mostrarCards = isSuperAdmin || resumoGeral.total_empresas > 1 || resumoGeral.total_rotas_ativas > 1;
+  // Cards apenas para SUPER_ADMIN
+  const mostrarCards = isSuperAdmin;
+  
+  // Empresa do usuário (para ADMIN/usuário comum)
+  const empresaIdDoUsuario = profile?.empresas_ids?.[0] || profile?.admin_empresa_ids?.[0];
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -215,8 +218,12 @@ export default function OrganizacaoPage() {
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Buscar resumo geral
-      const resumo = await organizacaoService.buscarResumoGeral(hierarquiaId || undefined);
+      // SUPER_ADMIN: resumo geral | Outros: resumo da própria empresa
+      const empresaIdParaResumo = isSuperAdmin ? undefined : (empresaIdSelecionada || empresaIdDoUsuario);
+      const resumo = await organizacaoService.buscarResumoGeral(
+        hierarquiaId || undefined, 
+        empresaIdParaResumo || undefined
+      );
       setResumoGeral(resumo);
 
       // Se tem empresa selecionada no seletor master → ir para rotas
