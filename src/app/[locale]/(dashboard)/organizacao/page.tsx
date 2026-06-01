@@ -186,7 +186,7 @@ export default function OrganizacaoPage() {
   const mostrarCards = isSuperAdmin;
   
   // Empresa do usuário (para ADMIN/usuário comum)
-  const empresaIdDoUsuario = profile?.empresas_ids?.[0] || profile?.admin_empresa_ids?.[0];
+  const empresaIdDoUsuario = profile?.empresas_ids?.[0];
 
   // Carregar dados iniciais
   useEffect(() => {
