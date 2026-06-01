@@ -177,16 +177,20 @@ export default function OrganizacaoPage() {
   // Verificações
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
   const isAdmin = profile?.tipo_usuario === 'ADMIN';
+  const isUsuarioPadrao = !isSuperAdmin && !isAdmin;
   const podeGerenciarEmpresa = isSuperAdmin || isAdmin;
   const hierarquiaId = localizacao?.hierarquia_id;
   const empresaIdSelecionada = localizacao?.empresa_id;
   const rotaIdSelecionada = localizacao?.rota_id;
   
-  // Cards apenas para SUPER_ADMIN
-  const mostrarCards = isSuperAdmin;
-  
   // Empresa do usuário (para ADMIN/usuário comum)
   const empresaIdDoUsuario = profile?.empresas_ids?.[0];
+  
+  // Cards:
+  // - SUPER_ADMIN: sempre vê
+  // - ADMIN: vê, exceto se tem apenas 1 empresa e 1 rota
+  // - Usuário padrão: nunca vê
+  const mostrarCards = isSuperAdmin || (isAdmin && (resumoGeral.total_empresas > 1 || resumoGeral.total_rotas_ativas > 1));
 
   // Carregar dados iniciais
   useEffect(() => {
