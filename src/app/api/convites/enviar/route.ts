@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         'content-type': 'application/json',
       },
       body: JSON.stringify({
-        sender: { name: 'Apprutea', email: 'noreply@apprutea.com' },
+        sender: { name: 'Apprutea', email: 'noreply@infotransforma.com.br' },
         to: [{ email }],
         subject: `Você foi convidado para a ${empresa?.nome || 'empresa'} no Apprutea`,
         htmlContent: `
