@@ -280,6 +280,9 @@ export const organizacaoService = {
 
     if (error) {
       console.error('Erro ao criar empresa:', error);
+      if (error.code === '23505') {
+        throw new Error('Já existe uma empresa com este nome nesta cidade');
+      }
       throw error;
     }
 
