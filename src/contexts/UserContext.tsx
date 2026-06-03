@@ -160,8 +160,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
 
   const loadLocalizacaoSalva = async (profileData: UserProfile) => {
     const empresasIds: string[] = profileData.empresas_ids || [];
+    const rotasIds: string[] = profileData.rotas_ids || [];
     const empresaIdInicial = profileData.ultima_empresa_id ||
       (empresasIds.length > 0 ? empresasIds[0] : null);
+
+    // Auto-selecionar única rota se rotas_ids tem exatamente 1 e ultima_rota_id está vazio
+    const rotaIdInicial = profileData.ultima_rota_id ||
+      (rotasIds.length === 1 ? rotasIds[0] : null);
 
     const locBruta: LocalizacaoAtual = {
       hierarquia_id: profileData.ultima_hierarquia_id || null,
@@ -170,7 +175,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       cidade: null,
       empresa_id: empresaIdInicial,
       empresa: null,
-      rota_id: profileData.ultima_rota_id || null,
+      rota_id: rotaIdInicial,
       rota: null,
     };
 
