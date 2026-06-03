@@ -11,10 +11,11 @@ export function SeletorLocalizacao() {
   const { profile, isSuperAdmin, localizacao, setLocalizacao } = useUser();
 
   // Calcular se deve ocultar o seletor:
-  // Não-SUPER_ADMIN com 1 empresa e no máximo 1 rota não precisa do seletor
+  // Não-SUPER_ADMIN com 1 empresa e 1 rota, E já tem rota selecionada
   const deveOcultarSeletor = !isSuperAdmin && profile && (
     (profile.empresas_ids || []).length <= 1 &&
-    (profile.rotas_ids || []).length <= 1
+    (profile.rotas_ids || []).length <= 1 &&
+    localizacao.rota_id !== null // Só oculta se já tiver selecionado
   );
   const [isOpen, setIsOpen] = useState(false);
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
