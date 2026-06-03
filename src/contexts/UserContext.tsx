@@ -222,6 +222,26 @@ export function UserProvider({ children }: { children: ReactNode }) {
         .eq('id', locValidada.empresa_id)
         .single();
       newLocalizacao.empresa = data;
+
+      // Auto-popular hierarquia e cidade a partir da empresa se estiverem vazias
+      if (data && !locValidada.hierarquia_id && data.hierarquia_id) {
+        newLocalizacao.hierarquia_id = data.hierarquia_id;
+        const { data: hierarquia } = await supabase
+          .from('hierarquias')
+          .select('*')
+          .eq('id', data.hierarquia_id)
+          .single();
+        newLocalizacao.hierarquia = hierarquia;
+      }
+      if (data && !locValidada.cidade_id && data.cidade_id) {
+        newLocalizacao.cidade_id = data.cidade_id;
+        const { data: cidade } = await supabase
+          .from('cidades')
+          .select('*')
+          .eq('id', data.cidade_id)
+          .single();
+        newLocalizacao.cidade = cidade;
+      }
     }
 
     if (locValidada.rota_id) {
