@@ -622,7 +622,22 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
       const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
       const cidadesIds = [...new Set(selecoes.map((s) => s.cidade_id).filter(Boolean))];
-      const rotasIds = [...new Set(selecoes.flatMap((s) => s.rotas_ids))];
+
+      // Auto-associar única rota se empresa tem só 1 rota e nenhuma foi selecionada
+      const selecoesComRotas = selecoes.map((s) => {
+        if (s.rotas_ids.length === 0) {
+          const empresa = todasEmpresas.find((e) => e.id === s.empresa_id);
+          const rotasDaEmpresa = todasRotas.filter((r) =>
+            empresa?.rotas_ids?.includes(r.id)
+          );
+          if (rotasDaEmpresa.length === 1) {
+            return { ...s, rotas_ids: [rotasDaEmpresa[0].id] };
+          }
+        }
+        return s;
+      });
+
+      const rotasIds = [...new Set(selecoesComRotas.flatMap((s) => s.rotas_ids))];
 
       let tipoFinal = usuario.tipo_usuario;
       if (tipoFinal !== 'SUPER_ADMIN') {
