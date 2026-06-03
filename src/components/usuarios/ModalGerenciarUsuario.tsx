@@ -324,11 +324,21 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       return;
     }
 
+    // Se nenhuma rota foi selecionada e a empresa tem só 1 rota, associar automaticamente
+    let rotasParaAdicionar = novasRotasIds;
+    if (rotasParaAdicionar.length === 0) {
+      const empresa = todasEmpresas.find((e) => e.id === novaEmpresaId);
+      const rotasDaEmpresa = todasRotas.filter((r) => empresa?.rotas_ids?.includes(r.id));
+      if (rotasDaEmpresa.length === 1) {
+        rotasParaAdicionar = [rotasDaEmpresa[0].id];
+      }
+    }
+
     setSelecoes([...selecoes, {
       hierarquia_id: novaHierarquiaId,
       cidade_id: novaCidadeId,
       empresa_id: novaEmpresaId,
-      rotas_ids: novasRotasIds,
+      rotas_ids: rotasParaAdicionar,
     }]);
 
     setNovoPais('');
