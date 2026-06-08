@@ -15,6 +15,7 @@ import {
   Shield,
   HelpCircle,
   MapPinOff,
+  Tag,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 
@@ -33,6 +34,7 @@ const menuItems: MenuItem[] = [
   { name: 'Clientes', href: '/clientes', icon: UserCog },
   { name: 'Empréstimos', href: '/emprestimos', icon: CreditCard },
   { name: 'Liquidação', href: '/liquidacao', icon: FileText },
+  { name: 'Categorias Financeiras', href: '/categorias-financeiras', icon: Tag, roles: ['SUPER_ADMIN'], sempreAtivo: true },
   { name: 'Rotas', href: '/rotas', icon: MapPin },
   { name: 'Relatórios', href: '/relatorios', icon: BarChart3 },
   { name: 'Usuários', href: '/usuarios', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN'], sempreAtivo: true },
