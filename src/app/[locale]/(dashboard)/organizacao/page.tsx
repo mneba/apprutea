@@ -895,9 +895,10 @@ export default function OrganizacaoPage() {
         empresaId: empresa.id,
         isSuperAdmin: false,
       });
+      // Filtrar: apenas aprovados E excluir SUPER_ADMIN
       setUsuariosEmpresa(
         usuarios
-          .filter((u) => u.status === 'APROVADO')
+          .filter((u) => u.status === 'APROVADO' && u.tipo_usuario !== 'SUPER_ADMIN')
           .map((u) => ({ user_id: u.user_id, nome: u.nome }))
       );
     } catch (err) {
@@ -2303,4 +2304,4 @@ export default function OrganizacaoPage() {
       )}
     </div>
   );
-} 
+}
