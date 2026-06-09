@@ -1,0 +1,16 @@
+{
+  "/api/convites/enviar/route": "app/api/convites/enviar/route.js",
+  "/_not-found/page": "app/_not-found/page.js",
+  "/[locale]/(auth)/registro/page": "app/[locale]/(auth)/registro/page.js",
+  "/[locale]/(auth)/aguardando-codigo/page": "app/[locale]/(auth)/aguardando-codigo/page.js",
+  "/[locale]/(auth)/login/page": "app/[locale]/(auth)/login/page.js",
+  "/[locale]/page": "app/[locale]/page.js",
+  "/[locale]/(dashboard)/clientes/page": "app/[locale]/(dashboard)/clientes/page.js",
+  "/[locale]/(dashboard)/dashboard/page": "app/[locale]/(dashboard)/dashboard/page.js",
+  "/[locale]/(dashboard)/organizacao/page": "app/[locale]/(dashboard)/organizacao/page.js",
+  "/[locale]/(dashboard)/liberacoes/page": "app/[locale]/(dashboard)/liberacoes/page.js",
+  "/[locale]/(dashboard)/financeiro/page": "app/[locale]/(dashboard)/financeiro/page.js",
+  "/[locale]/(dashboard)/usuarios/page": "app/[locale]/(dashboard)/usuarios/page.js",
+  "/[locale]/(dashboard)/liquidacao/page": "app/[locale]/(dashboard)/liquidacao/page.js",
+  "/[locale]/(dashboard)/vendedores/page": "app/[locale]/(dashboard)/vendedores/page.js"
+}
