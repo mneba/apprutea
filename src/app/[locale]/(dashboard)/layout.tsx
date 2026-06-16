@@ -14,7 +14,8 @@ import {
   X,
   LogOut,
   User,
-  ShieldCheck
+  ShieldCheck,
+  Tag
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
@@ -61,6 +62,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'CENTRAL_LIBERACOES' },
       { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'GESTAO_USUARIOS' },
+      { key: 'categorias-financeiras', label: 'Categorias Financeiras', icon: <Tag className="w-5 h-5" />, href: '/categorias-financeiras', roles: ['SUPER_ADMIN'], sempreAtivo: true },
     ],
   },
 ];
