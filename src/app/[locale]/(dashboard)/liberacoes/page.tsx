@@ -16,11 +16,13 @@ import {
   MapPin,
   DollarSign,
   RefreshCw,
-  PlusCircle
+  PlusCircle,
+  Eye
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
+import { ModalDetalhesCliente } from '@/components/clientes';
 
 // Labels e ícones por tipo de solicitação
 const TIPO_CONFIG: Record<string, { titulo: string; subtitulo: string; icone: string; cor: string }> = {
@@ -53,6 +55,12 @@ const TIPO_CONFIG: Record<string, { titulo: string; subtitulo: string; icone: st
     subtitulo: 'Renovação',
     icone: '🔄',
     cor: 'blue'
+  },
+  'RENOVACAO_EXCEDE_ANTERIOR': { 
+    titulo: 'Renovação Excede Último Empréstimo', 
+    subtitulo: 'Valor acima do anterior',
+    icone: '📈',
+    cor: 'amber'
   },
   'DESPESA_EXCEDE_LIMITE': { 
     titulo: 'Limite Excedido', 
@@ -130,6 +138,8 @@ function ModalDetalhesSolicitacao({
   const [vendaPendente, setVendaPendente] = useState<any>(null);
   const [loadingVenda, setLoadingVenda] = useState(false);
   const [editVenda, setEditVenda] = useState<any>(null);
+  // Modal de detalhes do cliente
+  const [mostrarDetalhesCliente, setMostrarDetalhesCliente] = useState(false);
 
   const statusColors = STATUS_SOLICITACAO_COLORS[solicitacao.status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
   const tipoConfig = TIPO_CONFIG[solicitacao.tipo_solicitacao] || { 
@@ -568,7 +578,18 @@ function ModalDetalhesSolicitacao({
                     <div className="border-t border-gray-200" />
                     <div className="flex justify-between items-center">
                       <span className="text-sm text-gray-500">Cliente</span>
-                      <p className="font-medium text-gray-900">{solicitacao.cliente_nome}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900">{solicitacao.cliente_nome}</p>
+                        {solicitacao.cliente_id && (
+                          <button
+                            onClick={() => setMostrarDetalhesCliente(true)}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Ver detalhes do cliente"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </>
                 )}
@@ -1035,6 +1056,14 @@ function ModalDetalhesSolicitacao({
           </div>
         )}
       </div>
+
+      {/* Modal de Detalhes do Cliente */}
+      {mostrarDetalhesCliente && solicitacao.cliente_id && (
+        <ModalDetalhesCliente
+          clienteId={solicitacao.cliente_id}
+          onClose={() => setMostrarDetalhesCliente(false)}
+        />
+      )}
     </div>
   );
 }
