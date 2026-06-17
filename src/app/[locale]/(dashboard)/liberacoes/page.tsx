@@ -140,6 +140,34 @@ function ModalDetalhesSolicitacao({
   const [editVenda, setEditVenda] = useState<any>(null);
   // Modal de detalhes do cliente
   const [mostrarDetalhesCliente, setMostrarDetalhesCliente] = useState(false);
+  const [clienteParaModal, setClienteParaModal] = useState<any>(null);
+  const [loadingCliente, setLoadingCliente] = useState(false);
+
+  // Buscar dados completos do cliente para o modal
+  const abrirDetalhesCliente = async () => {
+    if (!solicitacao.cliente_id) return;
+    
+    setLoadingCliente(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('clientes')
+        .select('*')
+        .eq('id', solicitacao.cliente_id)
+        .single();
+      
+      if (error) throw error;
+      
+      if (data) {
+        setClienteParaModal(data);
+        setMostrarDetalhesCliente(true);
+      }
+    } catch (err) {
+      console.error('Erro ao buscar cliente:', err);
+    } finally {
+      setLoadingCliente(false);
+    }
+  };
 
   const statusColors = STATUS_SOLICITACAO_COLORS[solicitacao.status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
   const tipoConfig = TIPO_CONFIG[solicitacao.tipo_solicitacao] || { 
@@ -582,11 +610,16 @@ function ModalDetalhesSolicitacao({
                         <p className="font-medium text-gray-900">{solicitacao.cliente_nome}</p>
                         {solicitacao.cliente_id && (
                           <button
-                            onClick={() => setMostrarDetalhesCliente(true)}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            onClick={abrirDetalhesCliente}
+                            disabled={loadingCliente}
+                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
                             title="Ver detalhes do cliente"
                           >
-                            <Eye className="w-4 h-4" />
+                            {loadingCliente ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Eye className="w-4 h-4" />
+                            )}
                           </button>
                         )}
                       </div>
@@ -1058,10 +1091,13 @@ function ModalDetalhesSolicitacao({
       </div>
 
       {/* Modal de Detalhes do Cliente */}
-      {mostrarDetalhesCliente && solicitacao.cliente_id && (
+      {mostrarDetalhesCliente && clienteParaModal && (
         <ModalDetalhesCliente
-          cliente={{ id: solicitacao.cliente_id, nome: solicitacao.cliente_nome || '' }}
-          onClose={() => setMostrarDetalhesCliente(false)}
+          cliente={clienteParaModal}
+          onClose={() => {
+            setMostrarDetalhesCliente(false);
+            setClienteParaModal(null);
+          }}
         />
       )}
     </div>
