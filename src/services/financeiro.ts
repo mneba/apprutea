@@ -1,4 +1,3 @@
-
 // =====================================================
 // SERVICE DO MÓDULO FINANCEIRO - SISTEMA BELLA KIDS
 // Integrado com Functions do Supabase
@@ -184,7 +183,13 @@ export const financeiroService = {
   // ==================================================
   async buscarExtrato(
     empresaId: string,
-    filtros: FiltrosExtrato & { data_inicio?: string; data_fim?: string; rota_id?: string | null }
+    filtros: FiltrosExtrato & { 
+      data_inicio?: string; 
+      data_fim?: string; 
+      rota_id?: string | null;
+      status?: string;
+      incluir_anulados?: boolean;
+    }
   ): Promise<MovimentoFinanceiro[]> {
     const supabase = createClient();
     
@@ -209,10 +214,12 @@ export const financeiroService = {
       p_conta_id: filtros.conta_id || null,
       p_categoria: filtros.categoria || null,
       p_tipo: filtros.tipo || null,
-      p_limite: 100,
+      p_limite: 500,
       p_rota_id: filtros.rota_id || null,
       p_data_inicio: dataInicioParam,
       p_data_fim: dataFimParam,
+      p_status: filtros.status || null,
+      p_incluir_anulados: filtros.incluir_anulados ?? false,
     });
     
     if (error) {

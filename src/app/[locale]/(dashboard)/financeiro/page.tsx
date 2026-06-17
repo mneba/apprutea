@@ -377,6 +377,7 @@ function LinhaExtrato({
   const isEntrada = movimento.tipo === 'RECEBER';
   const isTransferencia = movimento.tipo === 'TRANSFERENCIA';
   const isSaida = movimento.tipo === 'PAGAR';
+  const isAnulado = movimento.status === 'ANULADO';
   
   const getContaDisplay = () => {
     if (isTransferencia) {
@@ -414,9 +415,9 @@ function LinhaExtrato({
   const temDataLiqDiferente = dataLiqStr && dataLancStr && dataLancStr !== dataLiqStr;
   
   return (
-    <tr className="hover:bg-gray-50 transition-colors">
+    <tr className={`hover:bg-gray-50 transition-colors ${isAnulado ? 'bg-gray-50/50' : ''}`}>
       <td className="px-4 py-3">
-        <div className="text-sm text-gray-600">
+        <div className={`text-sm ${isAnulado ? 'text-gray-400' : 'text-gray-600'}`}>
           {formatarData(movimento.data_lancamento)}
           {temDataLiqDiferente && (
             <span className="text-xs text-gray-400 ml-1">
@@ -427,16 +428,20 @@ function LinhaExtrato({
       </td>
       <td className="px-4 py-3">
         <div>
-          <p className="text-sm font-medium text-gray-900">{movimento.descricao}</p>
+          <p className={`text-sm font-medium ${isAnulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+            {movimento.descricao}
+          </p>
           {getContaDisplay()}
           {movimento.observacoes && (
-            <p className="text-xs text-gray-400 mt-0.5">{movimento.observacoes}</p>
+            <p className={`text-xs mt-0.5 ${isAnulado ? 'text-gray-400' : 'text-gray-400'}`}>
+              {movimento.observacoes}
+            </p>
           )}
         </div>
       </td>
       <td className="px-4 py-3">
         <span 
-          className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium"
+          className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${isAnulado ? 'opacity-50' : ''}`}
           style={{ 
             backgroundColor: categoria?.cor_hex ? `${categoria.cor_hex}20` : '#f3f4f6',
             color: categoria?.cor_hex || '#374151'
@@ -447,6 +452,7 @@ function LinhaExtrato({
       </td>
       <td className="px-4 py-3 text-right">
         <span className={`text-sm font-semibold ${
+          isAnulado ? 'text-gray-400 line-through' :
           isTransferencia ? 'text-blue-600' : isEntrada ? 'text-green-600' : 'text-red-600'
         }`}>
           {isTransferencia ? '↔' : isEntrada ? '+' : '-'} 
@@ -458,10 +464,12 @@ function LinhaExtrato({
           movimento.status === 'PAGO' ? 'bg-green-100 text-green-700' :
           movimento.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
           movimento.status === 'CANCELADO' ? 'bg-gray-100 text-gray-700' :
+          movimento.status === 'ANULADO' ? 'bg-red-50 text-red-600 border border-red-200' :
           movimento.status === 'VENCIDO' ? 'bg-red-100 text-red-700' :
           'bg-gray-100 text-gray-700'
         }`}>
           {movimento.status === 'PAGO' && '✓ '}
+          {movimento.status === 'ANULADO' && '✕ '}
           {movimento.status}
         </span>
       </td>
@@ -580,6 +588,7 @@ export default function FinanceiroPage() {
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   const [buscaExtrato, setBuscaExtrato] = useState<string>('');
   const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
+  const [statusFiltro, setStatusFiltro] = useState<string>('PAGO'); // '', 'PAGO', 'PENDENTE', 'ANULADO', 'TODOS'
   const [modoFiltroTemporal, setModoFiltroTemporal] = useState<'periodo' | 'liquidacao'>('periodo');
   const [dataLiquidacao, setDataLiquidacao] = useState<string>(''); // YYYY-MM-DD
   const [loadingUltimaLiquidacao, setLoadingUltimaLiquidacao] = useState(false);
@@ -707,6 +716,9 @@ export default function FinanceiroPage() {
         conta_id: contaFiltro || undefined,
         categoria: categoriaFiltro || undefined,
         rota_id: rotaId,
+        // Passar status para o backend (se não for TODOS, filtra)
+        status: statusFiltro === 'TODOS' ? undefined : (statusFiltro || undefined),
+        incluir_anulados: statusFiltro === 'TODOS' || statusFiltro === 'ANULADO',
       };
 
       if (modoFiltroTemporal === 'liquidacao') {
@@ -729,7 +741,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingExtrato(false);
     }
-  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao]);
+  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, statusFiltro]);
 
   useEffect(() => {
     if (empresaId) {
@@ -842,12 +854,17 @@ export default function FinanceiroPage() {
   const totalEntradas = movimentos.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
 
-  // Filtrar movimentos localmente (busca, tipo, data liquidação)
+  // Filtrar movimentos localmente (busca, tipo, data liquidação, status)
   const movimentosFiltrados = React.useMemo(() => {
     return movimentos.filter(m => {
       // Filtro por tipo (ENTRADA/SAIDA)
       if (tipoMovimento === 'ENTRADA' && m.tipo !== 'RECEBER') return false;
       if (tipoMovimento === 'SAIDA' && m.tipo !== 'PAGAR') return false;
+
+      // Filtro por status (local, já que o backend pode não suportar)
+      if (statusFiltro && statusFiltro !== 'TODOS') {
+        if (m.status !== statusFiltro) return false;
+      }
 
       // No modo liquidação, o backend já filtrou por liquidacao_id
       // Não precisa filtrar por data aqui
@@ -870,11 +887,15 @@ export default function FinanceiroPage() {
 
       return true;
     });
-  }, [movimentos, tipoMovimento, buscaExtrato]);
+  }, [movimentos, tipoMovimento, buscaExtrato, statusFiltro]);
 
-  // Recalcular totais com base nos filtrados
-  const totalEntradasFiltrado = movimentosFiltrados.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
-  const totalSaidasFiltrado = movimentosFiltrados.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
+  // Recalcular totais com base nos filtrados (excluindo ANULADOS)
+  const totalEntradasFiltrado = movimentosFiltrados
+    .filter(m => m.tipo === 'RECEBER' && m.status !== 'ANULADO')
+    .reduce((acc, m) => acc + m.valor, 0);
+  const totalSaidasFiltrado = movimentosFiltrados
+    .filter(m => m.tipo === 'PAGAR' && m.status !== 'ANULADO')
+    .reduce((acc, m) => acc + m.valor, 0);
 
   // Preparar itens para os cards detalhados
   const rotasItens = saldos.rotas_detalhe?.map(r => ({ nome: r.rota_nome, valor: r.saldo })) || [];
@@ -1137,6 +1158,21 @@ export default function FinanceiroPage() {
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
 
+            {/* Status */}
+            <div className="relative">
+              <select 
+                value={statusFiltro} 
+                onChange={(e) => setStatusFiltro(e.target.value)} 
+                className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="PAGO">✓ Pagos</option>
+                <option value="PENDENTE">⏳ Pendentes</option>
+                <option value="ANULADO">✕ Anulados</option>
+                <option value="TODOS">📋 Todos os Status</option>
+              </select>
+              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            </div>
+
             {/* Conta */}
             <div className="relative">
               <select value={contaFiltro} onChange={(e) => setContaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
@@ -1164,13 +1200,14 @@ export default function FinanceiroPage() {
             </div>
 
             {/* Limpar */}
-            {(buscaExtrato || tipoMovimento || contaFiltro || categoriaFiltro) && (
+            {(buscaExtrato || tipoMovimento || contaFiltro || categoriaFiltro || statusFiltro !== 'PAGO') && (
               <button
                 onClick={() => {
                   setBuscaExtrato('');
                   setTipoMovimento('');
                   setContaFiltro('');
                   setCategoriaFiltro('');
+                  setStatusFiltro('PAGO');
                 }}
                 className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm flex items-center gap-1"
               >
