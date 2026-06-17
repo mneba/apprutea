@@ -107,9 +107,6 @@ export function CardEdicaoEmprestimo({
   const [requerRenegociacao, setRequerRenegociacao] = useState(false);
   const [parcelasAtrasadas, setParcelasAtrasadas] = useState(0);
 
-  // Parcelas restantes (não pode diminuir abaixo disso)
-  const parcelasRestantes = emprestimo.numero_parcelas - (emprestimo.parcelas_pagas || 0);
-
   // Cálculos automáticos
   const calculosNovos = useMemo(() => {
     const juros = valorPrincipal * (taxaJuros / 100);
@@ -161,7 +158,7 @@ export function CardEdicaoEmprestimo({
     // Validar valores
     if (valorPrincipal <= 0) return false;
     if (taxaJuros < 0) return false;
-    if (numeroParcelas < parcelasRestantes) return false;
+    if (numeroParcelas < 1) return false;
     
     // Validar parâmetros específicos de frequência
     if (frequencia === 'SEMANAL' && diaSemana === null) return false;
@@ -184,8 +181,8 @@ export function CardEdicaoEmprestimo({
       return;
     }
 
-    if (numeroParcelas < parcelasRestantes) {
-      setErro(`O número de parcelas não pode ser menor que ${parcelasRestantes} (parcelas restantes).`);
+    if (numeroParcelas < 1) {
+      setErro('O número de parcelas deve ser no mínimo 1.');
       return;
     }
     
@@ -427,13 +424,10 @@ export function CardEdicaoEmprestimo({
                     type="number"
                     value={numeroParcelas}
                     onChange={(e) => setNumeroParcelas(parseInt(e.target.value) || 1)}
-                    min={parcelasRestantes}
+                    min={1}
                     className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
-                {parcelasRestantes > 0 && (
-                  <p className="text-xs text-gray-400 mt-0.5">Mín: {parcelasRestantes}</p>
-                )}
               </div>
             </div>
             
