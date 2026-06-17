@@ -1093,6 +1093,7 @@ function ModalDetalhesSolicitacao({
       {/* Modal de Detalhes do Cliente */}
       {mostrarDetalhesCliente && clienteParaModal && (
         <ModalDetalhesCliente
+          isOpen={true}
           cliente={clienteParaModal}
           onClose={() => {
             setMostrarDetalhesCliente(false);
