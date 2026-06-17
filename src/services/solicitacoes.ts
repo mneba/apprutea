@@ -13,6 +13,7 @@ export const TIPO_SOLICITACAO_LABELS: Record<string, string> = {
   'ABERTURA_DIAS_FALTANTES': 'Abertura Dias Faltantes',
   'VENDA_EXCEDE_LIMITE': 'Venda Excede Limite',
   'RENOVACAO_EXCEDE_LIMITE': 'Renovação Excede Limite',
+  'RENOVACAO_EXCEDE_ANTERIOR': 'Renovação Excede Último Empréstimo',
   'DESPESA_EXCEDE_LIMITE': 'Despesa Excede Limite',
   'RECEITA_EXCEDE_LIMITE': 'Receita Excede Limite',
   'ESTORNO_PAGAMENTO': 'Estorno de Pagamento',
