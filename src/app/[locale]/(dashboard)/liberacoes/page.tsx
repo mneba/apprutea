@@ -1060,7 +1060,7 @@ function ModalDetalhesSolicitacao({
       {/* Modal de Detalhes do Cliente */}
       {mostrarDetalhesCliente && solicitacao.cliente_id && (
         <ModalDetalhesCliente
-          clienteId={solicitacao.cliente_id}
+          cliente={{ id: solicitacao.cliente_id, nome: solicitacao.cliente_nome || '' }}
           onClose={() => setMostrarDetalhesCliente(false)}
         />
       )}
