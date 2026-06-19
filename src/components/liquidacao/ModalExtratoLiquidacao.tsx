@@ -199,11 +199,12 @@ export function ModalExtratoLiquidacao({
       }
 
       // 2. Movimentações financeiras (entradas/saídas)
+      // Inclui ANULADOS para mostrar na lista com estilo diferente
       const { data: finData } = await supabase
         .from('financeiro')
         .select('id, tipo, categoria, descricao, valor, data_lancamento, created_at, forma_pagamento, cliente_nome, status')
         .eq('liquidacao_id', liquidacao.id)
-        .eq('status', 'PAGO')
+        .in('status', ['PAGO', 'ANULADO'])
         .order('created_at', { ascending: true });
 
       setRegistros((finData || []) as MovimentoFinanceiro[]);
@@ -301,16 +302,10 @@ export function ModalExtratoLiquidacao({
     0
   );
 
-  // Despesas (PAGAR exceto empréstimos, estornos, microseguro)
-  const totalSaidasDespesas = registros
-    .filter(
-      (r) =>
-        r.tipo === 'PAGAR' &&
-        r.categoria !== 'ESTORNO_PAGAMENTO' &&
-        r.categoria !== 'EMPRESTIMO' &&
-        !['RETIRO_MICROSEGURO', 'SAIDA_MICROSEGURO'].includes(r.categoria)
-    )
-    .reduce((s, r) => s + Number(r.valor), 0);
+  // ⭐ Despesas: usar valor salvo na liquidação para manter consistência com caixa_final
+  // O caixa_final foi calculado no momento do fechamento, então o total de despesas
+  // deve ser o mesmo para que a conta feche corretamente
+  const totalSaidasDespesas = Number((liquidacao as any)?.total_despesas_dia || 0);
 
   // Pagamentos que entraram dinheiro de fato (exclui pagamentos só com crédito)
   const pagamentosDinheiro = pagamentos.filter((p) => p.forma_pagamento !== 'CREDITO');
@@ -320,9 +315,9 @@ export function ModalExtratoLiquidacao({
     return s + (valorPagoAtual - creditoUsado);
   }, 0);
 
-  // Entradas separadas em 3 grupos
+  // Entradas separadas em 3 grupos (exclui ANULADOS do cálculo)
   const registrosEntradas = registros.filter(
-    (r) => r.tipo === 'RECEBER' && r.status !== 'CANCELADO'
+    (r) => r.tipo === 'RECEBER' && r.status !== 'CANCELADO' && r.status !== 'ANULADO'
   );
   const entradasMicroseguro = registrosEntradas.filter((r) =>
     ['VENDA_MICROSEGURO', 'MICROSEGURO'].includes(r.categoria)
@@ -337,6 +332,7 @@ export function ModalExtratoLiquidacao({
   const totalMicroseguros = entradasMicroseguro.reduce((s, r) => s + Number(r.valor), 0);
   const totalOutrasReceitas = entradasOutras.reduce((s, r) => s + Number(r.valor), 0);
 
+  // Lista de saídas para exibição (inclui ANULADOS para mostrar riscados)
   const registrosSaidas = registros.filter(
     (r) =>
       r.tipo === 'PAGAR' &&
@@ -507,14 +503,17 @@ export function ModalExtratoLiquidacao({
   <div class="secao">Detalhes Saídas (${registrosSaidas.length})</div>
   ${registrosSaidas.length === 0 ? `<div class="sub cinza">Nenhuma saída</div>` :
     registrosSaidas.map((item, idx) => {
-      const principal = item.cliente_nome || formatarCategoria(item.categoria);
-      const sub = item.cliente_nome && item.descricao ? item.descricao : '';
-      return `<div class="item">
+      const isAnulado = item.status === 'ANULADO';
+      const principal = (isAnulado ? '❌ ' : '') + (item.cliente_nome || formatarCategoria(item.categoria));
+      const sub = isAnulado ? 'ANULADO' : (item.cliente_nome && item.descricao ? item.descricao : '');
+      const valorClass = isAnulado ? 'cinza' : 'verm';
+      const valorStyle = isAnulado ? 'text-decoration: line-through;' : '';
+      return `<div class="item" style="${isAnulado ? 'background: #f3f4f6;' : ''}">
         <div class="item-row">
-          <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${principal}</span>
-          <span class="item-val verm">-${formatarMoeda(Number(item.valor))}</span>
+          <span class="item-cat" style="${isAnulado ? 'color: #9ca3af;' : ''}">${String(idx + 1).padStart(2, '0')} ${principal}</span>
+          <span class="item-val ${valorClass}" style="${valorStyle}">-${formatarMoeda(Number(item.valor))}</span>
         </div>
-        ${sub ? `<div class="item-sub">${sub}</div>` : ''}
+        ${sub ? `<div class="item-sub" style="${isAnulado ? 'color: #dc2626; font-weight: 600;' : ''}">${sub}</div>` : ''}
         <div class="item-meta">${formatarHora(item.created_at)}${item.forma_pagamento ? ` · ${formatarFormaPagamento(item.forma_pagamento)}` : ''}</div>
       </div>`;
     }).join('')}
@@ -739,19 +738,31 @@ export function ModalExtratoLiquidacao({
                   <div className="text-center py-4 text-gray-400 text-sm">Nenhuma saída</div>
                 ) : (
                   <>
-                    {registrosSaidas.map((item, idx) => (
-                      <CardLinhaSimples
-                        key={item.id}
-                        idx={idx}
-                        titulo={item.cliente_nome || formatarCategoria(item.categoria)}
-                        subtitulo={item.cliente_nome && item.descricao ? item.descricao : undefined}
-                        valor={`-${formatarMoeda(Number(item.valor))}`}
-                        hora={formatarHora(item.created_at)}
-                        forma={formatarFormaPagamento(item.forma_pagamento)}
-                        corValor="text-red-600"
-                        bgColor="bg-red-50"
-                      />
-                    ))}
+                    {registrosSaidas.map((item, idx) => {
+                      const isAnulado = item.status === 'ANULADO';
+                      return (
+                        <CardLinhaSimples
+                          key={item.id}
+                          idx={idx}
+                          titulo={
+                            (isAnulado ? '❌ ' : '') +
+                            (item.cliente_nome || formatarCategoria(item.categoria))
+                          }
+                          subtitulo={
+                            isAnulado
+                              ? 'ANULADO'
+                              : item.cliente_nome && item.descricao
+                              ? item.descricao
+                              : undefined
+                          }
+                          valor={`-${formatarMoeda(Number(item.valor))}`}
+                          hora={formatarHora(item.created_at)}
+                          forma={formatarFormaPagamento(item.forma_pagamento)}
+                          corValor={isAnulado ? 'text-gray-400 line-through' : 'text-red-600'}
+                          bgColor={isAnulado ? 'bg-gray-100' : 'bg-red-50'}
+                        />
+                      );
+                    })}
                     <div className="flex justify-between items-center px-3 py-2 bg-red-50 rounded mt-2">
                       <span className="text-sm font-semibold text-red-700">TOTAL SAÍDAS</span>
                       <span className="text-sm font-bold text-red-700">-{formatarMoeda(totalSaidasDespesas)}</span>
