@@ -302,10 +302,17 @@ export function ModalExtratoLiquidacao({
     0
   );
 
-  // ⭐ Despesas: usar valor salvo na liquidação para manter consistência com caixa_final
-  // O caixa_final foi calculado no momento do fechamento, então o total de despesas
-  // deve ser o mesmo para que a conta feche corretamente
-  const totalSaidasDespesas = Number((liquidacao as any)?.total_despesas_dia || 0);
+  // Despesas (PAGAR exceto empréstimos, estornos, microseguro) - exclui ANULADOS
+  const totalSaidasDespesas = registros
+    .filter(
+      (r) =>
+        r.tipo === 'PAGAR' &&
+        r.status !== 'ANULADO' &&
+        r.categoria !== 'ESTORNO_PAGAMENTO' &&
+        r.categoria !== 'EMPRESTIMO' &&
+        !['RETIRO_MICROSEGURO', 'SAIDA_MICROSEGURO'].includes(r.categoria)
+    )
+    .reduce((s, r) => s + Number(r.valor), 0);
 
   // Pagamentos que entraram dinheiro de fato (exclui pagamentos só com crédito)
   const pagamentosDinheiro = pagamentos.filter((p) => p.forma_pagamento !== 'CREDITO');
