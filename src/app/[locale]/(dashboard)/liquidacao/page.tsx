@@ -37,6 +37,7 @@ import {
   Plus,
   ArrowDownAZ,
   ListOrdered,
+  Ban,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
@@ -616,7 +617,7 @@ function CardDiaNaoTrabalhavel({ data, motivo }: { data: Date; motivo: MotivoBlo
 type FiltroLista = 'TODOS' | 'PAGOS' | 'NAO_PAGOS' | 'NOVOS' | 'RENOVADOS' | 'RENEGOCIADOS' | 'QUITADOS';
 
 interface EventoCliente {
-  tipo: 'PAGOU' | 'NAO_PAGOU' | 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO' | 'QUITADO';
+  tipo: 'PAGOU' | 'NAO_PAGOU' | 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO' | 'QUITADO' | 'CANCELADO';
   parcelasPagas?: number;
   totalParcelas?: number;
   numeroParcelaPaga?: number;
@@ -1313,6 +1314,8 @@ export default function LiquidacaoDiariaPage() {
 
     for (const cid of todosClienteIds) {
       const emp = empPorCliente.get(cid);
+      // ⭐ Empréstimo cancelado: mostrar como cancelado
+      if (emp?.status === 'CANCELADO') { mapa.set(cid, { tipo: 'CANCELADO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
       if (emp?.status === 'QUITADO') { mapa.set(cid, { tipo: 'QUITADO', valorEmprestimo: Number(emp.valor_principal || 0) }); continue; }
       if (emp?.tipo_emprestimo === 'NOVO') { mapa.set(cid, { tipo: 'NOVO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
       if (emp?.tipo_emprestimo === 'RENOVACAO') { mapa.set(cid, { tipo: 'RENOVACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
@@ -1327,7 +1330,7 @@ export default function LiquidacaoDiariaPage() {
   }, [clientesDia, emprestimosDoDia]);
 
   const contagens = useMemo(() => {
-    let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0;
+    let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0, cancelados = 0;
     for (const ev of eventosPorCliente.values()) {
       if (ev.tipo === 'PAGOU') pagos++;
       else if (ev.tipo === 'NAO_PAGOU') naoPagos++;
@@ -1335,8 +1338,9 @@ export default function LiquidacaoDiariaPage() {
       else if (ev.tipo === 'RENOVACAO') renovados++;
       else if (ev.tipo === 'RENEGOCIACAO') renegociados++;
       else if (ev.tipo === 'QUITADO') quitados++;
+      else if (ev.tipo === 'CANCELADO') cancelados++;
     }
-    return { todos: eventosPorCliente.size, pagos, naoPagos, novos, renovados, renegociados, quitados };
+    return { todos: eventosPorCliente.size, pagos, naoPagos, novos, renovados, renegociados, quitados, cancelados };
   }, [eventosPorCliente]);
 
   const clientesComEvento = useMemo(() => {
@@ -1734,10 +1738,11 @@ export default function LiquidacaoDiariaPage() {
                   {clientesOrdenados.map(({ cliente, evento }) => {
                     const notasInfo = notasClientes.get(cliente.cliente_id);
                     const temNotasLiquidacao = (notasInfo?.liquidacao || 0) > 0;
+                    const isCancelado = evento?.tipo === 'CANCELADO';
                     return (
                       <div
                         key={cliente.cliente_id}
-                        className="px-3 py-2 hover:bg-blue-50/50 transition-colors cursor-pointer"
+                        className={`px-3 py-2 hover:bg-blue-50/50 transition-colors cursor-pointer ${isCancelado ? 'bg-gray-50' : ''}`}
                         onClick={() => handleAbrirModalCliente(cliente)}
                       >
                         <div className="flex items-center gap-2.5">
@@ -1746,7 +1751,7 @@ export default function LiquidacaoDiariaPage() {
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-sm font-medium text-gray-900 truncate">{cliente.nome}</span>
+                              <span className={`text-sm font-medium truncate ${isCancelado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{cliente.nome}</span>
                               {temNotasLiquidacao && (
                                 <button onClick={(e) => { e.stopPropagation(); setModalNotasCliente({ aberto: true, clienteId: cliente.cliente_id, clienteNome: cliente.nome }); }} className="text-[10px] flex items-center gap-0.5 text-amber-600 hover:text-amber-700 flex-shrink-0">
                                   <MessageSquare className="w-3 h-3" />
@@ -1891,6 +1896,7 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
     );
   }
   if (evento.tipo === 'QUITADO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
+  if (evento.tipo === 'CANCELADO') return <span className="text-gray-500 font-medium inline-flex items-center gap-1"><Ban className="w-3.5 h-3.5" />Empréstimo cancelado · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
   if (evento.tipo === 'NOVO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'RENOVACAO') return <span className="text-blue-700 font-medium inline-flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium inline-flex items-center gap-1"><Undo2 className="w-3.5 h-3.5" />Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
@@ -1914,6 +1920,7 @@ function getCorAvatar(evento?: EventoCliente): string {
     case 'RENOVACAO': return 'bg-blue-100 text-blue-700';
     case 'RENEGOCIACAO': return 'bg-purple-100 text-purple-700';
     case 'QUITADO': return 'bg-teal-100 text-teal-700';
+    case 'CANCELADO': return 'bg-gray-200 text-gray-500';
     default: return 'bg-gray-100 text-gray-600';
   }
 }
