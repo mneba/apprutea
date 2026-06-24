@@ -852,6 +852,31 @@ export default function LiquidacaoDiariaPage() {
       setSaldoConta(contaData?.saldo_atual || 0);
 
       const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaId);
+      
+      // ⭐ CORREÇÃO: Se não há liquidação aberta, verificar se há fechada HOJE (no timezone da empresa)
+      if (!liquidacaoData) {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data: statusHoje, error: errStatus } = await supabase.rpc('fn_status_liquidacao_hoje', {
+          p_rota_id: rotaId
+        });
+        
+        if (!errStatus && statusHoje?.status === 'FECHADA_HOJE' && statusHoje?.liquidacao_id) {
+          // Carregar a liquidação fechada de hoje para mostrar com botão "Reabrir"
+          const liqFechadaHoje = await liquidacaoService.buscarLiquidacaoPorId(statusHoje.liquidacao_id);
+          if (liqFechadaHoje) {
+            setLiquidacao(liqFechadaHoje);
+            setLiquidacaoAtiva(null); // Não há liquidação ativa (aberta)
+            setVisualizandoOutroDia(false); // É hoje, não outro dia
+            await carregarDadosLiquidacao(liqFechadaHoje, rotaId);
+            setDataSelecionada(new Date(liqFechadaHoje.data_abertura));
+            const meta = await liquidacaoService.buscarMetaRota(rotaId);
+            setMetaDia(meta);
+            setLoading(false);
+            return; // Importante: sair aqui
+          }
+        }
+      }
+      
       setLiquidacao(liquidacaoData);
       setLiquidacaoAtiva(liquidacaoData);
 
@@ -995,20 +1020,27 @@ export default function LiquidacaoDiariaPage() {
     (async () => {
       try {
         const supabase = (await import('@/lib/supabase/client')).createClient();
-        const hoje = new Date();
-        const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+        
+        // ⭐ CORREÇÃO: Usar data "hoje" do servidor no timezone da empresa
+        const { data: dataHojeResp } = await supabase.rpc('fn_data_hoje_rota', {
+          p_rota_id: rota.id
+        });
+        const hojeStr = dataHojeResp || new Date().toISOString().split('T')[0];
+        
         const { data, error } = await supabase.rpc('fn_proxima_liquidacao_info', {
           p_rota_id: rota.id,
           p_data_atual: hojeStr,
         });
         if (error) {
           console.error('Erro ao buscar info próxima liquidação:', error);
+          const hoje = new Date(hojeStr + 'T12:00:00');
           setProximaInfo({ dataProxima: hoje, diasPulados: [] });
           return;
         }
         const dataProxStr = (data as any)?.data_proxima as string | null;
         const dias = ((data as any)?.dias_pulados as string[] | null) || [];
-        const dataProx = dataProxStr ? new Date(dataProxStr + 'T12:00:00') : hoje;
+        const hojeDate = new Date(hojeStr + 'T12:00:00');
+        const dataProx = dataProxStr ? new Date(dataProxStr + 'T12:00:00') : hojeDate;
         setProximaInfo({ dataProxima: dataProx, diasPulados: dias });
       } catch (err) {
         console.error('Erro inesperado em fn_proxima_liquidacao_info:', err);
