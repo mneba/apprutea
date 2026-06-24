@@ -646,7 +646,7 @@ export default function LiquidacaoDiariaPage() {
   const [metaDia, setMetaDia] = useState(0);
 
   const [emprestimosDoDia, setEmprestimosDoDia] = useState<Array<{
-    id: string; cliente_id: string; valor_principal: number; numero_parcelas: number; tipo_emprestimo: string; status: string;
+    id: string; cliente_id: string; valor_principal: number; numero_parcelas: number; tipo_emprestimo: string; status: string; clientes?: { nome: string };
   }>>([]);
 
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
@@ -719,9 +719,10 @@ export default function LiquidacaoDiariaPage() {
       const supabase = (await import('@/lib/supabase/client')).createClient();
       
       // 1. Empréstimos CRIADOS nesta liquidação (novos, renovações, renegociações)
+      // ⭐ Inclui nome do cliente para empréstimos cancelados que não aparecem em clientesDia
       const { data: empsNovos } = await supabase
         .from('emprestimos')
-        .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
+        .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status, clientes!inner(nome)')
         .eq('liquidacao_id', liq.id);
 
       // 2. Empréstimos QUITADOS nesta liquidação (via RPC)
@@ -1355,8 +1356,10 @@ export default function LiquidacaoDiariaPage() {
       if (seen.has(emp.cliente_id)) continue;
       const ev = eventosPorCliente.get(emp.cliente_id);
       if (!ev) continue;
+      // ⭐ Usar nome real do cliente (vem do join com clientes)
+      const nomeCliente = emp.clientes?.nome || '(cliente do empréstimo)';
       const fake = {
-        cliente_id: emp.cliente_id, nome: '(cliente do empréstimo)', consecutivo: '',
+        cliente_id: emp.cliente_id, nome: nomeCliente, consecutivo: '',
         telefone_celular: '', endereco: '', rota_id: rota?.id || '', parcela_id: emp.id,
         numero_parcela: 0, numero_parcelas: emp.numero_parcelas, valor_parcela: 0,
         valor_pago_parcela: 0, valor_principal: emp.valor_principal, saldo_emprestimo: 0,
