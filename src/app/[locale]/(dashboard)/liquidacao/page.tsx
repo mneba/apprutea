@@ -624,6 +624,7 @@ interface EventoCliente {
   valorPago?: number;
   valorEmprestimo?: number;
   numeroParcelasEmprestimo?: number;
+  isParcial?: boolean; // ⭐ indica se foi pagamento parcial (não quitou a parcela)
 }
 
 export default function LiquidacaoDiariaPage() {
@@ -1291,15 +1292,17 @@ export default function LiquidacaoDiariaPage() {
       if (!existente || pNovo > pAtual) empPorCliente.set(emp.cliente_id, emp);
     }
 
-    const pagosPorCliente = new Map<string, { somaValor: number; parcelas: number[]; totalParcelas: number }>();
+    const pagosPorCliente = new Map<string, { somaValor: number; parcelas: number[]; totalParcelas: number; temParcial: boolean }>();
     const naoPagosPorCliente = new Map<string, { numero: number; total: number }>();
 
     for (const c of clientesDia) {
       if (c.status_dia === 'PAGO' || c.status_dia === 'PARCIAL') {
-        const atual = pagosPorCliente.get(c.cliente_id) || { somaValor: 0, parcelas: [], totalParcelas: c.numero_parcelas ?? 0 };
+        const atual = pagosPorCliente.get(c.cliente_id) || { somaValor: 0, parcelas: [], totalParcelas: c.numero_parcelas ?? 0, temParcial: false };
         atual.somaValor += Number(c.valor_pago_parcela || 0);
         if (c.numero_parcela != null) atual.parcelas.push(c.numero_parcela);
         atual.totalParcelas = c.numero_parcelas ?? atual.totalParcelas;
+        // ⭐ Marca se alguma parcela é PARCIAL (não totalmente paga)
+        if (c.status_dia === 'PARCIAL') atual.temParcial = true;
         pagosPorCliente.set(c.cliente_id, atual);
       } else {
         if (!naoPagosPorCliente.has(c.cliente_id)) {
@@ -1322,7 +1325,7 @@ export default function LiquidacaoDiariaPage() {
       if (emp?.tipo_emprestimo === 'RENOVACAO') { mapa.set(cid, { tipo: 'RENOVACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
       if (emp?.tipo_emprestimo === 'RENEGOCIACAO') { mapa.set(cid, { tipo: 'RENEGOCIACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
       const pag = pagosPorCliente.get(cid);
-      if (pag && pag.somaValor > 0) { mapa.set(cid, { tipo: 'PAGOU', parcelasPagas: pag.parcelas.length, totalParcelas: pag.totalParcelas, numeroParcelaPaga: pag.parcelas[0], valorPago: pag.somaValor }); continue; }
+      if (pag && pag.somaValor > 0) { mapa.set(cid, { tipo: 'PAGOU', parcelasPagas: pag.parcelas.length, totalParcelas: pag.totalParcelas, numeroParcelaPaga: pag.parcelas[0], valorPago: pag.somaValor, isParcial: pag.temParcial }); continue; }
       const np = naoPagosPorCliente.get(cid);
       if (np) mapa.set(cid, { tipo: 'NAO_PAGOU', numeroParcelaPaga: np.numero, totalParcelas: np.total });
     }
@@ -1905,9 +1908,15 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
   if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium inline-flex items-center gap-1"><Undo2 className="w-3.5 h-3.5" />Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'PAGOU') {
     const qtdParc = evento.parcelasPagas || 1;
-    const txt = qtdParc > 1
-      ? `${qtdParc} parcelas pagas · ${formatarMoeda(evento.valorPago || 0)}`
-      : `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
+    let txt: string;
+    if (qtdParc > 1) {
+      txt = `${qtdParc} parcelas pagas · ${formatarMoeda(evento.valorPago || 0)}`;
+    } else if (evento.isParcial) {
+      // ⭐ Pagamento parcial - não quitou a parcela
+      txt = `Pagou parcial ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
+    } else {
+      txt = `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
+    }
     return <span className="text-green-700 font-medium inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" />{txt}</span>;
   }
   if (evento.tipo === 'NAO_PAGOU') return <span className="text-red-600 font-medium inline-flex items-center gap-1"><X className="w-3.5 h-3.5" />Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}</span>;
