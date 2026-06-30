@@ -868,13 +868,12 @@ export function ModalNotasLiquidacao({
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   })();
 
-  // Autores presentes nas notas (para o dropdown)
+  // Autores presentes nas notas (para o dropdown).
+  // notas está em ordem de criação (ASC), então sobrescrever faz prevalecer o tipo da nota MAIS recente.
   const autores = (() => {
     const map = new Map<string, { id: string; nome: string; tipo: string }>();
     for (const n of notas) {
-      if (!map.has(n.autor_id)) {
-        map.set(n.autor_id, { id: n.autor_id, nome: n.autor_nome, tipo: n.autor_tipo });
-      }
+      map.set(n.autor_id, { id: n.autor_id, nome: n.autor_nome, tipo: n.autor_tipo });
     }
     return Array.from(map.values()).sort((a, b) => a.nome.localeCompare(b.nome));
   })();
