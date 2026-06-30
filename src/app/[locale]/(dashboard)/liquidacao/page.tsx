@@ -1846,6 +1846,7 @@ export default function LiquidacaoDiariaPage() {
           vendedorId={vendedor.id}
           autorId={userId || ''}
           autorNome={profile?.nome || 'Administrador'}
+          autorTipo={profile?.tipo_usuario || 'ADMIN'}
           dataReferencia={liquidacao.data_abertura.split('T')[0]}
           clientes={clientesDia}
           onChanged={recarregarContagemNotas}

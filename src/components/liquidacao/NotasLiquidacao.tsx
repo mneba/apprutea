@@ -30,7 +30,7 @@ interface Nota {
   vendedor_id: string;
   autor_id: string;
   autor_nome: string;
-  autor_tipo: 'VENDEDOR' | 'MONITOR';
+  autor_tipo: string;
   liquidacao_id: string | null;
   cliente_id: string | null;
   cliente_nome: string | null;
@@ -743,6 +743,8 @@ interface ModalNotasLiquidacaoProps {
   vendedorId: string;
   autorId: string;
   autorNome: string;
+  /** tipo_usuario real do autor logado (SUPER_ADMIN, ADMIN, MONITOR...) */
+  autorTipo: string;
   dataReferencia: string;
   /** Clientes da liquidação atual — usados para anexar nota + parcela */
   clientes: ClienteDaLiquidacao[];
@@ -757,12 +759,15 @@ const PRIORIDADES_NOTA: Array<{ valor: Nota['prioridade']; label: string }> = [
   { valor: 'BAIXA', label: 'Baixa' },
 ];
 
-function labelAutorTipo(tipo: string): string {
+function labelAutorTipo(tipo: string): string | null {
   switch (tipo) {
     case 'VENDEDOR': return 'Vendedor';
     case 'MONITOR': return 'Monitor';
-    case 'ADMIN': return 'Administrador';
-    default: return tipo || '-';
+    // ADMIN e SUPER_ADMIN: mostra apenas o nome, sem o tipo
+    case 'ADMIN':
+    case 'SUPER_ADMIN':
+      return null;
+    default: return null;
   }
 }
 
@@ -779,6 +784,7 @@ export function ModalNotasLiquidacao({
   vendedorId,
   autorId,
   autorNome,
+  autorTipo,
   dataReferencia,
   clientes,
   onChanged,
@@ -949,7 +955,7 @@ export function ModalNotasLiquidacao({
         p_vendedor_id: vendedorId,
         p_autor_id: autorId,
         p_autor_nome: autorNome,
-        p_autor_tipo: 'MONITOR', // no web é sempre MONITOR/ADMIN
+        p_autor_tipo: autorTipo || 'ADMIN', // tipo real do usuário logado
         p_liquidacao_id: liquidacaoId,
         p_cliente_id: pClienteId,
         p_emprestimo_id: pEmprestimoId,
@@ -1062,7 +1068,7 @@ export function ModalNotasLiquidacao({
               <option value="">Todos os autores</option>
               {autores.map((a) => (
                 <option key={a.id} value={a.id}>
-                  {a.nome} ({labelAutorTipo(a.tipo)})
+                  {a.nome}{labelAutorTipo(a.tipo) ? ` (${labelAutorTipo(a.tipo)})` : ''}
                 </option>
               ))}
             </select>
@@ -1270,7 +1276,7 @@ export function ModalNotasLiquidacao({
                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-2 text-[11px] text-gray-400">
                           <span className="flex items-center gap-1">
                             <User className="w-3 h-3" />
-                            {nota.autor_nome} ({labelAutorTipo(nota.autor_tipo)})
+                            {nota.autor_nome}{labelAutorTipo(nota.autor_tipo) ? ` (${labelAutorTipo(nota.autor_tipo)})` : ''}
                           </span>
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
