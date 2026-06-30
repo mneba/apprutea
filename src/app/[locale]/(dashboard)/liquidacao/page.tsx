@@ -1306,12 +1306,19 @@ export default function LiquidacaoDiariaPage() {
     if (!clientesDia.length && !emprestimosDoDia.length) return mapa;
 
     const empPorCliente = new Map<string, typeof emprestimosDoDia[number]>();
+    // Score de desempate quando o cliente tem +1 empréstimo no dia.
+    // CANCELADO fica abaixo de QUALQUER empréstimo ativo: assim, quando há
+    // renovação no mesmo dia, mostra a renovação (ativa) e não o cancelado.
+    // Se o único empréstimo do cliente for cancelado, ele continua aparecendo como CANCELADO.
+    const scoreEmp = (e: typeof emprestimosDoDia[number]) => {
+      if (e.status === 'CANCELADO') return -1;
+      if (e.status === 'QUITADO') return 4;
+      const prioridade: Record<string, number> = { NOVO: 3, RENOVACAO: 2, RENEGOCIACAO: 1 };
+      return prioridade[e.tipo_emprestimo] || 0;
+    };
     for (const emp of emprestimosDoDia) {
       const existente = empPorCliente.get(emp.cliente_id);
-      const prioridade: Record<string, number> = { QUITADO: 4, NOVO: 3, RENOVACAO: 2, RENEGOCIACAO: 1 };
-      const pAtual = prioridade[existente?.tipo_emprestimo || ''] || 0;
-      const pNovo = emp.status === 'QUITADO' ? 4 : (prioridade[emp.tipo_emprestimo] || 0);
-      if (!existente || pNovo > pAtual) empPorCliente.set(emp.cliente_id, emp);
+      if (!existente || scoreEmp(emp) > scoreEmp(existente)) empPorCliente.set(emp.cliente_id, emp);
     }
 
     const pagosPorCliente = new Map<string, { somaValor: number; parcelas: number[]; totalParcelas: number; temParcial: boolean }>();
