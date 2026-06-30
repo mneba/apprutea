@@ -45,7 +45,7 @@ import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendar
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
 import { FaixaLiquidacaoReaberta } from '@/components/liquidacao/FaixaLiquidacaoReaberta';
-import { ModalNotasCliente } from '@/components/liquidacao/NotasLiquidacao';
+import { ModalNotasCliente, ModalNotasLiquidacao } from '@/components/liquidacao/NotasLiquidacao';
 import {
   ModalEmprestimos,
   ModalDespesas,
@@ -679,6 +679,7 @@ export default function LiquidacaoDiariaPage() {
   const [modalNotasCliente, setModalNotasCliente] = useState<{ aberto: boolean; clienteId: string; clienteNome: string }>({
     aberto: false, clienteId: '', clienteNome: '',
   });
+  const [modalNotasLiquidacao, setModalNotasLiquidacao] = useState(false);
 
   const [modalEmprestimos, setModalEmprestimos] = useState(false);
   const [modalDespesas, setModalDespesas] = useState(false);
@@ -1274,8 +1275,29 @@ export default function LiquidacaoDiariaPage() {
     setModalClienteAberto(true);
   };
 
+  const recarregarContagemNotas = useCallback(async () => {
+    if (!liquidacao?.id) return;
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { count } = await supabase
+      .from('notas').select('id', { count: 'exact', head: true })
+      .eq('liquidacao_id', liquidacao.id).eq('status', 'ATIVA');
+    setQtdNotasLiquidacao(count || 0);
+
+    const clienteIds = [...new Set(clientesDia.map(c => c.cliente_id))];
+    if (clienteIds.length > 0) {
+      const { data: notasLiq } = await supabase
+        .from('notas').select('cliente_id').eq('liquidacao_id', liquidacao.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
+      const { data: notasOutras } = await supabase
+        .from('notas').select('cliente_id').neq('liquidacao_id', liquidacao.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
+      const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
+      (notasLiq || []).forEach((n: any) => { const a = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false }; mapaNotas.set(n.cliente_id, { ...a, liquidacao: a.liquidacao + 1 }); });
+      (notasOutras || []).forEach((n: any) => { const a = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false }; mapaNotas.set(n.cliente_id, { ...a, outras: true }); });
+      setNotasClientes(mapaNotas);
+    }
+  }, [liquidacao?.id, clientesDia]);
+
   const handleAbrirNotas = () => {
-    console.log('TODO: abrir modal de notas da liquidação', { liquidacaoId: liquidacao?.id, qtdNotasLiquidacao });
+    setModalNotasLiquidacao(true);
   };
 
   // Máscara de evento por cliente
@@ -1811,6 +1833,22 @@ export default function LiquidacaoDiariaPage() {
           autorId={userId || ''}
           autorNome={profile?.nome || 'Administrador'}
           dataReferencia={liquidacao.data_abertura.split('T')[0]}
+        />
+      )}
+
+      {liquidacao && rota && vendedor && (
+        <ModalNotasLiquidacao
+          isOpen={modalNotasLiquidacao}
+          onClose={() => setModalNotasLiquidacao(false)}
+          liquidacaoId={liquidacao.id}
+          rotaId={rota.id}
+          empresaId={rota.empresa_id}
+          vendedorId={vendedor.id}
+          autorId={userId || ''}
+          autorNome={profile?.nome || 'Administrador'}
+          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+          clientes={clientesDia}
+          onChanged={recarregarContagemNotas}
         />
       )}
 
