@@ -676,6 +676,7 @@ export default function LiquidacaoDiariaPage() {
   // Contagem de notas
   const [qtdNotasLiquidacao, setQtdNotasLiquidacao] = useState(0);
   const [notasClientes, setNotasClientes] = useState<Map<string, { liquidacao: number; outras: boolean }>>(new Map());
+  const [fotosClientes, setFotosClientes] = useState<Map<string, string>>(new Map());
   const [modalNotasCliente, setModalNotasCliente] = useState<{ aberto: boolean; clienteId: string; clienteNome: string }>({
     aberto: false, clienteId: '', clienteNome: '',
   });
@@ -684,6 +685,8 @@ export default function LiquidacaoDiariaPage() {
   const [modalEmprestimos, setModalEmprestimos] = useState(false);
   const [modalDespesas, setModalDespesas] = useState(false);
   const [modalMicroseguros, setModalMicroseguros] = useState(false);
+  const [modalReceitas, setModalReceitas] = useState(false);
+  const [receitasDia, setReceitasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
 
   // Info pra abertura de nova liquidação (data prevista + dias pulados)
   const [proximaInfo, setProximaInfo] = useState<{
@@ -759,6 +762,34 @@ export default function LiquidacaoDiariaPage() {
       }
 
       setEmprestimosDoDia(empsTodos as any);
+
+      // Receitas do dia = RECEBER pagos da liquidação, EXCETO cobrança de parcela
+      // (COBRANCA_PARCELAS vira o card "Cobranças" à parte)
+      const { data: receitasData } = await supabase
+        .from('financeiro')
+        .select('id, categoria, descricao, valor, forma_pagamento, data_lancamento, created_at')
+        .eq('liquidacao_id', liq.id)
+        .eq('tipo', 'RECEBER')
+        .eq('status', 'PAGO')
+        .neq('categoria', 'COBRANCA_PARCELAS')
+        .order('created_at', { ascending: false });
+      const receitasItens = receitasData || [];
+      const receitasTotal = receitasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
+      setReceitasDia({ total: receitasTotal, qtd: receitasItens.length, itens: receitasItens });
+
+      // Fotos dos clientes do dia (ClienteDoDia não traz foto_url)
+      const idsFotos = [...new Set(clientes.map(c => c.cliente_id))];
+      if (idsFotos.length > 0) {
+        const { data: fotosData } = await supabase
+          .from('clientes')
+          .select('id, foto_url')
+          .in('id', idsFotos);
+        const mapaFotos = new Map<string, string>();
+        (fotosData || []).forEach((f: any) => { if (f.foto_url) mapaFotos.set(f.id, f.foto_url); });
+        setFotosClientes(mapaFotos);
+      } else {
+        setFotosClientes(new Map());
+      }
 
       // Buscar ordem dos clientes na rota (ordem_rota_cliente)
       const { data: ordemData } = await supabase
@@ -1706,6 +1737,17 @@ export default function LiquidacaoDiariaPage() {
                   <span className="text-sm font-bold text-red-700 tabular-nums">{formatarMoeda(liquidacao.total_despesas_dia)}</span>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
                 </button>
+                <button onClick={() => setModalReceitas(true)} className="w-full px-3 py-2.5 hover:bg-green-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-green-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Receitas</p>
+                    <p className="text-[10px] text-gray-400">{receitasDia.qtd} lanç.</p>
+                  </div>
+                  <span className="text-sm font-bold text-green-700 tabular-nums">{formatarMoeda(receitasDia.total)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
                 <button onClick={() => setModalMicroseguros(true)} className="w-full px-3 py-2.5 hover:bg-teal-50/50 transition-colors flex items-center gap-2 text-left">
                   <div className="w-7 h-7 bg-teal-50 rounded-md flex items-center justify-center flex-shrink-0">
                     <Shield className="w-3.5 h-3.5 text-teal-600" />
@@ -1781,8 +1823,16 @@ export default function LiquidacaoDiariaPage() {
                         onClick={() => handleAbrirModalCliente(cliente)}
                       >
                         <div className="flex items-center gap-2.5">
-                          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 ${getCorAvatar(evento)}`}>
-                            {cliente.nome?.charAt(0) || '?'}
+                          <div className={`relative w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 overflow-hidden ${getCorAvatar(evento)}`}>
+                            <span>{cliente.nome?.charAt(0) || '?'}</span>
+                            {fotosClientes.get(cliente.cliente_id) && (
+                              <img
+                                src={fotosClientes.get(cliente.cliente_id)!}
+                                alt={cliente.nome}
+                                className="absolute inset-0 w-full h-full object-cover"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            )}
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline justify-between gap-2">
@@ -1865,6 +1915,55 @@ export default function LiquidacaoDiariaPage() {
           <ModalEmprestimos isOpen={modalEmprestimos} onClose={() => setModalEmprestimos(false)} liquidacaoId={liquidacao.id} totalFallback={liquidacao.total_emprestado_dia} qtdFallback={liquidacao.qtd_emprestimos_dia} />
           <ModalDespesas isOpen={modalDespesas} onClose={() => setModalDespesas(false)} liquidacaoId={liquidacao.id} totalFallback={liquidacao.total_despesas_dia} qtdFallback={liquidacao.qtd_despesas_dia} />
           <ModalMicroseguros isOpen={modalMicroseguros} onClose={() => setModalMicroseguros(false)} liquidacaoId={liquidacao.id} totalFallback={liquidacao.total_microseguro_dia} qtdFallback={liquidacao.qtd_microseguros_dia} />
+
+          {/* Modal Receitas (autocontido) */}
+          {modalReceitas && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setModalReceitas(false)} />
+              <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-green-600" />
+                      Receitas do Dia
+                    </h2>
+                    <p className="text-sm text-gray-500">{receitasDia.qtd} lançamento(s) · {formatarMoeda(receitasDia.total)}</p>
+                  </div>
+                  <button onClick={() => setModalReceitas(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {receitasDia.itens.length > 0 ? (
+                    <div className="space-y-2">
+                      {receitasDia.itens.map((r: any) => (
+                        <div key={r.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{r.descricao || r.categoria}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {r.categoria}{r.forma_pagamento ? ` · ${r.forma_pagamento}` : ''}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold text-green-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(r.valor || 0))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      <TrendingUp className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      Nenhuma receita lançada nesta liquidação
+                    </div>
+                  )}
+                </div>
+                {receitasDia.itens.length > 0 && (
+                  <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Total</span>
+                    <span className="text-base font-bold text-green-700 tabular-nums">{formatarMoeda(receitasDia.total)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
