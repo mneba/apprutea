@@ -546,10 +546,27 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     setTimeout(() => setToast(null), 2500);
   };
 
+  // Recarrega as permissões do usuário a partir do banco (usado após aprovar,
+  // quando o trigger cria a permissão inicial de Liquidação Diária)
+  const recarregarPermissoes = async () => {
+    try {
+      const permissoesData = await usuariosService.listarPermissoesUsuario(usuario.user_id);
+      const permissoesMap: Record<string, UserPermissao> = {};
+      permissoesData.forEach((p) => { permissoesMap[p.modulo_id] = p; });
+      setPermissoes(permissoesMap);
+    } catch (err) {
+      console.warn('Erro ao recarregar permissões:', err);
+    }
+  };
+
   const handleAlterarStatus = async (novoStatus: 'APROVADO' | 'PENDENTE' | 'REJEITADO') => {
     try {
       await usuariosService.atualizarUsuario(usuario.user_id, { status: novoStatus });
       setStatus(novoStatus);
+      // Ao aprovar, o trigger cria a permissão inicial — recarrega para refletir no modal
+      if (novoStatus === 'APROVADO') {
+        await recarregarPermissoes();
+      }
       showToast(
         novoStatus === 'APROVADO' ? '✓ Usuário aprovado com sucesso' :
         novoStatus === 'REJEITADO' ? '✗ Usuário rejeitado' :
@@ -630,7 +647,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     setAviso(null);
     try {
       const empresasIds = [...new Set(selecoes.map((s) => s.empresa_id))];
-      const hierarquiasIds = [...new Set(selecoes.map((s) => s.hierarquia_id))];
       const cidadesIds = [...new Set(selecoes.map((s) => s.cidade_id).filter(Boolean))];
 
       // Auto-associar única rota se empresa tem só 1 rota e nenhuma foi selecionada
@@ -682,7 +698,6 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         status,
         tipo_usuario: tipoFinal,
         empresas_ids: empresasIds,
-        hierarquias_ids: hierarquiasIds,
         cidades_ids: cidadesIds,
         rotas_ids: rotasIds,
       } as any);
@@ -776,6 +791,18 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
     return true;
   });
 
+  // Permissões e Liberações só ficam liberadas após o usuário ser APROVADO
+  const abaBloqueadaPorStatus = (id: TabType) =>
+    (id === 'permissoes' || id === 'liberacoes') && status !== 'APROVADO';
+
+  // Se o usuário estiver numa aba que passou a ficar bloqueada, volta para "Dados"
+  useEffect(() => {
+    if (abaBloqueadaPorStatus(activeTab)) {
+      setActiveTab('dados');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, activeTab]);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -839,15 +866,20 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
         <div className="flex border-b border-gray-200 px-4">
           {tabsVisiveis.map((tab) => {
             const Icon = tab.icon;
+            const bloqueada = abaBloqueadaPorStatus(tab.id);
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => { if (!bloqueada) setActiveTab(tab.id); }}
+                disabled={bloqueada}
+                title={bloqueada ? 'Disponível após aprovar o usuário' : undefined}
                 className={`
                   flex items-center gap-1.5 px-3 py-3 text-sm font-medium border-b-2 -mb-px transition-colors
-                  ${activeTab === tab.id
-                    ? 'border-blue-600 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'}
+                  ${bloqueada
+                    ? 'border-transparent text-gray-300 cursor-not-allowed'
+                    : activeTab === tab.id
+                      ? 'border-blue-600 text-blue-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700'}
                 `}
               >
                 <Icon className="w-4 h-4" />

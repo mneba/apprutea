@@ -56,6 +56,22 @@ export const usuariosService = {
 
     // Clonar dados para não modificar original
     const dadosParaSalvar: any = { ...dados };
+
+    // Whitelist de colunas reais de user_profiles — evita que campos
+    // inexistentes (ex.: hierarquias_ids) derrubem o UPDATE inteiro.
+    const COLUNAS_VALIDAS = new Set([
+      'nome', 'telefone', 'documento', 'endereco', 'justificativa',
+      'empresa_pretendida', 'status', 'aprovado_por', 'data_aprovacao',
+      'observacoes_aprovacao', 'tipo_usuario', 'empresas_ids', 'cidades_ids',
+      'rotas_ids', 'token_acesso', 'token_gerado_por', 'token_gerado_em',
+      'token_validado', 'Url_foto_usuario', 'admin_empresa_ids',
+    ]);
+    for (const chave of Object.keys(dadosParaSalvar)) {
+      if (!COLUNAS_VALIDAS.has(chave)) {
+        console.warn(`⚠️ atualizarUsuario: ignorando campo inválido "${chave}"`);
+        delete dadosParaSalvar[chave];
+      }
+    }
     
     // Sempre enviar quem alterou e quando
     if (adminId) {
