@@ -411,6 +411,11 @@ function ModalDetalhesSolicitacao({
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Empresa</span>
+                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Rota</span>
                   <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
                 </div>
@@ -447,6 +452,11 @@ function ModalDetalhesSolicitacao({
                     <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
                     <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
                   </div>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Empresa</span>
+                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
@@ -500,6 +510,11 @@ function ModalDetalhesSolicitacao({
                     <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
                     <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
                   </div>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Empresa</span>
+                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
@@ -598,6 +613,11 @@ function ModalDetalhesSolicitacao({
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
+                  <span className="text-sm text-gray-500">Empresa</span>
+                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                </div>
+                <div className="border-t border-gray-200" />
+                <div className="flex justify-between items-center">
                   <span className="text-sm text-gray-500">Rota</span>
                   <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
                 </div>
@@ -687,6 +707,11 @@ function ModalDetalhesSolicitacao({
                         <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
                         <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
                       </div>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Empresa</span>
+                      <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
                     </div>
                     <div className="border-t border-gray-200" />
                     <div className="flex justify-between items-center">
@@ -1466,6 +1491,7 @@ export default function LiberacoesPage() {
                 <tr className="bg-gray-50 border-b border-gray-200">
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Tipo</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Vendedor</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Empresa</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Data</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
@@ -1495,6 +1521,7 @@ export default function LiberacoesPage() {
                       <p className="text-gray-900">{solicitacao.vendedor_nome}</p>
                       <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
                     </td>
+                    <td className="px-4 py-3 text-gray-600">{solicitacao.empresa_nome || '-'}</td>
                     <td className="px-4 py-3 text-gray-600">{solicitacao.rota_nome}</td>
                     <td className="px-4 py-3 text-gray-600">{formatarData(solicitacao.created_at)}</td>
                     <td className="px-4 py-3 text-center">

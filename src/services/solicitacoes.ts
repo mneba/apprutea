@@ -46,6 +46,8 @@ export interface Solicitacao {
   vendedor_codigo: string;
   rota_id: string;
   rota_nome: string;
+  empresa_id: string | null;
+  empresa_nome: string | null;
   cliente_id: string | null;
   cliente_nome: string | null;
   emprestimo_id: string | null;
@@ -210,7 +212,7 @@ export const solicitacoesService = {
       .select(`
         *,
         vendedor:vendedores(nome, codigo_vendedor),
-        rota:rotas(nome),
+        rota:rotas(nome, empresa_id, empresa:empresas(nome)),
         cliente:clientes(nome),
         resolvedor:user_profiles!resolvido_por(nome)
       `)
@@ -227,6 +229,8 @@ export const solicitacoesService = {
       vendedor_nome: data.vendedor?.nome,
       vendedor_codigo: data.vendedor?.codigo_vendedor,
       rota_nome: data.rota?.nome,
+      empresa_id: data.rota?.empresa_id ?? null,
+      empresa_nome: data.rota?.empresa?.nome ?? null,
       cliente_nome: data.cliente?.nome,
       resolvido_por_nome: data.resolvedor?.nome,
     } as Solicitacao;
