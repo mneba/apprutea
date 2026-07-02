@@ -1154,6 +1154,7 @@ export default function LiberacoesPage() {
   const [filtroCategoria, setFiltroCategoria] = useState<string>(''); // '', 'ENTRADAS', 'SAIDAS', 'LIQUIDACAO'
   const [filtroCliente, setFiltroCliente] = useState<string>('');
   const [filtroData, setFiltroData] = useState<string>(''); // YYYY-MM-DD
+  const [filtroEmpresa, setFiltroEmpresa] = useState<string>(''); // empresa_id (só SUPER_ADMIN)
   const [busca, setBusca] = useState('');
 
   // Categorias de tipos
@@ -1265,6 +1266,9 @@ export default function LiberacoesPage() {
 
     // Filtro de data (data_solicitada)
     if (filtroData && s.data_solicitada !== filtroData) return false;
+
+    // Filtro de empresa (apenas SUPER_ADMIN usa; para os demais fica sempre vazio)
+    if (filtroEmpresa && s.empresa_id !== filtroEmpresa) return false;
     
     // Filtro de busca geral
     if (busca) {
@@ -1288,11 +1292,24 @@ export default function LiberacoesPage() {
     setFiltroCategoria('');
     setFiltroCliente('');
     setFiltroData('');
+    setFiltroEmpresa('');
     setBusca('');
   };
 
   // Verificar se há filtros ativos
-  const temFiltrosAtivos = filtroStatus || filtroTipo || filtroCategoria || filtroCliente || filtroData || busca;
+  const temFiltrosAtivos = filtroStatus || filtroTipo || filtroCategoria || filtroCliente || filtroData || filtroEmpresa || busca;
+
+  // Filtro de empresa é exclusivo do SUPER_ADMIN (só ele vê várias empresas)
+  const ehSuperAdmin = (user as any)?.tipo_usuario === 'SUPER_ADMIN';
+
+  // Empresas presentes nas solicitações carregadas (para o dropdown)
+  const empresasDisponiveis = (() => {
+    const map = new Map<string, string>();
+    for (const s of todasSolicitacoes) {
+      if (s.empresa_id) map.set(s.empresa_id, s.empresa_nome || '—');
+    }
+    return Array.from(map, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome));
+  })();
 
   const formatarData = (data: string) => {
     return new Date(data).toLocaleDateString('pt-BR', {
@@ -1452,6 +1469,19 @@ export default function LiberacoesPage() {
                 ))
               )}
             </select>
+
+            {ehSuperAdmin && empresasDisponiveis.length > 0 && (
+              <select
+                value={filtroEmpresa}
+                onChange={(e) => setFiltroEmpresa(e.target.value)}
+                className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[180px]"
+              >
+                <option value="">Todas as empresas</option>
+                {empresasDisponiveis.map((emp) => (
+                  <option key={emp.id} value={emp.id}>{emp.nome}</option>
+                ))}
+              </select>
+            )}
 
             {temFiltrosAtivos && (
               <button
