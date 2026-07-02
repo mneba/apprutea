@@ -101,6 +101,7 @@ function TabelaClientes({
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 w-10"></th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Código</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Nome</th>
               <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Documento</th>
@@ -120,6 +121,19 @@ function TabelaClientes({
                 className="hover:bg-gray-50 transition-colors cursor-pointer"
                 onClick={() => onDetalhes(cliente)}
               >
+                <td className="px-3 py-3">
+                  <div className="relative w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-semibold overflow-hidden">
+                    <span>{cliente.nome?.charAt(0)?.toUpperCase() || '?'}</span>
+                    {cliente.foto_url && (
+                      <img
+                        src={cliente.foto_url}
+                        alt={cliente.nome}
+                        className="absolute inset-0 w-full h-full object-cover"
+                        onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                      />
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-3">
                   <span className="font-mono text-gray-600">#{cliente.codigo_cliente}</span>
                 </td>
