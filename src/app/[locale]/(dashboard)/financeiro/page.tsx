@@ -19,7 +19,8 @@ import {
   AlertCircle,
   X,
   Eye,
-  Search
+  Search,
+  Ban
 } from 'lucide-react';
 import {
   BarChart,
@@ -368,10 +369,14 @@ function FiltroPeriodo({
 
 function LinhaExtrato({ 
   movimento, 
-  categorias 
+  categorias,
+  podeAnular,
+  onAnular,
 }: { 
   movimento: MovimentoFinanceiro; 
   categorias: CategoriaFinanceira[];
+  podeAnular?: boolean;
+  onAnular?: (movimento: MovimentoFinanceiro) => void;
 }) {
   const categoria = categorias.find(c => c.codigo === movimento.categoria);
   const isEntrada = movimento.tipo === 'RECEBER';
@@ -473,6 +478,18 @@ function LinhaExtrato({
           {movimento.status}
         </span>
       </td>
+      <td className="px-4 py-3 text-right">
+        {podeAnular && !isAnulado && movimento.status !== 'CANCELADO' && (
+          <button
+            onClick={() => onAnular?.(movimento)}
+            title="Anular movimentação"
+            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+          >
+            <Ban className="w-3.5 h-3.5" />
+            Anular
+          </button>
+        )}
+      </td>
     </tr>
   );
 }
@@ -568,7 +585,8 @@ function ModalVerTodas({
 // =====================================================
 
 export default function FinanceiroPage() {
-  const { localizacao, profile } = useUser();
+  const { localizacao, profile, isSuperAdmin, permissoes } = useUser();
+  const podeAnular = isSuperAdmin || permissoes?.['FINANCEIRO']?.pode_eliminar === true;
   const empresaId = localizacao?.empresa_id;
   const rotaId = localizacao?.rota_id;
   const rotaNome = localizacao?.rota?.nome;
@@ -801,6 +819,27 @@ export default function FinanceiroPage() {
       carregarExtrato();
     }
   }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
+
+  const handleAnularMovimentacao = async (movimento: MovimentoFinanceiro) => {
+    if (!podeAnular) return;
+    const confirmar = window.confirm(
+      `Anular esta movimentação de ${movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}?\n\n` +
+      `Isto reverte o saldo da conta e o caixa da liquidação. O registro é mantido como ANULADO (histórico).`
+    );
+    if (!confirmar) return;
+
+    // Motivo é opcional — se o usuário cancelar o prompt, aborta; se deixar vazio, segue sem motivo.
+    const motivo = window.prompt('Motivo da anulação (opcional):', '');
+    if (motivo === null) return; // cancelou
+
+    try {
+      await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
+      await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
+    } catch (e) {
+      console.error('Erro ao anular movimentação:', e);
+      alert('Erro ao anular a movimentação. Tente novamente.');
+    }
+  };
 
   const handleSalvarMovimentacao = async (dados: any) => {
     const result = await financeiroService.criarMovimentacao(
@@ -1227,15 +1266,16 @@ export default function FinanceiroPage() {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
                   {loadingExtrato ? (
-                    <tr><td colSpan={5} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
+                    <tr><td colSpan={6} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
                   ) : movimentosFiltrados.length > 0 ? (
-                    movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} />))
+                    movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} />))
                   ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
-                    <tr><td colSpan={5} className="px-4 py-12 text-center">
+                    <tr><td colSpan={6} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center">
                         <Calendar className="w-12 h-12 text-blue-300 mb-3" />
                         <p className="text-gray-600 font-medium">Selecione uma data de liquidação</p>
@@ -1243,7 +1283,7 @@ export default function FinanceiroPage() {
                       </div>
                     </td></tr>
                   ) : (
-                    <tr><td colSpan={5} className="px-4 py-12 text-center">
+                    <tr><td colSpan={6} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center">
                         <FileText className="w-12 h-12 text-gray-300 mb-3" />
                         <p className="text-gray-500">Nenhuma movimentação encontrada</p>

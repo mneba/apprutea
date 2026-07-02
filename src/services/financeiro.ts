@@ -24,6 +24,27 @@ import type {
 
 export const financeiroService = {
   // ==================================================
+  // ANULAR MOVIMENTAÇÃO (marca ANULADO e reverte saldo da conta + caixa_final)
+  // A RPC fn_anular_lancamento_financeiro já reverte os dois efeitos.
+  // ==================================================
+  async anularMovimentacao(
+    financeiroId: string,
+    motivo?: string | null,
+    userId?: string | null
+  ): Promise<void> {
+    const supabase = createClient();
+    const { error } = await supabase.rpc('fn_anular_lancamento_financeiro', {
+      p_financeiro_id: financeiroId,
+      p_motivo: motivo || null,
+      p_user_id: userId || null,
+    });
+    if (error) {
+      console.error('Erro ao anular movimentação:', error);
+      throw error;
+    }
+  },
+
+  // ==================================================
   // BUSCAR SALDOS DAS CONTAS (Dashboard)
   // Agora aceita rota_id opcional para filtrar por rota
   // ==================================================
