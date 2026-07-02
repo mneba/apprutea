@@ -1142,7 +1142,7 @@ function BadgeStatus({ status }: { status: string }) {
 
 // Página Principal
 export default function LiberacoesPage() {
-  const { user } = useUser();
+  const { user, isSuperAdmin } = useUser();
   const [loading, setLoading] = useState(true);
   const [todasSolicitacoes, setTodasSolicitacoes] = useState<Solicitacao[]>([]);
   const [solicitacaoSelecionada, setSolicitacaoSelecionada] = useState<Solicitacao | null>(null);
@@ -1300,7 +1300,7 @@ export default function LiberacoesPage() {
   const temFiltrosAtivos = filtroStatus || filtroTipo || filtroCategoria || filtroCliente || filtroData || filtroEmpresa || busca;
 
   // Filtro de empresa é exclusivo do SUPER_ADMIN (só ele vê várias empresas)
-  const ehSuperAdmin = (user as any)?.tipo_usuario === 'SUPER_ADMIN';
+  const ehSuperAdmin = isSuperAdmin;
 
   // Empresas presentes nas solicitações carregadas (para o dropdown)
   const empresasDisponiveis = (() => {
