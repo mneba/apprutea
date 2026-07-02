@@ -897,20 +897,24 @@ export default function LiquidacaoDiariaPage() {
       setVendedor(vendedorData);
       setRota(rotaData);
 
-      if (rotaData?.empresa_id) {
-        const supabase = (await import('@/lib/supabase/client')).createClient();
-        const { data: empresaData } = await supabase.from('empresas').select('nome').eq('id', rotaData.empresa_id).single();
-        setEmpresaNome(empresaData?.nome || '');
-      }
+      const supabase = (await import('@/lib/supabase/client')).createClient();
 
-      const contaData = await liquidacaoService.buscarSaldoContaRota(rotaId);
+      // Independentes entre si → paralelo (empresa, saldo, liquidação aberta, meta)
+      const [empresaRes, contaData, liquidacaoData, meta] = await Promise.all([
+        rotaData?.empresa_id
+          ? supabase.from('empresas').select('nome').eq('id', rotaData.empresa_id).single()
+          : Promise.resolve({ data: null } as any),
+        liquidacaoService.buscarSaldoContaRota(rotaId),
+        liquidacaoService.buscarLiquidacaoAberta(rotaId),
+        liquidacaoService.buscarMetaRota(rotaId),
+      ]);
+
+      setEmpresaNome(empresaRes?.data?.nome || '');
       setSaldoConta(contaData?.saldo_atual || 0);
+      setMetaDia(meta);
 
-      const liquidacaoData = await liquidacaoService.buscarLiquidacaoAberta(rotaId);
-      
       // ⭐ CORREÇÃO: Se não há liquidação aberta, verificar se há fechada HOJE (no timezone da empresa)
       if (!liquidacaoData) {
-        const supabase = (await import('@/lib/supabase/client')).createClient();
         const { data: statusHoje, error: errStatus } = await supabase.rpc('fn_status_liquidacao_hoje', {
           p_rota_id: rotaId
         });
@@ -924,8 +928,6 @@ export default function LiquidacaoDiariaPage() {
             setVisualizandoOutroDia(false); // É hoje, não outro dia
             await carregarDadosLiquidacao(liqFechadaHoje, rotaId);
             setDataSelecionada(new Date(liqFechadaHoje.data_abertura));
-            const meta = await liquidacaoService.buscarMetaRota(rotaId);
-            setMetaDia(meta);
             setLoading(false);
             return; // Importante: sair aqui
           }
@@ -939,9 +941,6 @@ export default function LiquidacaoDiariaPage() {
         await carregarDadosLiquidacao(liquidacaoData, rotaId);
         setDataSelecionada(new Date(liquidacaoData.data_abertura));
       }
-
-      const meta = await liquidacaoService.buscarMetaRota(rotaId);
-      setMetaDia(meta);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
