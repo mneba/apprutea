@@ -16,7 +16,7 @@ import type { LiquidacaoDiaria } from '@/types/liquidacao';
 
 interface MovimentoFinanceiro {
   id: string;
-  tipo: 'RECEBER' | 'PAGAR';
+  tipo: 'RECEBER' | 'PAGAR' | 'AJUSTE' | 'TRANSFERENCIA';
   categoria: string;
   descricao: string;
   valor: number;
@@ -339,6 +339,18 @@ export function ModalExtratoLiquidacao({
   const totalMicroseguros = entradasMicroseguro.reduce((s, r) => s + Number(r.valor), 0);
   const totalOutrasReceitas = entradasOutras.reduce((s, r) => s + Number(r.valor), 0);
 
+  // Ajustes de saldo do dia (AJUSTE, exceto AJUSTE_ABERTURA) — valor já sinalizado.
+  // Total líquido: soma direta (negativos reduzem, positivos aumentam).
+  const registrosAjustes = registros.filter(
+    (r) =>
+      (r.tipo as string) === 'AJUSTE' &&
+      r.status !== 'CANCELADO' &&
+      r.status !== 'ANULADO' &&
+      r.categoria !== 'AJUSTE_ABERTURA'
+  );
+  const totalAjustes = registrosAjustes.reduce((s, r) => s + Number(r.valor), 0);
+  const temAjustes = registrosAjustes.length > 0;
+
   // Lista de saídas para exibição (inclui ANULADOS para mostrar riscados)
   const registrosSaidas = registros.filter(
     (r) =>
@@ -379,6 +391,7 @@ export function ModalExtratoLiquidacao({
   .lg { font-size: 16px; font-weight: 700; }
   .verde { color: #059669; }
   .verm { color: #DC2626; }
+  .azul { color: #2563EB; }
   .roxo { color: #7C3AED; }
   .ambar { color: #D97706; }
   .cinza { color: #9CA3AF; }
@@ -404,6 +417,7 @@ export function ModalExtratoLiquidacao({
   <div class="row"><span class="verde">(+) Cobrança do dia</span><span class="verde">${formatarMoeda(totalCobrancas)}</span></div>
   <div class="row"><span class="verde">(+) Receitas do dia</span><span class="verde">${formatarMoeda(totalOutrasReceitas)}</span></div>
   <div class="row"><span class="verm">(-) Despesas do dia</span><span class="verm">${formatarMoeda(totalSaidasDespesas)}</span></div>
+  ${temAjustes ? `<div class="row"><span class="azul">(±) Ajustes de saldo</span><span class="azul">${totalAjustes >= 0 ? '+' : ''}${formatarMoeda(totalAjustes)}</span></div>` : ''}
   ${totalVendasEmprestimos > 0 ? `<div class="row"><span class="verm">(-) Empréstimos do dia</span><span class="verm">${formatarMoeda(totalVendasEmprestimos)}</span></div>` : ''}
   <hr class="sep2">
   <div class="row"><span class="lg">(=) Caixa final</span><span class="lg">${formatarMoeda(liquidacao.caixa_final)}</span></div>
@@ -616,6 +630,13 @@ export function ModalExtratoLiquidacao({
                 <Linha label="(+) Cobrança do dia" valor={formatarMoeda(totalCobrancas)} cor="verde" />
                 <Linha label="(+) Receitas do dia" valor={formatarMoeda(totalOutrasReceitas)} cor="verde" />
                 <Linha label="(-) Despesas do dia" valor={formatarMoeda(totalSaidasDespesas)} cor="verm" />
+                {temAjustes && (
+                  <Linha
+                    label="(±) Ajustes de saldo"
+                    valor={`${totalAjustes >= 0 ? '+' : ''}${formatarMoeda(totalAjustes)}`}
+                    cor="azul"
+                  />
+                )}
                 {totalVendasEmprestimos > 0 && (
                   <Linha label="(-) Empréstimos do dia" valor={formatarMoeda(totalVendasEmprestimos)} cor="verm" />
                 )}
@@ -810,7 +831,7 @@ function Linha({
 }: {
   label: string;
   valor: string | number;
-  cor?: 'verde' | 'verm' | 'roxo' | 'ambar';
+  cor?: 'verde' | 'verm' | 'roxo' | 'ambar' | 'azul';
   bold?: boolean;
   large?: boolean;
 }) {
@@ -823,6 +844,8 @@ function Linha({
       ? 'text-purple-600'
       : cor === 'ambar'
       ? 'text-amber-600'
+      : cor === 'azul'
+      ? 'text-blue-600'
       : 'text-gray-900';
   const sizeClass = large ? 'text-lg' : 'text-sm';
   const weightClass = bold ? 'font-bold' : 'font-medium';

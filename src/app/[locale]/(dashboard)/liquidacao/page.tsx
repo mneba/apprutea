@@ -719,151 +719,135 @@ export default function LiquidacaoDiariaPage() {
 
   const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
     try {
-      // Se a liquidação tem ID, usa o snapshot de clientes planejados (clientes_planejados_ids).
-      // Fallback automático pra busca dinâmica se o array estiver vazio (liquidações antigas).
-      const clientes = liq.id
-        ? await liquidacaoService.buscarClientesDaLiquidacao(liq.id)
-        : await liquidacaoService.buscarClientesDoDia(rotaId, liq.data_abertura.split('T')[0]);
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+
+      // ── ONDA 1: tudo que NÃO depende de outra query roda em paralelo ──
+      const [
+        clientes,
+        emps,
+        empsNovosRes,
+        statusClientesRes,
+        receitasRes,
+        ajustesRes,
+        cobrancasRes,
+        ordemRes,
+        countNotasRes,
+      ] = await Promise.all([
+        liq.id
+          ? liquidacaoService.buscarClientesDaLiquidacao(liq.id)
+          : liquidacaoService.buscarClientesDoDia(rotaId, liq.data_abertura.split('T')[0]),
+        liquidacaoService.buscarEmprestimosDoDia(liq.id),
+        supabase
+          .from('emprestimos')
+          .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status, clientes!inner(nome)')
+          .eq('liquidacao_id', liq.id),
+        supabase.rpc('fn_clientes_parcela_status_liquidacao', { p_liquidacao_id: liq.id }),
+        supabase
+          .from('financeiro')
+          .select('id, categoria, descricao, valor, forma_pagamento, data_lancamento, created_at')
+          .eq('liquidacao_id', liq.id).eq('tipo', 'RECEBER').eq('status', 'PAGO')
+          .neq('categoria', 'COBRANCA_PARCELAS').order('created_at', { ascending: false }),
+        supabase
+          .from('financeiro')
+          .select('id, categoria, descricao, valor, forma_pagamento, observacoes, created_at')
+          .eq('liquidacao_id', liq.id).eq('tipo', 'AJUSTE').eq('status', 'PAGO')
+          .neq('categoria', 'AJUSTE_ABERTURA').order('created_at', { ascending: false }),
+        supabase
+          .from('financeiro')
+          .select('id, categoria, descricao, valor, forma_pagamento, cliente_nome, data_lancamento, created_at')
+          .eq('liquidacao_id', liq.id).eq('tipo', 'RECEBER').eq('status', 'PAGO')
+          .eq('categoria', 'COBRANCA_PARCELAS').order('created_at', { ascending: false }),
+        supabase.from('ordem_rota_cliente').select('cliente_id, ordem').eq('rota_id', rotaId),
+        supabase.from('notas').select('id', { count: 'exact', head: true })
+          .eq('liquidacao_id', liq.id).eq('status', 'ATIVA'),
+      ]);
+
       setClientesDia(clientes);
-      const stats = liquidacaoService.calcularEstatisticasClientesDia(clientes);
-      setEstatisticas(stats);
-      const emps = await liquidacaoService.buscarEmprestimosDoDia(liq.id);
+      setEstatisticas(liquidacaoService.calcularEstatisticasClientesDia(clientes));
       setEmprestimos(emps);
 
-      const supabase = (await import('@/lib/supabase/client')).createClient();
-      
-      // 1. Empréstimos CRIADOS nesta liquidação (novos, renovações, renegociações)
-      // ⭐ Inclui nome do cliente para empréstimos cancelados que não aparecem em clientesDia
-      const { data: empsNovos } = await supabase
-        .from('emprestimos')
-        .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status, clientes!inner(nome)')
-        .eq('liquidacao_id', liq.id);
+      const empsNovos = empsNovosRes.data;
+      const statusClientes = statusClientesRes.data;
 
-      // 2. Empréstimos QUITADOS nesta liquidação (via RPC)
-      const { data: statusClientes } = await supabase.rpc('fn_clientes_parcela_status_liquidacao', {
-        p_liquidacao_id: liq.id
+      // Receitas
+      const receitasItens = receitasRes.data || [];
+      setReceitasDia({
+        total: receitasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: receitasItens.length, itens: receitasItens,
       });
 
-      // Identificar clientes que quitaram
+      // Ajustes
+      const ajustesItens = ajustesRes.data || [];
+      setAjustesDia({
+        total: ajustesItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: ajustesItens.length, itens: ajustesItens,
+      });
+
+      // Cobranças
+      const cobrancasItens = cobrancasRes.data || [];
+      setCobrancasDia({
+        total: cobrancasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: cobrancasItens.length, itens: cobrancasItens,
+      });
+
+      // Ordem dos clientes na rota
+      const novoOrdemMap = new Map<string, number>();
+      (ordemRes.data || []).forEach((o: any) => {
+        if (o.cliente_id != null) novoOrdemMap.set(o.cliente_id, Number(o.ordem ?? 0));
+      });
+      setOrdemRotaMap(novoOrdemMap);
+
+      // Contagem de notas
+      setQtdNotasLiquidacao(countNotasRes.count || 0);
+
+      // ── ONDA 2: queries que dependem dos resultados da onda 1 ──
       const clientesQuitados = new Set(
         (statusClientes || [])
           .filter((s: any) => s.parcela_status === 'QUITADO')
           .map((s: any) => s.cliente_id)
       );
+      const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
 
-      // Se há clientes quitados, buscar os empréstimos deles
-      let empsQuitados: any[] = [];
-      if (clientesQuitados.size > 0) {
-        const { data: quitados } = await supabase
-          .from('emprestimos')
-          .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
-          .in('cliente_id', Array.from(clientesQuitados))
-          .eq('status', 'QUITADO');
-        empsQuitados = quitados || [];
-      }
+      const [quitadosRes, fotosRes, notasLiqRes, notasOutrasRes] = await Promise.all([
+        clientesQuitados.size > 0
+          ? supabase.from('emprestimos')
+              .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
+              .in('cliente_id', Array.from(clientesQuitados)).eq('status', 'QUITADO')
+          : Promise.resolve({ data: [] as any[] }),
+        clienteIds.length > 0
+          ? supabase.from('clientes').select('id, foto_url').in('id', clienteIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clienteIds.length > 0
+          ? supabase.from('notas').select('cliente_id').eq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clienteIds.length > 0
+          ? supabase.from('notas').select('cliente_id').neq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
 
-      // Combinar ambas as listas (sem duplicatas)
+      // Combinar empréstimos (novos + quitados, sem duplicatas)
       const empsTodos = [...(empsNovos || [])];
-      for (const eq of empsQuitados) {
-        if (!empsTodos.find(e => e.id === eq.id)) {
-          empsTodos.push(eq);
-        }
+      for (const eq of (quitadosRes.data || [])) {
+        if (!empsTodos.find(e => e.id === eq.id)) empsTodos.push(eq);
       }
-
       setEmprestimosDoDia(empsTodos as any);
 
-      // Receitas do dia = RECEBER pagos da liquidação, EXCETO cobrança de parcela
-      // (COBRANCA_PARCELAS vira o card "Cobranças" à parte)
-      const { data: receitasData } = await supabase
-        .from('financeiro')
-        .select('id, categoria, descricao, valor, forma_pagamento, data_lancamento, created_at')
-        .eq('liquidacao_id', liq.id)
-        .eq('tipo', 'RECEBER')
-        .eq('status', 'PAGO')
-        .neq('categoria', 'COBRANCA_PARCELAS')
-        .order('created_at', { ascending: false });
-      const receitasItens = receitasData || [];
-      const receitasTotal = receitasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-      setReceitasDia({ total: receitasTotal, qtd: receitasItens.length, itens: receitasItens });
-
-      // Ajustes de saldo do dia = AJUSTE da liquidação, EXCETO AJUSTE_ABERTURA
-      // (valor já vem sinalizado: negativo reduz, positivo aumenta)
-      const { data: ajustesData } = await supabase
-        .from('financeiro')
-        .select('id, categoria, descricao, valor, forma_pagamento, observacoes, created_at')
-        .eq('liquidacao_id', liq.id)
-        .eq('tipo', 'AJUSTE')
-        .eq('status', 'PAGO')
-        .neq('categoria', 'AJUSTE_ABERTURA')
-        .order('created_at', { ascending: false });
-      const ajustesItens = ajustesData || [];
-      const ajustesTotal = ajustesItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-      setAjustesDia({ total: ajustesTotal, qtd: ajustesItens.length, itens: ajustesItens });
-
-      // Cobranças = RECEBER pagos da liquidação com categoria COBRANCA_PARCELAS
-      const { data: cobrancasData } = await supabase
-        .from('financeiro')
-        .select('id, categoria, descricao, valor, forma_pagamento, cliente_nome, data_lancamento, created_at')
-        .eq('liquidacao_id', liq.id)
-        .eq('tipo', 'RECEBER')
-        .eq('status', 'PAGO')
-        .eq('categoria', 'COBRANCA_PARCELAS')
-        .order('created_at', { ascending: false });
-      const cobrancasItens = cobrancasData || [];
-      const cobrancasTotal = cobrancasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0);
-      setCobrancasDia({ total: cobrancasTotal, qtd: cobrancasItens.length, itens: cobrancasItens });
-
-      // Fotos dos clientes do dia (ClienteDoDia não traz foto_url)
-      const idsFotos = [...new Set(clientes.map(c => c.cliente_id))];
-      if (idsFotos.length > 0) {
-        const { data: fotosData } = await supabase
-          .from('clientes')
-          .select('id, foto_url')
-          .in('id', idsFotos);
-        const mapaFotos = new Map<string, string>();
-        (fotosData || []).forEach((f: any) => { if (f.foto_url) mapaFotos.set(f.id, f.foto_url); });
-        setFotosClientes(mapaFotos);
-      } else {
-        setFotosClientes(new Map());
-      }
-
-      // Buscar ordem dos clientes na rota (ordem_rota_cliente)
-      const { data: ordemData } = await supabase
-        .from('ordem_rota_cliente')
-        .select('cliente_id, ordem')
-        .eq('rota_id', rotaId);
-      const novoOrdemMap = new Map<string, number>();
-      (ordemData || []).forEach((o: any) => {
-        if (o.cliente_id != null) novoOrdemMap.set(o.cliente_id, Number(o.ordem ?? 0));
-      });
-      setOrdemRotaMap(novoOrdemMap);
-
-      // Contagem total de notas da liquidação
-      const { count: countNotasLiq } = await supabase
-        .from('notas')
-        .select('id', { count: 'exact', head: true })
-        .eq('liquidacao_id', liq.id)
-        .eq('status', 'ATIVA');
-      setQtdNotasLiquidacao(countNotasLiq || 0);
+      // Fotos
+      const mapaFotos = new Map<string, string>();
+      (fotosRes.data || []).forEach((f: any) => { if (f.foto_url) mapaFotos.set(f.id, f.foto_url); });
+      setFotosClientes(mapaFotos);
 
       // Notas por cliente
-      if (clientes.length > 0) {
-        const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
-        const { data: notasLiq } = await supabase
-          .from('notas').select('cliente_id').eq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
-        const { data: notasOutras } = await supabase
-          .from('notas').select('cliente_id').neq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
-        const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
-        (notasLiq || []).forEach((n: any) => {
-          const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
-          mapaNotas.set(n.cliente_id, { ...atual, liquidacao: atual.liquidacao + 1 });
-        });
-        (notasOutras || []).forEach((n: any) => {
-          const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
-          mapaNotas.set(n.cliente_id, { ...atual, outras: true });
-        });
-        setNotasClientes(mapaNotas);
-      }
+      const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
+      (notasLiqRes.data || []).forEach((n: any) => {
+        const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
+        mapaNotas.set(n.cliente_id, { ...atual, liquidacao: atual.liquidacao + 1 });
+      });
+      (notasOutrasRes.data || []).forEach((n: any) => {
+        const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
+        mapaNotas.set(n.cliente_id, { ...atual, outras: true });
+      });
+      setNotasClientes(mapaNotas);
 
       setBuscaCliente('');
       setFiltroLista('TODOS');
