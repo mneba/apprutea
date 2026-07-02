@@ -167,6 +167,25 @@ export const vendedoresService = {
     }
   },
 
+  // Regerar o código de ACESSO (6 dígitos) do vendedor — chama a RPC no banco.
+  // Retorna { codigo_antigo, codigo_novo }.
+  async regerarCodigoAcesso(vendedorId: string): Promise<{ codigo_antigo: string; codigo_novo: string }> {
+    const { data, error } = await supabase.rpc('cambiar_codigo_vendedor', {
+      p_vendedor_id: vendedorId,
+    });
+
+    if (error) {
+      console.error('Erro ao regerar código de acesso:', error);
+      throw error;
+    }
+
+    const resultado = Array.isArray(data) ? data[0] : data;
+    return {
+      codigo_antigo: resultado?.codigo_antigo || '',
+      codigo_novo: resultado?.codigo_novo || '',
+    };
+  },
+
   // Gerar novo código de vendedor (sequencial V000001)
   async gerarCodigoVendedor(): Promise<string> {
     const { data } = await supabase

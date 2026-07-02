@@ -133,6 +133,8 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   const [endereco, setEndereco] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
   const [dataVencimento, setDataVencimento] = useState('');
+  const [codigoAcesso, setCodigoAcesso] = useState('');
+  const [regerando, setRegerando] = useState(false);
 
   // === ABA CONFIGURAÇÕES ===
   const [configuracoes, setConfiguracoes] = useState<Omit<ConfiguracaoVendedor, 'vendedor_id'>>(CONFIGURACOES_PADRAO);
@@ -158,7 +160,8 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       setDocumento(vendedor.documento || '');
       setEndereco(vendedor.endereco || '');
       setFotoUrl(vendedor.foto_url || '');
-      
+      setCodigoAcesso(vendedor.codigo_acesso || '');
+
       // Extrair DDI do telefone
       if (vendedor.telefone) {
         const ddiEncontrado = DDIS.find(d => vendedor.telefone?.startsWith(d.codigo));
@@ -342,6 +345,28 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
     setTaxasPersonalizadas(prev => prev.filter(t => t !== taxa));
     const taxasAtuais = restricoes.taxas_juros_permitidas || [];
     updateRestricao('taxas_juros_permitidas', taxasAtuais.filter(t => t !== taxa));
+  };
+
+  // Regerar código de acesso (6 dígitos) — ação destrutiva: invalida o código atual
+  const handleRegerarCodigoAcesso = async () => {
+    if (!vendedor) return;
+    const ok = window.confirm(
+      'Regerar o código de acesso vai INVALIDAR o código atual do vendedor. ' +
+      'Ele precisará usar o novo código para acessar o app. Deseja continuar?'
+    );
+    if (!ok) return;
+
+    setRegerando(true);
+    try {
+      const { codigo_novo } = await vendedoresService.regerarCodigoAcesso(vendedor.id);
+      setCodigoAcesso(codigo_novo);
+      alert(`Novo código de acesso: ${codigo_novo}`);
+    } catch (e) {
+      console.error('Erro ao regerar código de acesso:', e);
+      alert('Erro ao regerar o código de acesso. Tente novamente.');
+    } finally {
+      setRegerando(false);
+    }
   };
 
   // Salvar vendedor
@@ -564,26 +589,38 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         </div>
                       </div>
 
-                      {/* Código de Acesso (somente leitura) */}
-                      {isEdicao && vendedor?.codigo_acesso && (
+                      {/* Código de Acesso (somente leitura + regerar) */}
+                      {isEdicao && codigoAcesso && (
                         <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-3">
                             <div>
                               <label className="block text-xs font-medium text-purple-700 mb-1">
                                 Código de Acesso (App Móvel)
                               </label>
-                              <code className="text-xl font-mono text-purple-700 font-bold">
-                                {vendedor.codigo_acesso}
+                              <code className="text-xl font-mono text-purple-700 font-bold tracking-widest">
+                                {codigoAcesso}
                               </code>
                             </div>
-                            {dataVencimento && (
-                              <div className="text-right">
-                                <span className="text-xs text-purple-600">Válido até</span>
-                                <p className="text-sm font-medium text-purple-700">
-                                  {new Date(dataVencimento).toLocaleDateString('pt-BR')}
-                                </p>
-                              </div>
-                            )}
+                            <div className="flex items-center gap-3">
+                              {dataVencimento && (
+                                <div className="text-right">
+                                  <span className="text-xs text-purple-600">Válido até</span>
+                                  <p className="text-sm font-medium text-purple-700">
+                                    {new Date(dataVencimento).toLocaleDateString('pt-BR')}
+                                  </p>
+                                </div>
+                              )}
+                              <button
+                                type="button"
+                                onClick={handleRegerarCodigoAcesso}
+                                disabled={regerando}
+                                title="Gerar um novo código de acesso (invalida o atual)"
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 bg-white border border-purple-300 rounded-lg hover:bg-purple-100 disabled:opacity-50 transition-colors"
+                              >
+                                {regerando ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
+                                Regerar
+                              </button>
+                            </div>
                           </div>
                         </div>
                       )}
