@@ -940,6 +940,24 @@ export default function LiquidacaoDiariaPage() {
       if (liquidacaoData) {
         await carregarDadosLiquidacao(liquidacaoData, rotaId);
         setDataSelecionada(new Date(liquidacaoData.data_abertura));
+      } else {
+        // Sem liquidação aberta: se houver um dia salvo (por rota) nesta sessão,
+        // reabrir automaticamente o último dia que estava sendo visualizado.
+        let dataSalva: string | null = null;
+        try { dataSalva = sessionStorage.getItem(`liq_ultima_data_${rotaId}`); } catch {}
+        if (dataSalva) {
+          const liqSalva = await liquidacaoService.buscarLiquidacaoPorData(rotaId, dataSalva);
+          if (liqSalva) {
+            setLiquidacao(liqSalva);
+            setVisualizandoOutroDia(true);
+            await carregarDadosLiquidacao(liqSalva, rotaId);
+            const [a, m, d] = dataSalva.split('-').map(Number);
+            setDataSelecionada(new Date(a, m - 1, d));
+          } else {
+            // data salva não corresponde mais a uma liquidação → descartar
+            try { sessionStorage.removeItem(`liq_ultima_data_${rotaId}`); } catch {}
+          }
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -980,6 +998,7 @@ export default function LiquidacaoDiariaPage() {
         setLiquidacao(liquidacaoAtiva);
         setVisualizandoOutroDia(false);
         setPrevisaoDia(null);
+        try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {}
         if (liquidacaoAtiva) await carregarDadosLiquidacao(liquidacaoAtiva, rota.id);
         setLoadingCalendario(false);
         return;
@@ -989,11 +1008,14 @@ export default function LiquidacaoDiariaPage() {
       if (liqData) {
         setLiquidacao(liqData);
         setVisualizandoOutroDia(true);
+        // Lembrar o dia visualizado (por rota) para reabrir ao voltar à tela
+        try { sessionStorage.setItem(`liq_ultima_data_${rota.id}`, dataStr); } catch {}
         await carregarDadosLiquidacao(liqData, rota.id);
         setPrevisaoDia(null);
       } else {
         setLiquidacao(null);
         setVisualizandoOutroDia(true);
+        try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {}
         const previsao = await liquidacaoService.buscarPrevisaoDia(rota.id, dataStr);
         setPrevisaoDia(previsao);
         const clientes = await liquidacaoService.buscarClientesDoDia(rota.id, dataStr);
@@ -1012,6 +1034,7 @@ export default function LiquidacaoDiariaPage() {
   }, [rota, handleSelecionarData]);
 
   const voltarParaLiquidacaoAtiva = useCallback(async () => {
+    if (rota) { try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {} }
     if (liquidacaoAtiva && rota) {
       setDataSelecionada(new Date(liquidacaoAtiva.data_abertura));
       setLiquidacao(liquidacaoAtiva);
