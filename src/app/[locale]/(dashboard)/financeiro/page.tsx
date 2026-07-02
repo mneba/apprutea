@@ -383,6 +383,19 @@ function LinhaExtrato({
   const isTransferencia = movimento.tipo === 'TRANSFERENCIA';
   const isSaida = movimento.tipo === 'PAGAR';
   const isAnulado = movimento.status === 'ANULADO';
+
+  // Só é anulável por aqui: transferência avulsa, OU receita/despesa DIRETA.
+  // Lançamentos que são reflexo de outra operação (cobrança de parcela,
+  // empréstimo, estorno, microseguro) NÃO podem ser anulados aqui — cada um
+  // tem sua própria reversão (estorno de pagamento, cancelamento de empréstimo, etc.).
+  const CATEGORIAS_REFLEXO = [
+    'COBRANCA_PARCELAS', 'EMPRESTIMO', 'ESTORNO_PAGAMENTO',
+    'VENDA_MICROSEGURO', 'RETIRO_MICROSEGURO', 'SAIDA_MICROSEGURO',
+  ];
+  const anulavel =
+    movimento.tipo === 'TRANSFERENCIA' ||
+    ((movimento.tipo === 'RECEBER' || movimento.tipo === 'PAGAR') &&
+      !CATEGORIAS_REFLEXO.includes(movimento.categoria));
   
   const getContaDisplay = () => {
     if (isTransferencia) {
@@ -479,7 +492,7 @@ function LinhaExtrato({
         </span>
       </td>
       <td className="px-4 py-3 text-right">
-        {podeAnular && !isAnulado && movimento.status !== 'CANCELADO' && (
+        {podeAnular && anulavel && !isAnulado && movimento.status !== 'CANCELADO' && (
           <button
             onClick={() => onAnular?.(movimento)}
             title="Anular movimentação"
