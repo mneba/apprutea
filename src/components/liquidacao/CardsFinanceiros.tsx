@@ -14,9 +14,55 @@ import {
   Wallet,
   CreditCard,
   Banknote,
+  Image as ImageIcon,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { ClienteDoDia } from '@/types/liquidacao';
+
+// =====================================================
+// COMPROVANTE (lightbox de imagem reutilizável)
+// =====================================================
+
+export function LightboxImagem({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/80" />
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 z-10 p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+        aria-label="Fechar"
+      >
+        <X className="w-6 h-6" />
+      </button>
+      <img
+        src={url}
+        alt="Comprovante"
+        className="relative max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain"
+        onClick={(e) => e.stopPropagation()}
+        onError={(e) => {
+          const el = e.currentTarget;
+          el.replaceWith(Object.assign(document.createElement('div'), {
+            className: 'relative bg-white rounded-lg p-6 text-gray-600 text-sm',
+            innerText: 'Não foi possível carregar o comprovante.',
+          }));
+        }}
+      />
+    </div>
+  );
+}
+
+export function BotaoVerComprovante({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="inline-flex items-center gap-1 mt-2 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
+      title="Ver comprovante anexado"
+    >
+      <ImageIcon className="w-3.5 h-3.5" />
+      Ver comprovante
+    </button>
+  );
+}
 
 // =====================================================
 // TIPOS
@@ -36,6 +82,7 @@ interface MovimentacaoFinanceiro {
   cliente_nome: string | null;
   ref_emprestimo_id: string | null;
   status: string;
+  foto_url?: string | null;
 }
 
 interface MicroseguroVenda {
@@ -269,6 +316,7 @@ interface ModalDespesasProps {
 export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qtdFallback }: ModalDespesasProps) {
   const [loading, setLoading] = useState(true);
   const [registros, setRegistros] = useState<MovimentacaoFinanceiro[]>([]);
+  const [comprovante, setComprovante] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen && liquidacaoId) {
@@ -327,7 +375,10 @@ export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qt
                   </div>
                   <p className="font-bold text-red-600">-{formatarMoeda(reg.valor)}</p>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">{formatarHora(reg.created_at)}</p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-xs text-gray-400">{formatarHora(reg.created_at)}</p>
+                  {reg.foto_url && <BotaoVerComprovante onClick={() => setComprovante(reg.foto_url!)} />}
+                </div>
               </div>
             ))}
           </div>
@@ -343,6 +394,7 @@ export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qt
           <span className="font-bold text-red-800">{formatarMoeda(total)}</span>
         </div>
       </div>
+      {comprovante && <LightboxImagem url={comprovante} onClose={() => setComprovante(null)} />}
     </ModalBase>
   );
 }
