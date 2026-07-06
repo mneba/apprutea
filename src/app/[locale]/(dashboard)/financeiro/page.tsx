@@ -38,6 +38,7 @@ import {
   ModalTransferencia, 
   ModalAjusteSaldo 
 } from '@/components/financeiro';
+import { LightboxImagem, BotaoVerComprovante } from '@/components/liquidacao/CardsFinanceiros';
 import type {
   SaldosContas,
   ResumoMovimentacoes,
@@ -372,11 +373,13 @@ function LinhaExtrato({
   categorias,
   podeAnular,
   onAnular,
+  onVerComprovante,
 }: { 
   movimento: MovimentoFinanceiro; 
   categorias: CategoriaFinanceira[];
   podeAnular?: boolean;
   onAnular?: (movimento: MovimentoFinanceiro) => void;
+  onVerComprovante?: (url: string) => void;
 }) {
   const categoria = categorias.find(c => c.codigo === movimento.categoria);
   const isEntrada = movimento.tipo === 'RECEBER';
@@ -492,16 +495,21 @@ function LinhaExtrato({
         </span>
       </td>
       <td className="px-4 py-3 text-right">
-        {podeAnular && anulavel && !isAnulado && movimento.status !== 'CANCELADO' && (
-          <button
-            onClick={() => onAnular?.(movimento)}
-            title="Anular movimentação"
-            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
-          >
-            <Ban className="w-3.5 h-3.5" />
-            Anular
-          </button>
-        )}
+        <div className="inline-flex items-center gap-2">
+          {(movimento as any).foto_url && (
+            <BotaoVerComprovante onClick={() => onVerComprovante?.((movimento as any).foto_url)} />
+          )}
+          {podeAnular && anulavel && !isAnulado && movimento.status !== 'CANCELADO' && (
+            <button
+              onClick={() => onAnular?.(movimento)}
+              title="Anular movimentação"
+              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+            >
+              <Ban className="w-3.5 h-3.5" />
+              Anular
+            </button>
+          )}
+        </div>
       </td>
     </tr>
   );
@@ -658,6 +666,7 @@ export default function FinanceiroPage() {
   const [movimentos, setMovimentos] = useState<MovimentoFinanceiro[]>([]);
   const [contas, setContas] = useState<ContaComDetalhes[]>([]);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
+  const [comprovante, setComprovante] = useState<string | null>(null);
 
   const carregarSaldos = useCallback(async () => {
     if (!empresaId) return;
@@ -1286,7 +1295,7 @@ export default function FinanceiroPage() {
                   {loadingExtrato ? (
                     <tr><td colSpan={6} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
                   ) : movimentosFiltrados.length > 0 ? (
-                    movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} />))
+                    movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} onVerComprovante={(url) => setComprovante(url)} />))
                   ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
                     <tr><td colSpan={6} className="px-4 py-12 text-center">
                       <div className="flex flex-col items-center">
@@ -1362,6 +1371,8 @@ export default function FinanceiroPage() {
         icone={Shield}
         corIcone="text-amber-600"
       />
+
+      {comprovante && <LightboxImagem url={comprovante} onClose={() => setComprovante(null)} />}
     </div>
   );
 }
