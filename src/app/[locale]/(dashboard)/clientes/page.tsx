@@ -328,6 +328,7 @@ export default function ClientesPage() {
   const userId = profile?.user_id;
 
   const [clientes, setClientes] = useState<ClienteComTotais[]>([]);
+  const [contagens, setContagens] = useState({ total: 0, ativos: 0, inativos: 0, suspensos: 0 });
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [rotas, setRotas] = useState<RotaSimples[]>([]);
   const [loading, setLoading] = useState(false);
@@ -368,13 +369,7 @@ export default function ClientesPage() {
     }
   }, [clientes, ordenacao]);
 
-  const estatisticas = useMemo(() => {
-    const total = clientes.length;
-    const ativos = clientes.filter(c => c.status === 'ATIVO').length;
-    const inativos = clientes.filter(c => c.status === 'INATIVO').length;
-    const suspensos = clientes.filter(c => c.status === 'SUSPENSO').length;
-    return { total, ativos, inativos, suspensos };
-  }, [clientes]);
+  const estatisticas = useMemo(() => contagens, [contagens]);
 
   const temRotas = rotas.length > 0;
 
@@ -392,14 +387,27 @@ export default function ClientesPage() {
       const segmentosData = await clientesService.buscarSegmentos();
       setSegmentos(segmentosData);
 
-      // Carregar clientes
-      const clientesData = await clientesService.buscarClientes({
-        empresa_id: empresaId,
-        rota_id: rotaIdContexto || rotaFiltro || undefined,
-        status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
-        busca: busca || undefined,
-      });
+      // Carregar clientes: lista filtrada (tabela) + base sem filtro de status (contagens)
+      const [clientesData, baseParaContagem] = await Promise.all([
+        clientesService.buscarClientes({
+          empresa_id: empresaId,
+          rota_id: rotaIdContexto || rotaFiltro || undefined,
+          status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
+          busca: busca || undefined,
+        }),
+        clientesService.buscarClientes({
+          empresa_id: empresaId,
+          rota_id: rotaIdContexto || rotaFiltro || undefined,
+          busca: busca || undefined,
+        }),
+      ]);
       setClientes(clientesData);
+      setContagens({
+        total: baseParaContagem.length,
+        ativos: baseParaContagem.filter(c => c.status === 'ATIVO').length,
+        inativos: baseParaContagem.filter(c => c.status === 'INATIVO').length,
+        suspensos: baseParaContagem.filter(c => c.status === 'SUSPENSO').length,
+      });
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
