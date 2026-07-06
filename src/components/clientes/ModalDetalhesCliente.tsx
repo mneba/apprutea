@@ -36,6 +36,8 @@ import {
   ShieldCheck,
   Banknote,
   Wallet,
+  Ban,
+  RotateCcw,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
@@ -429,6 +431,29 @@ function FormularioEdicao({
   // Permissão para alterar status do cliente (módulo GESTAO_CLIENTES, ação 'eliminar')
   const { podeAcessar: podeAlterarStatus } = usePermissaoModulo('GESTAO_CLIENTES', 'eliminar');
 
+  // Status atual (Ativo/Inativo são automáticos; Suspenso é a ação manual)
+  const [statusCliente, setStatusCliente] = useState<string>(cliente.status || 'ATIVO');
+  const [alterandoStatus, setAlterandoStatus] = useState(false);
+
+  const handleToggleSuspensao = async () => {
+    const suspender = statusCliente !== 'SUSPENSO';
+    const msg = suspender
+      ? 'Suspender este cliente? Ele ficará marcado como SUSPENSO até ser reativado.'
+      : 'Reativar este cliente? O status voltará a ATIVO ou INATIVO conforme os empréstimos dele.';
+    if (!window.confirm(msg)) return;
+
+    setAlterandoStatus(true);
+    try {
+      const novo = await clientesService.definirStatusCliente(cliente.id, suspender ? 'SUSPENDER' : 'REATIVAR');
+      setStatusCliente(novo);
+    } catch (e) {
+      console.error('Erro ao alterar status do cliente:', e);
+      alert('Não foi possível alterar o status do cliente. Tente novamente.');
+    } finally {
+      setAlterandoStatus(false);
+    }
+  };
+
   const handleChange = (campo: keyof FormEdicaoCliente, valor: string | boolean) => {
     setForm(prev => ({ ...prev, [campo]: valor }));
   };
@@ -464,17 +489,36 @@ function FormularioEdicao({
               <span className="ml-2 text-xs text-gray-400 font-normal">(sem permissão)</span>
             )}
           </label>
-          <select
-            value={form.status}
-            onChange={(e) => handleChange('status', e.target.value)}
-            disabled={!podeAlterarStatus}
-            title={!podeAlterarStatus ? 'Você não tem permissão para alterar o status do cliente' : undefined}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed disabled:text-gray-500"
-          >
-            <option value="ATIVO">Ativo</option>
-            <option value="INATIVO">Inativo</option>
-            <option value="SUSPENSO">Suspenso</option>
-          </select>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${
+              statusCliente === 'ATIVO' ? 'bg-green-100 text-green-700'
+              : statusCliente === 'SUSPENSO' ? 'bg-red-100 text-red-700'
+              : 'bg-gray-100 text-gray-700'
+            }`}>
+              {statusCliente === 'ATIVO' ? 'Ativo' : statusCliente === 'SUSPENSO' ? 'Suspenso' : 'Inativo'}
+            </span>
+            {podeAlterarStatus && (
+              <button
+                type="button"
+                onClick={handleToggleSuspensao}
+                disabled={alterandoStatus}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors disabled:opacity-50 ${
+                  statusCliente === 'SUSPENSO'
+                    ? 'text-green-700 bg-green-50 hover:bg-green-100'
+                    : 'text-red-700 bg-red-50 hover:bg-red-100'
+                }`}
+                title={statusCliente === 'SUSPENSO' ? 'Reativar cliente' : 'Suspender cliente'}
+              >
+                {alterandoStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  : statusCliente === 'SUSPENSO' ? <RotateCcw className="w-3.5 h-3.5" />
+                  : <Ban className="w-3.5 h-3.5" />}
+                {statusCliente === 'SUSPENSO' ? 'Reativar' : 'Suspender'}
+              </button>
+            )}
+          </div>
+          <p className="mt-1 text-[11px] text-gray-400">
+            Ativo/Inativo são definidos automaticamente pelos empréstimos.
+          </p>
         </div>
       </div>
 
@@ -680,7 +724,7 @@ function FormularioEdicao({
           Cancelar
         </button>
         <button
-          onClick={() => onSalvar(form)}
+          onClick={() => onSalvar({ ...form, status: statusCliente })}
           disabled={salvando || !form.nome.trim()}
           className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >

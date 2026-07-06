@@ -29,6 +29,21 @@ import type {
 // =====================================================
 
 export const clientesService = {
+  // Suspender ou reativar cliente. 'REATIVAR' recalcula ATIVO/INATIVO
+  // conforme empréstimos vivos (regra no banco). Retorna o novo status.
+  async definirStatusCliente(clienteId: string, acao: 'SUSPENDER' | 'REATIVAR'): Promise<string> {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc('fn_definir_status_cliente', {
+      p_cliente_id: clienteId,
+      p_acao: acao,
+    });
+    if (error) {
+      console.error('Erro ao definir status do cliente:', error);
+      throw error;
+    }
+    return data as string;
+  },
+
   // ==================================================
   // BUSCAR CLIENTES (LISTAGEM)
   // ==================================================
