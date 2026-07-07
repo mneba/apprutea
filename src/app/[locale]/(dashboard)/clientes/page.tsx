@@ -94,11 +94,13 @@ function BadgeStatus({ status }: { status: string }) {
 function TabelaClientes({
   clientes,
   onDetalhes,
-  onNovaVenda
+  onNovaVenda,
+  podeNovaVenda
 }: {
   clientes: ClienteComTotais[];
   onDetalhes: (cliente: ClienteComTotais) => void;
   onNovaVenda: (cliente: ClienteComTotais) => void;
+  podeNovaVenda?: boolean;
 }) {
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
@@ -191,12 +193,14 @@ function TabelaClientes({
                   <BadgeStatus status={cliente.status} />
                 </td>
                 <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                  <button
-                    onClick={() => onNovaVenda(cliente)}
-                    className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
-                  >
-                    Nova Venda
-                  </button>
+                  {podeNovaVenda && (
+                    <button
+                      onClick={() => onNovaVenda(cliente)}
+                      className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
+                    >
+                      Nova Venda
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -340,7 +344,8 @@ function exportarExcel(clientes: ClienteComTotais[]) {
 // =====================================================
 
 export default function ClientesPage() {
-  const { localizacao, profile } = useUser();
+  const { localizacao, profile, isSuperAdmin, permissoes } = useUser();
+  const podeNovoCliente = isSuperAdmin || permissoes?.['GESTAO_CLIENTES']?.pode_guardar === true;
   const empresaId = localizacao?.empresa_id;
   const rotaIdContexto = localizacao?.rota_id;
   const userId = profile?.user_id;
@@ -489,19 +494,21 @@ export default function ClientesPage() {
             </p>
           </div>
           
-          <button
-            onClick={() => handleNovaVenda()}
-            disabled={!temRotas}
-            title={!temRotas ? 'Cadastre pelo menos uma rota primeiro' : undefined}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-colors ${
-              temRotas 
-                ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <UserPlus className="w-5 h-5" />
-            Novo Cliente
-          </button>
+          {podeNovoCliente && (
+            <button
+              onClick={() => handleNovaVenda()}
+              disabled={!temRotas}
+              title={!temRotas ? 'Cadastre pelo menos uma rota primeiro' : undefined}
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-colors ${
+                temRotas 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <UserPlus className="w-5 h-5" />
+              Novo Cliente
+            </button>
+          )}
         </div>
 
         {/* Aviso sem rotas */}
@@ -716,6 +723,7 @@ export default function ClientesPage() {
               setModalDetalhes(true);
             }}
             onNovaVenda={(cliente) => handleNovaVenda(cliente)}
+            podeNovaVenda={podeNovoCliente}
           />
         ) : (
           <div className="flex flex-col items-center justify-center h-full">
