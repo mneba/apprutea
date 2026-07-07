@@ -401,6 +401,7 @@ function FormularioEdicao({
   temEmprestimoAtivo,
   temParcelaEmAtraso,
   temEmprestimoEmDia,
+  onStatusAlterado,
 }: {
   cliente: Cliente;
   segmentos: Segmento[];
@@ -411,6 +412,7 @@ function FormularioEdicao({
   temEmprestimoAtivo: boolean;
   temParcelaEmAtraso: boolean;
   temEmprestimoEmDia: boolean;
+  onStatusAlterado?: () => void;
 }) {
   const [form, setForm] = useState<FormEdicaoCliente>({
     nome: cliente.nome || '',
@@ -446,6 +448,7 @@ function FormularioEdicao({
     try {
       const novo = await clientesService.definirStatusCliente(cliente.id, suspender ? 'SUSPENDER' : 'REATIVAR');
       setStatusCliente(novo);
+      onStatusAlterado?.();
     } catch (e) {
       console.error('Erro ao alterar status do cliente:', e);
       alert('Não foi possível alterar o status do cliente. Tente novamente.');
@@ -1104,6 +1107,7 @@ export function ModalDetalhesCliente({
                     temEmprestimoAtivo={emprestimosAtivos.length > 0}
                     temParcelaEmAtraso={temParcelaEmAtraso}
                     temEmprestimoEmDia={temEmprestimoEmDia}
+                    onStatusAlterado={onClienteAtualizado}
                   />
                 ) : (
                   <div className="space-y-6">
