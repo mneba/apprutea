@@ -260,6 +260,7 @@ interface AvatarClienteProps {
   tamanho?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   className?: string;
   corFundo?: string;
+  onImageClick?: (fotoUrl: string) => void;
 }
 
 const TAMANHOS_AVATAR = {
@@ -276,17 +277,21 @@ export function AvatarCliente({
   tamanho = 'md',
   className = '',
   corFundo = 'bg-blue-100 text-blue-700',
+  onImageClick,
 }: AvatarClienteProps) {
   const [imageError, setImageError] = useState(false);
   const config = TAMANHOS_AVATAR[tamanho];
   const inicial = nome?.charAt(0)?.toUpperCase() || '?';
 
   if (fotoUrl && !imageError) {
+    const clicavel = !!onImageClick;
     return (
       <img
         src={fotoUrl}
         alt={nome}
-        className={`${config.container} rounded-full object-cover border-2 border-white shadow-sm ${className}`}
+        onClick={clicavel ? () => onImageClick!(fotoUrl) : undefined}
+        title={clicavel ? 'Clique para ampliar' : undefined}
+        className={`${config.container} rounded-full object-cover border-2 border-white shadow-sm ${clicavel ? 'cursor-zoom-in hover:opacity-90 transition-opacity' : ''} ${className}`}
         onError={() => setImageError(true)}
       />
     );
