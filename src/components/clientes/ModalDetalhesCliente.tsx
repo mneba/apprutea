@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
+import { LightboxImagem } from '@/components/liquidacao/CardsFinanceiros';
 import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
 import { ModalQuitarEmprestimo } from '@/components/liquidacao/ModalQuitarEmprestimo';
 import { usePermissaoModulo } from '@/hooks/usePermissaoModulo';
@@ -782,6 +783,7 @@ export function ModalDetalhesCliente({
   
   // Estados de edição
   const [modoEdicao, setModoEdicao] = useState(false);
+  const [fotoAmpliada, setFotoAmpliada] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
@@ -989,6 +991,7 @@ export function ModalDetalhesCliente({
               nome={dadosExibicao.nome}
               tamanho="lg"
               className="border-2 border-white/30"
+              onImageClick={(url) => setFotoAmpliada(url)}
             />
             <div>
               <h2 className="text-xl font-bold text-white">{dadosExibicao.nome}</h2>
@@ -1119,6 +1122,7 @@ export function ModalDetalhesCliente({
                           nome={dadosExibicao.nome}
                           tamanho="xl"
                           className="border-4 border-gray-100 shadow-lg"
+                          onImageClick={(url) => setFotoAmpliada(url)}
                         />
                       </div>
                     )}
@@ -1339,6 +1343,10 @@ export function ModalDetalhesCliente({
           liquidacaoId={liquidacaoId}
           onQuitacaoSucesso={handleQuitacaoSucesso}
         />
+      )}
+
+      {fotoAmpliada && (
+        <LightboxImagem url={fotoAmpliada} onClose={() => setFotoAmpliada(null)} />
       )}
     </div>
   );
