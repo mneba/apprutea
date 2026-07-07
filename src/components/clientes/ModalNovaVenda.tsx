@@ -23,6 +23,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
+import { createClient } from '@/lib/supabase/client';
 import type { 
   Cliente,
   ClienteComTotais, 
@@ -109,6 +110,9 @@ export function ModalNovaVenda({
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState('');
   const [uploadingFoto, setUploadingFoto] = useState(false);
+  // Verificação de liquidação aberta na rota (apenas aviso no modal)
+  const [liquidacaoAberta, setLiquidacaoAberta] = useState<boolean | null>(null);
+  const [checandoLiquidacao, setChecandoLiquidacao] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const valorPrincipalRef = useRef<HTMLInputElement>(null);
 
@@ -245,6 +249,35 @@ export function ModalNovaVenda({
   // Rota selecionada e vendedor
   const rotaSelecionada = rotas.find(r => r.id === rotaId);
   const vendedorId = rotaSelecionada?.vendedor_id;
+
+  // Verifica se a rota tem liquidação aberta (aviso no modal; a FN também valida no backend)
+  useEffect(() => {
+    if (!isOpen || !rotaId) {
+      setLiquidacaoAberta(null);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      setChecandoLiquidacao(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('liquidacoes_diarias')
+          .select('id')
+          .eq('rota_id', rotaId)
+          .in('status', ['ABERTO', 'REABERTO'])
+          .limit(1);
+        if (!cancelado) {
+          setLiquidacaoAberta(!error && Array.isArray(data) && data.length > 0);
+        }
+      } catch {
+        if (!cancelado) setLiquidacaoAberta(null);
+      } finally {
+        if (!cancelado) setChecandoLiquidacao(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [isOpen, rotaId]);
 
   const validarEmprestimo = () => {
     if (!rotaId) return 'Selecione uma rota';
@@ -485,6 +518,15 @@ export function ModalNovaVenda({
         </div>
 
         {/* Erro */}
+        {rotaId && liquidacaoAberta === false && !checandoLiquidacao && (
+          <div className="mx-6 mt-4 flex items-center gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
+            <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <p className="text-sm text-amber-800">
+              Esta rota não tem uma liquidação aberta. É necessário abrir o dia (liquidação) antes de registrar a venda.
+            </p>
+          </div>
+        )}
+
         {erro && (
           <div className="mx-6 mt-4 flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200">
             <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
@@ -1100,8 +1142,9 @@ export function ModalNovaVenda({
           {activeTab === 'resumo' && (
             <button
               onClick={handleSalvar}
-              disabled={saving}
-              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium disabled:opacity-50"
+              disabled={saving || liquidacaoAberta === false}
+              title={liquidacaoAberta === false ? 'É necessário ter uma liquidação aberta nesta rota para registrar a venda' : undefined}
+              className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? (
                 <>
