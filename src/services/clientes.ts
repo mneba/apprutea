@@ -57,6 +57,9 @@ export const clientesService = {
       p_busca: filtros.busca || null,
       p_limite: filtros.limite || 1000,
       p_offset: filtros.offset || 0,
+      p_frequencias: (filtros as any).frequencias && (filtros as any).frequencias.length > 0
+        ? (filtros as any).frequencias
+        : null,
     });
     
     if (error) {

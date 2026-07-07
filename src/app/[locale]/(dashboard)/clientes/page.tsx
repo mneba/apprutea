@@ -27,6 +27,15 @@ import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
 
 type TipoOrdenacao = 'nome_asc' | 'nome_desc' | 'codigo_asc' | 'codigo_desc' | 'data_asc' | 'data_desc';
 
+const FREQUENCIAS = ['DIARIO', 'SEMANAL', 'QUINZENAL', 'MENSAL', 'FLEXIVEL'] as const;
+const LABEL_FREQUENCIA: Record<string, string> = {
+  DIARIO: 'Diário',
+  SEMANAL: 'Semanal',
+  QUINZENAL: 'Quinzenal',
+  MENSAL: 'Mensal',
+  FLEXIVEL: 'Flexível',
+};
+
 // =====================================================
 // COMPONENTES AUXILIARES
 // =====================================================
@@ -168,6 +177,15 @@ function TabelaClientes({
                       <span className="text-gray-400">-</span>
                     )}
                   </div>
+                  {Array.isArray((cliente as any).frequencias_vivas) && (cliente as any).frequencias_vivas.length > 0 && (
+                    <div className="flex flex-wrap gap-1 justify-center mt-1">
+                      {(cliente as any).frequencias_vivas.map((f: string) => (
+                        <span key={f} className="inline-block px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                          {LABEL_FREQUENCIA[f] || f}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-center">
                   <BadgeStatus status={cliente.status} />
@@ -333,6 +351,8 @@ export default function ClientesPage() {
   const [rotas, setRotas] = useState<RotaSimples[]>([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
+  const [frequenciasFiltro, setFrequenciasFiltro] = useState<string[]>([...FREQUENCIAS]);
+  const [dropdownFreqAberto, setDropdownFreqAberto] = useState(false);
   const [statusFiltro, setStatusFiltro] = useState<string>('');
   const [rotaFiltro, setRotaFiltro] = useState<string>('');
   
@@ -388,18 +408,21 @@ export default function ClientesPage() {
       setSegmentos(segmentosData);
 
       // Carregar clientes: lista filtrada (tabela) + base sem filtro de status (contagens)
+      const freqParam = frequenciasFiltro;
       const [clientesData, baseParaContagem] = await Promise.all([
         clientesService.buscarClientes({
           empresa_id: empresaId,
           rota_id: rotaIdContexto || rotaFiltro || undefined,
           status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
           busca: busca || undefined,
-        }),
+          frequencias: freqParam,
+        } as any),
         clientesService.buscarClientes({
           empresa_id: empresaId,
           rota_id: rotaIdContexto || rotaFiltro || undefined,
           busca: busca || undefined,
-        }),
+          frequencias: freqParam,
+        } as any),
       ]);
       setClientes(clientesData);
       setContagens({
@@ -413,7 +436,7 @@ export default function ClientesPage() {
     } finally {
       setLoading(false);
     }
-  }, [empresaId, rotaIdContexto, rotaFiltro, statusFiltro, busca]);
+  }, [empresaId, rotaIdContexto, rotaFiltro, statusFiltro, busca, frequenciasFiltro]);
 
   useEffect(() => {
     carregarDados();
@@ -538,7 +561,58 @@ export default function ClientesPage() {
             />
           </div>
 
-          {/* Filtro de Rota */}
+          {/* Filtro de Periodicidade (multi-seleção) */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setDropdownFreqAberto(v => !v)}
+              className="flex items-center gap-2 pl-4 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
+            >
+              <span className="text-sm text-gray-700">
+                {frequenciasFiltro.length === FREQUENCIAS.length
+                  ? 'Todas as periodicidades'
+                  : frequenciasFiltro.length === 0
+                  ? 'Nenhuma periodicidade'
+                  : `${frequenciasFiltro.length} periodicidade(s)`}
+              </span>
+              <ChevronDown className="w-4 h-4 text-gray-400" />
+            </button>
+            {dropdownFreqAberto && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setDropdownFreqAberto(false)} />
+                <div className="absolute right-0 mt-1 z-20 w-52 bg-white border border-gray-200 rounded-xl shadow-lg p-2">
+                  <div className="flex items-center justify-between px-2 py-1 mb-1 border-b border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setFrequenciasFiltro([...FREQUENCIAS])}
+                      className="text-[11px] text-blue-600 hover:underline"
+                    >Todas</button>
+                    <button
+                      type="button"
+                      onClick={() => setFrequenciasFiltro([])}
+                      className="text-[11px] text-gray-500 hover:underline"
+                    >Limpar</button>
+                  </div>
+                  {FREQUENCIAS.map(f => {
+                    const marcada = frequenciasFiltro.includes(f);
+                    return (
+                      <label key={f} className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={marcada}
+                          onChange={() => setFrequenciasFiltro(prev =>
+                            marcada ? prev.filter(x => x !== f) : [...prev, f]
+                          )}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm text-gray-700">{LABEL_FREQUENCIA[f]}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
           {rotas.length > 1 && (
             <div className="relative">
               <select
