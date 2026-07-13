@@ -60,6 +60,33 @@ export interface Solicitacao {
   ja_visualizada: boolean;
 }
 
+export interface MovimentacaoPendente {
+  id: string;
+  vendedor_id: string;
+  rota_id: string;
+  empresa_id: string | null;
+  liquidacao_id: string;
+  user_id: string | null;
+  solicitacao_id: string | null;
+  tipo: 'RECEITA' | 'DESPESA';
+  categoria: string;
+  descricao: string | null;
+  valor: number;
+  forma_pagamento: string | null;
+  foto_url: string | null;
+  justificativa: string;
+  valor_limite: number | null;
+  latitude: number | null;
+  longitude: number | null;
+  status: string;
+  motivo_rejeicao: string | null;
+  financeiro_id: string | null;
+  created_at: string;
+  updated_at: string;
+  rota_nome?: string | null;
+  vendedor_nome?: string | null;
+}
+
 export interface FiltrosSolicitacoes {
   status?: string | null;
   rota_id?: string | null;
@@ -234,5 +261,78 @@ export const solicitacoesService = {
       cliente_nome: data.cliente?.nome,
       resolvido_por_nome: data.resolvedor?.nome,
     } as Solicitacao;
+  },
+
+  // ===================================================================
+  // MOVIMENTAÇÕES PENDENTES (despesa/receita que excede limite)
+  // ===================================================================
+
+  // Busca os dados operacionais da movimentação pendente pela solicitação
+  async buscarMovimentacaoPendente(solicitacaoId: string): Promise<MovimentacaoPendente | null> {
+    const { data, error } = await supabase
+      .from('movimentacoes_pendentes')
+      .select(`
+        *,
+        rota:rotas(nome),
+        vendedor:vendedores(nome)
+      `)
+      .eq('solicitacao_id', solicitacaoId)
+      .limit(1)
+      .maybeSingle();
+
+    if (error) {
+      console.error('Erro ao buscar movimentação pendente:', error);
+      return null;
+    }
+    if (!data) return null;
+
+    return {
+      ...data,
+      rota_nome: (data as any).rota?.nome ?? null,
+      vendedor_nome: (data as any).vendedor?.nome ?? null,
+    } as MovimentacaoPendente;
+  },
+
+  // Aprova a movimentação: cria o financeiro e atualiza a liquidação (regras na RPC)
+  async aprovarMovimentacaoPendente(
+    movimentacaoId: string,
+    adminUserId: string
+  ): Promise<{ success: boolean; message: string; financeiroId?: string | null }> {
+    const { data, error } = await supabase.rpc('fn_aprovar_movimentacao_pendente', {
+      p_movimentacao_id: movimentacaoId,
+      p_admin_user_id: adminUserId,
+    });
+    if (error) {
+      console.error('Erro ao aprovar movimentação pendente:', error);
+      return { success: false, message: error.message };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      success: !!row?.sucesso,
+      message: row?.mensagem ?? '',
+      financeiroId: row?.financeiro_id_out ?? null,
+    };
+  },
+
+  // Rejeita a movimentação (não mexe em financeiro/liquidação)
+  async rejeitarMovimentacaoPendente(
+    movimentacaoId: string,
+    adminUserId: string,
+    motivo: string
+  ): Promise<{ success: boolean; message: string }> {
+    const { data, error } = await supabase.rpc('fn_rejeitar_movimentacao_pendente', {
+      p_movimentacao_id: movimentacaoId,
+      p_admin_user_id: adminUserId,
+      p_motivo: motivo,
+    });
+    if (error) {
+      console.error('Erro ao rejeitar movimentação pendente:', error);
+      return { success: false, message: error.message };
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    return {
+      success: !!row?.sucesso,
+      message: row?.mensagem ?? '',
+    };
   },
 };

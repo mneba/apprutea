@@ -138,6 +138,9 @@ function ModalDetalhesSolicitacao({
   const [vendaPendente, setVendaPendente] = useState<any>(null);
   const [loadingVenda, setLoadingVenda] = useState(false);
   const [editVenda, setEditVenda] = useState<any>(null);
+
+  const [movimentacaoPendente, setMovimentacaoPendente] = useState<any>(null);
+  const [movimentacaoId, setMovimentacaoId] = useState<string | null>(null);
   // Modal de detalhes do cliente
   const [mostrarDetalhesCliente, setMostrarDetalhesCliente] = useState(false);
   const [clienteParaModal, setClienteParaModal] = useState<any>(null);
@@ -206,6 +209,9 @@ function ModalDetalhesSolicitacao({
   const isEmprestimoAdicional = solicitacao.tipo_solicitacao === 'EMPRESTIMO_ADICIONAL';
   const isAutorizacaoCliente = isRenegociacao || isEmprestimoAdicional;
   const isVendaExcedeLimite = solicitacao.tipo_solicitacao === 'VENDA_EXCEDE_LIMITE';
+  const isMovimentacaoExcedeLimite =
+    solicitacao.tipo_solicitacao === 'DESPESA_EXCEDE_LIMITE' ||
+    solicitacao.tipo_solicitacao === 'RECEITA_EXCEDE_LIMITE';
 
   // Carregar detalhes do empréstimo para renegociação
   useEffect(() => {
@@ -292,6 +298,23 @@ function ModalDetalhesSolicitacao({
     carregarVendaPendente();
   }, [isVendaExcedeLimite, (solicitacao as any).venda_pendente_id]);
 
+  // Carrega a movimentação pendente (despesa/receita) vinculada à solicitação
+  useEffect(() => {
+    const carregarMovimentacao = async () => {
+      if (!isMovimentacaoExcedeLimite || !solicitacao.id) return;
+      try {
+        const mp = await solicitacoesService.buscarMovimentacaoPendente(solicitacao.id);
+        if (mp) {
+          setMovimentacaoPendente(mp);
+          setMovimentacaoId(mp.id);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar movimentação pendente:', err);
+      }
+    };
+    carregarMovimentacao();
+  }, [isMovimentacaoExcedeLimite, solicitacao.id]);
+
   // Handler para confirmar aprovação de autorização de cliente
   const handleConfirmarAprovacao = () => {
     if (isAutorizacaoCliente) {
@@ -368,6 +391,62 @@ function ModalDetalhesSolicitacao({
     } catch (err: any) {
       console.error('Erro ao rejeitar venda:', err);
       alert(err.message || 'Erro ao rejeitar venda');
+    } finally {
+      setSalvandoVenda(false);
+    }
+  };
+
+  const handleAprovarMovimentacao = async () => {
+    if (!movimentacaoId) {
+      alert('Movimentação não encontrada.');
+      return;
+    }
+    setSalvandoVenda(true);
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const adminId = userData.user?.id;
+      if (!adminId) throw new Error('Usuário não autenticado');
+
+      const res = await solicitacoesService.aprovarMovimentacaoPendente(movimentacaoId, adminId);
+      if (!res.success) {
+        alert(res.message || 'Erro ao aprovar movimentação');
+        return;
+      }
+      onVendaResolvida?.();
+    } catch (err: any) {
+      console.error('Erro ao aprovar movimentação:', err);
+      alert(err.message || 'Erro ao aprovar movimentação');
+    } finally {
+      setSalvandoVenda(false);
+    }
+  };
+
+  const handleRejeitarMovimentacao = async () => {
+    if (!movimentacaoId) {
+      alert('Movimentação não encontrada.');
+      return;
+    }
+    setSalvandoVenda(true);
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const adminId = userData.user?.id;
+      if (!adminId) throw new Error('Usuário não autenticado');
+
+      const res = await solicitacoesService.rejeitarMovimentacaoPendente(
+        movimentacaoId,
+        adminId,
+        motivoRejeicao
+      );
+      if (!res.success) {
+        alert(res.message || 'Erro ao rejeitar movimentação');
+        return;
+      }
+      onVendaResolvida?.();
+    } catch (err: any) {
+      console.error('Erro ao rejeitar movimentação:', err);
+      alert(err.message || 'Erro ao rejeitar movimentação');
     } finally {
       setSalvandoVenda(false);
     }
@@ -1050,12 +1129,12 @@ function ModalDetalhesSolicitacao({
                   Rejeitar
                 </button>
                 <button
-                  onClick={isVendaExcedeLimite ? handleAprovarVenda : handleConfirmarAprovacao}
+                  onClick={isVendaExcedeLimite ? handleAprovarVenda : isMovimentacaoExcedeLimite ? handleAprovarMovimentacao : handleConfirmarAprovacao}
                   disabled={loading || salvandoVenda}
                   className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : 'Aprovar'}
+                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : isMovimentacaoExcedeLimite ? 'Aprovar' : 'Aprovar'}
                 </button>
               </>
             ) : (
@@ -1067,7 +1146,7 @@ function ModalDetalhesSolicitacao({
                   Voltar
                 </button>
                 <button
-                  onClick={isVendaExcedeLimite ? handleRejeitarVenda : () => onRejeitar(motivoRejeicao)}
+                  onClick={isVendaExcedeLimite ? handleRejeitarVenda : isMovimentacaoExcedeLimite ? handleRejeitarMovimentacao : () => onRejeitar(motivoRejeicao)}
                   disabled={loading || salvandoVenda || !motivoRejeicao.trim()}
                   className="flex items-center gap-1.5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
