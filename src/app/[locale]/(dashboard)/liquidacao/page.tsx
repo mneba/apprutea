@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
+import { TIPO_SOLICITACAO_LABELS } from '@/services/solicitacoes';
 import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendarioLiquidacao';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
@@ -666,6 +667,9 @@ export default function LiquidacaoDiariaPage() {
   const [loadingAcao, setLoadingAcao] = useState(false);
   const [modalAbrir, setModalAbrir] = useState(false);
   const [modalFechar, setModalFechar] = useState(false);
+  const [modalPendencias, setModalPendencias] = useState(false);
+  const [pendenciasEncerramento, setPendenciasEncerramento] = useState<any[]>([]);
+  const [observacoesFechamento, setObservacoesFechamento] = useState<string>('');
   const [modalExtrato, setModalExtrato] = useState(false);
   const [modalReabrir, setModalReabrir] = useState(false);
 
@@ -1305,17 +1309,70 @@ export default function LiquidacaoDiariaPage() {
     setModalAbrir(true);
   };
 
-  const handleFecharLiquidacao = async (observacoes: string) => {
+  // Executa o fechamento de fato (RPC de fechar)
+  const executarFechamento = async (observacoes: string) => {
     if (!liquidacao || !userId) return;
     setLoadingAcao(true);
     try {
       const resultado = liquidacao.status === 'REABERTO'
         ? await liquidacaoService.fecharLiquidacaoReaberta({ liquidacao_id: liquidacao.id, user_id: userId, observacoes })
         : await liquidacaoService.fecharLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, observacoes });
-      if (resultado.sucesso) { await carregarDados(); setModalFechar(false); }
+      if (resultado.sucesso) { await carregarDados(); setModalFechar(false); setModalPendencias(false); }
       else alert(resultado.mensagem);
     } catch (error) { console.error('Erro ao fechar liquidação:', error); alert('Erro ao fechar liquidação'); }
     finally { setLoadingAcao(false); }
+  };
+
+  const handleFecharLiquidacao = async (observacoes: string) => {
+    if (!liquidacao || !userId) return;
+    const rotaId = (liquidacao as any).rota_id || rotaIdContexto;
+    // Antes de fechar: verificar solicitações pendentes da rota
+    if (rotaId) {
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data, error } = await supabase.rpc('fn_listar_solicitacoes_pendentes_rota', { p_rota_id: rotaId });
+        if (!error && Array.isArray(data) && data.length > 0) {
+          // Há pendências: guarda observações e abre modal informativo
+          setObservacoesFechamento(observacoes);
+          setPendenciasEncerramento(data);
+          setModalFechar(false);
+          setModalPendencias(true);
+          return;
+        }
+      } catch (err) {
+        console.error('Erro ao verificar pendências:', err);
+        // Em caso de erro na verificação, segue o fechamento normal
+      }
+    }
+    // Sem pendências: fecha direto
+    await executarFechamento(observacoes);
+  };
+
+  // "Continuar" no modal de pendências: rejeita em massa e fecha
+  const handleContinuarEncerramento = async () => {
+    if (!liquidacao || !userId) return;
+    const rotaId = (liquidacao as any).rota_id || rotaIdContexto;
+    setLoadingAcao(true);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data, error } = await supabase.rpc('fn_rejeitar_solicitacoes_encerramento', {
+        p_rota_id: rotaId,
+        p_admin_user_id: userId,
+      });
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error || !row?.sucesso) {
+        alert(row?.mensagem || error?.message || 'Erro ao rejeitar solicitações pendentes');
+        setLoadingAcao(false);
+        return;
+      }
+    } catch (err: any) {
+      console.error('Erro ao rejeitar solicitações:', err);
+      alert('Erro ao rejeitar solicitações pendentes');
+      setLoadingAcao(false);
+      return;
+    }
+    // Rejeitadas: agora fecha de fato
+    await executarFechamento(observacoesFechamento);
   };
 
   const handleReabrirLiquidacao = async (motivo: string) => {
@@ -1939,6 +1996,63 @@ export default function LiquidacaoDiariaPage() {
         dataProxima={proximaInfo.dataProxima}
       />
       <ModalFecharLiquidacao isOpen={modalFechar} onClose={() => setModalFechar(false)} onConfirmar={handleFecharLiquidacao} loading={loadingAcao} liquidacao={liquidacao} />
+
+      {modalPendencias && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !loadingAcao && setModalPendencias(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+            <div className="flex items-center gap-3 px-6 py-4 border-b">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Solicitações pendentes</h2>
+                <p className="text-sm text-gray-500">Existem solicitações não resolvidas nesta rota</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 overflow-y-auto">
+              <p className="text-sm text-gray-600 mb-3">
+                Ao encerrar o dia, as solicitações abaixo serão <strong>rejeitadas automaticamente</strong> pelo sistema.
+                Esta ação não pode ser desfeita.
+              </p>
+              <div className="space-y-2">
+                {pendenciasEncerramento.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {TIPO_SOLICITACAO_LABELS?.[p.tipo_solicitacao] || p.tipo_solicitacao}
+                      </p>
+                      {p.motivo_solicitacao && (
+                        <p className="text-xs text-gray-500 mt-0.5">{p.motivo_solicitacao}</p>
+                      )}
+                    </div>
+                    <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Pendente</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2 px-6 py-4 border-t">
+              <button
+                onClick={() => setModalPendencias(false)}
+                disabled={loadingAcao}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleContinuarEncerramento}
+                disabled={loadingAcao}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingAcao ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Continuar e encerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={liquidacao?.data_abertura?.split('T')[0] || ''} />
       <ModalExtratoLiquidacao isOpen={modalExtrato} onClose={() => setModalExtrato(false)} liquidacao={liquidacao} rotaNome={rota?.nome || ''} vendedorNome={vendedor?.nome} empresaNome={empresaNome} />
       <ModalDetalhesCliente isOpen={modalClienteAberto} onClose={() => { setModalClienteAberto(false); setClienteSelecionado(null); }} cliente={clienteSelecionado} />
