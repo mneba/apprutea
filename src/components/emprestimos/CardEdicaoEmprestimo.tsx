@@ -118,6 +118,66 @@ export function CardEdicaoEmprestimo({
   // Data mínima (hoje)
   const dataMinima = new Date().toISOString().split('T')[0];
 
+  // ---------------------------------------------------------------
+  // REGRAS DE VALIDAÇÃO DA ALTERAÇÃO
+  // ---------------------------------------------------------------
+  const MAX_PARCELAS = 48;
+
+  // Parcelas já pagas: não é permitido reduzir para <= esse número
+  const parcelasPagas = emprestimo.parcelas_pagas ?? 0;
+  const minParcelas = Math.max(1, parcelasPagas + 1);
+
+  // Total já pago pelo cliente (valor_total contratado - saldo devedor)
+  const totalPago = Math.max(0, (emprestimo.valor_total || 0) - (emprestimo.valor_saldo || 0));
+
+  // O empréstimo precisa continuar em aberto após a alteração
+  const alteracaoQuitaEmprestimo = calculosNovos.valorTotal <= totalPago;
+
+  // Empréstimos encerrados não podem ser alterados
+  const statusBloqueado = ['QUITADO', 'CANCELADO'].includes((emprestimo.status || '').toUpperCase());
+
+  // Validações de contexto (liquidação aberta / limite de taxa do vendedor)
+  const [liquidacaoAberta, setLiquidacaoAberta] = useState<boolean | null>(null);
+  const [taxaMaximaVendedor, setTaxaMaximaVendedor] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      try {
+        const supabase = createClient();
+        const { data: emp } = await supabase
+          .from('emprestimos')
+          .select('rota_id, vendedor_id')
+          .eq('id', emprestimo.id)
+          .maybeSingle();
+        if (!emp || cancelado) return;
+
+        const { data: liq } = await supabase
+          .from('liquidacoes_diarias')
+          .select('id')
+          .eq('rota_id', (emp as any).rota_id)
+          .in('status', ['ABERTO', 'REABERTO'])
+          .limit(1);
+        if (!cancelado) setLiquidacaoAberta(Array.isArray(liq) && liq.length > 0);
+
+        const { data: restr } = await supabase
+          .from('restricoes_vendedor')
+          .select('validar_taxa_juros, taxa_juros_maxima')
+          .eq('vendedor_id', (emp as any).vendedor_id)
+          .maybeSingle();
+        if (!cancelado && restr && (restr as any).validar_taxa_juros) {
+          setTaxaMaximaVendedor((restr as any).taxa_juros_maxima ?? null);
+        }
+      } catch {
+        /* silencioso: não bloqueia a edição por falha de consulta */
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [emprestimo.id]);
+
+  const taxaAcimaDoLimite =
+    taxaMaximaVendedor !== null && taxaJuros > taxaMaximaVendedor;
+
   // Resetar ao mudar empréstimo
   useEffect(() => {
     setFrequencia(emprestimo.frequencia_pagamento);
@@ -156,9 +216,14 @@ export function CardEdicaoEmprestimo({
     if ((mudouFrequencia || mudouValores) && !dataPrimeiraParcela) return false;
     
     // Validar valores
+    if (statusBloqueado) return false;
+    if (liquidacaoAberta === false) return false;
     if (valorPrincipal <= 0) return false;
     if (taxaJuros < 0) return false;
-    if (numeroParcelas < 1) return false;
+    if (numeroParcelas < minParcelas) return false;
+    if (numeroParcelas > MAX_PARCELAS) return false;
+    if (alteracaoQuitaEmprestimo) return false;
+    if (taxaAcimaDoLimite) return false;
     
     // Validar parâmetros específicos de frequência
     if (frequencia === 'SEMANAL' && diaSemana === null) return false;
@@ -171,6 +236,16 @@ export function CardEdicaoEmprestimo({
   // Handler para salvar
   const handleSalvar = async () => {
     // Validações
+    if (statusBloqueado) {
+      setErro(`Empréstimo ${emprestimo.status} não pode ser alterado.`);
+      return;
+    }
+
+    if (liquidacaoAberta === false) {
+      setErro('É necessário ter uma liquidação aberta nesta rota para alterar o empréstimo.');
+      return;
+    }
+
     if ((mudouFrequencia || mudouValores) && !dataPrimeiraParcela) {
       setErro('Informe a data da primeira parcela pendente.');
       return;
@@ -181,8 +256,29 @@ export function CardEdicaoEmprestimo({
       return;
     }
 
-    if (numeroParcelas < 1) {
-      setErro('O número de parcelas deve ser no mínimo 1.');
+    if (numeroParcelas < minParcelas) {
+      setErro(
+        parcelasPagas > 0
+          ? `O número de parcelas não pode ser menor que ${minParcelas}, pois já há ${parcelasPagas} parcela(s) paga(s).`
+          : 'O número de parcelas deve ser no mínimo 1.'
+      );
+      return;
+    }
+
+    if (numeroParcelas > MAX_PARCELAS) {
+      setErro(`O número de parcelas não pode ser maior que ${MAX_PARCELAS}.`);
+      return;
+    }
+
+    if (alteracaoQuitaEmprestimo) {
+      setErro(
+        `O novo valor total (${formatarMoeda(calculosNovos.valorTotal)}) não pode ser menor ou igual ao já pago (${formatarMoeda(totalPago)}). A alteração quitaria o empréstimo.`
+      );
+      return;
+    }
+
+    if (taxaAcimaDoLimite) {
+      setErro(`A taxa de juros excede o limite permitido para este vendedor (${taxaMaximaVendedor}%).`);
       return;
     }
     
@@ -423,11 +519,17 @@ export function CardEdicaoEmprestimo({
                   <input
                     type="number"
                     value={numeroParcelas}
-                    onChange={(e) => setNumeroParcelas(parseInt(e.target.value) || 1)}
-                    min={1}
+                    onChange={(e) => setNumeroParcelas(parseInt(e.target.value) || minParcelas)}
+                    min={minParcelas}
+                    max={MAX_PARCELAS}
                     className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   />
                 </div>
+                <p className="mt-1 text-[11px] text-gray-500">
+                  {parcelasPagas > 0
+                    ? `Mínimo ${minParcelas} (${parcelasPagas} paga(s)) • Máximo ${MAX_PARCELAS}`
+                    : `Mínimo ${minParcelas} • Máximo ${MAX_PARCELAS}`}
+                </p>
               </div>
             </div>
             
@@ -582,6 +684,30 @@ export function CardEdicaoEmprestimo({
               <div className="flex items-start gap-2 text-blue-700 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <p>As configurações do empréstimo serão atualizadas.</p>
+              </div>
+            </div>
+          )}
+
+          {/* Avisos de bloqueio */}
+          {(statusBloqueado || liquidacaoAberta === false || alteracaoQuitaEmprestimo || taxaAcimaDoLimite) && (
+            <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+              <div className="text-xs text-amber-800 space-y-1">
+                {statusBloqueado && (
+                  <p>Empréstimo {emprestimo.status} não pode ser alterado.</p>
+                )}
+                {liquidacaoAberta === false && (
+                  <p>É necessário ter uma liquidação aberta nesta rota para alterar o empréstimo.</p>
+                )}
+                {alteracaoQuitaEmprestimo && (
+                  <p>
+                    O novo valor total ({formatarMoeda(calculosNovos.valorTotal)}) não pode ser menor ou igual
+                    ao já pago ({formatarMoeda(totalPago)}) — a alteração quitaria o empréstimo.
+                  </p>
+                )}
+                {taxaAcimaDoLimite && (
+                  <p>A taxa de juros excede o limite permitido para este vendedor ({taxaMaximaVendedor}%).</p>
+                )}
               </div>
             </div>
           )}
