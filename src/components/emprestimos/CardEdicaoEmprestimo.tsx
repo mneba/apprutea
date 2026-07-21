@@ -78,6 +78,16 @@ function formatarMoeda(valor: number): string {
   }).format(valor || 0);
 }
 
+// Data de hoje no fuso LOCAL (YYYY-MM-DD).
+// Não usar toISOString(): ele converte para UTC e, à noite (UTC-3),
+// devolve a data do dia seguinte.
+function hojeLocalISO(): string {
+  const d = new Date();
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const dia = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${mes}-${dia}`;
+}
+
 // =====================================================
 // COMPONENTE PRINCIPAL
 // =====================================================
@@ -115,8 +125,10 @@ export function CardEdicaoEmprestimo({
     return { juros, valorTotal, valorParcela };
   }, [valorPrincipal, taxaJuros, numeroParcelas]);
 
-  // Data mínima (hoje)
-  const dataMinima = new Date().toISOString().split('T')[0];
+  // Data mínima da primeira parcela = data da LIQUIDAÇÃO aberta.
+  // (fallback para hoje-local apenas enquanto a liquidação não carregou)
+  const [dataLiquidacao, setDataLiquidacao] = useState<string | null>(null);
+  const dataMinima = dataLiquidacao || hojeLocalISO();
 
   // ---------------------------------------------------------------
   // REGRAS DE VALIDAÇÃO DA ALTERAÇÃO
@@ -165,11 +177,20 @@ export function CardEdicaoEmprestimo({
 
         const { data: liq } = await supabase
           .from('liquidacoes_diarias')
-          .select('id')
+          .select('id, data_liquidacao')
           .eq('rota_id', (emp as any).rota_id)
           .in('status', ['ABERTO', 'REABERTO'])
           .limit(1);
-        if (!cancelado) setLiquidacaoAberta(Array.isArray(liq) && liq.length > 0);
+        if (!cancelado) {
+          const temLiq = Array.isArray(liq) && liq.length > 0;
+          setLiquidacaoAberta(temLiq);
+          if (temLiq) {
+            // data_liquidacao é uma data "crua" do banco — usar como string,
+            // sem passar por new Date() (evita deslocamento de fuso).
+            const dl = String((liq as any)[0].data_liquidacao || '').slice(0, 10);
+            if (dl) setDataLiquidacao(dl);
+          }
+        }
 
         const { data: restr } = await supabase
           .from('restricoes_vendedor')
@@ -228,7 +249,8 @@ export function CardEdicaoEmprestimo({
     
     // Validar valores
     if (statusBloqueado) return false;
-    if (liquidacaoAberta === false) return false;
+    if (liquidacaoAberta !== true) return false;
+    if (dataPrimeiraParcela && dataPrimeiraParcela < dataMinima) return false;
     if (valorPrincipal <= 0) return false;
     if (taxaJuros < 0) return false;
     if (numeroParcelas < minParcelas) return false;
@@ -253,13 +275,18 @@ export function CardEdicaoEmprestimo({
       return;
     }
 
-    if (liquidacaoAberta === false) {
-      setErro('É necessário ter uma liquidação aberta nesta rota para alterar o empréstimo.');
+    if (liquidacaoAberta !== true) {
+      setErro('É necessário ter uma liquidação aberta (ou reaberta) nesta rota para alterar o empréstimo.');
       return;
     }
 
     if ((mudouFrequencia || mudouValores) && !dataPrimeiraParcela) {
       setErro('Informe a data da primeira parcela pendente.');
+      return;
+    }
+
+    if (dataPrimeiraParcela && dataPrimeiraParcela < dataMinima) {
+      setErro(`A data da primeira parcela não pode ser anterior à data da liquidação (${dataMinima.split('-').reverse().join('/')}).`);
       return;
     }
     
@@ -702,6 +729,9 @@ export function CardEdicaoEmprestimo({
               />
               <p className="mt-1 text-xs text-amber-600">
                 Esta data será usada como base para recalcular todas as parcelas pendentes.
+                {dataLiquidacao && (
+                  <> Mínimo permitido: {dataLiquidacao.split('-').reverse().join('/')} (data da liquidação aberta).</>
+                )}
               </p>
             </div>
           )}
@@ -717,15 +747,15 @@ export function CardEdicaoEmprestimo({
           )}
 
           {/* Avisos de bloqueio */}
-          {(statusBloqueado || liquidacaoAberta === false || alteracaoQuitaEmprestimo || taxaAcimaDoLimite) && (
+          {(statusBloqueado || liquidacaoAberta !== true || alteracaoQuitaEmprestimo || taxaAcimaDoLimite) && (
             <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
               <div className="text-xs text-amber-800 space-y-1">
                 {statusBloqueado && (
                   <p>Empréstimo {emprestimo.status} não pode ser alterado.</p>
                 )}
-                {liquidacaoAberta === false && (
-                  <p>É necessário ter uma liquidação aberta nesta rota para alterar o empréstimo.</p>
+                {liquidacaoAberta !== true && (
+                  <p>É necessário ter uma liquidação aberta (ou reaberta) nesta rota para alterar o empréstimo.</p>
                 )}
                 {alteracaoQuitaEmprestimo && (
                   <p>
