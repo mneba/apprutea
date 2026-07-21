@@ -139,6 +139,7 @@ export function CardEdicaoEmprestimo({
   // Validações de contexto (liquidação aberta / limite de taxa do vendedor)
   const [liquidacaoAberta, setLiquidacaoAberta] = useState<boolean | null>(null);
   const [taxaMaximaVendedor, setTaxaMaximaVendedor] = useState<number | null>(null);
+  const [trabalhaDomingo, setTrabalhaDomingo] = useState<boolean>(true);
 
   useEffect(() => {
     let cancelado = false;
@@ -151,6 +152,16 @@ export function CardEdicaoEmprestimo({
           .eq('id', emprestimo.id)
           .maybeSingle();
         if (!emp || cancelado) return;
+
+        // Rota trabalha aos domingos?
+        const { data: rota } = await supabase
+          .from('rotas')
+          .select('trabalha_domingo')
+          .eq('id', (emp as any).rota_id)
+          .maybeSingle();
+        if (!cancelado && rota) {
+          setTrabalhaDomingo(!!(rota as any).trabalha_domingo);
+        }
 
         const { data: liq } = await supabase
           .from('liquidacoes_diarias')
@@ -227,6 +238,7 @@ export function CardEdicaoEmprestimo({
     
     // Validar parâmetros específicos de frequência
     if (frequencia === 'SEMANAL' && diaSemana === null) return false;
+    if (frequencia === 'SEMANAL' && diaSemana === 0 && !trabalhaDomingo) return false;
     if (frequencia === 'MENSAL' && diaMes === null) return false;
     if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0) return false;
     
@@ -284,6 +296,11 @@ export function CardEdicaoEmprestimo({
     
     if (frequencia === 'SEMANAL' && diaSemana === null) {
       setErro('Selecione o dia da semana para cobrança.');
+      return;
+    }
+
+    if (frequencia === 'SEMANAL' && diaSemana === 0 && !trabalhaDomingo) {
+      setErro('Esta rota não trabalha aos domingos. Selecione outro dia da semana.');
       return;
     }
     
@@ -381,8 +398,9 @@ export function CardEdicaoEmprestimo({
         {!editando && (
           <button
             onClick={() => setEditando(true)}
-            className="text-xs text-blue-600 hover:text-blue-700 font-medium"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-xs font-medium shadow-sm transition-colors"
           >
+            <Edit3 className="w-3.5 h-3.5" />
             Editar
           </button>
         )}
@@ -584,21 +602,31 @@ export function CardEdicaoEmprestimo({
                 Dia da Semana <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-7 gap-1">
-                {DIAS_SEMANA.map((dia) => (
-                  <button
-                    key={dia.value}
-                    type="button"
-                    onClick={() => setDiaSemana(dia.value)}
-                    className={`p-2 rounded text-center transition-all text-xs ${
-                      diaSemana === dia.value
-                        ? 'bg-blue-500 text-white font-medium'
-                        : 'bg-white border border-gray-200 hover:border-gray-300 text-gray-700'
-                    }`}
-                  >
-                    {dia.label}
-                  </button>
-                ))}
+                {DIAS_SEMANA.map((dia) => {
+                  const domingoBloqueado = dia.value === 0 && !trabalhaDomingo;
+                  return (
+                    <button
+                      key={dia.value}
+                      type="button"
+                      disabled={domingoBloqueado}
+                      title={domingoBloqueado ? 'Esta rota não trabalha aos domingos' : dia.completo}
+                      onClick={() => !domingoBloqueado && setDiaSemana(dia.value)}
+                      className={`p-2 rounded text-center transition-all text-xs ${
+                        domingoBloqueado
+                          ? 'bg-gray-100 border border-gray-200 text-gray-300 cursor-not-allowed line-through'
+                          : diaSemana === dia.value
+                          ? 'bg-blue-500 text-white font-medium'
+                          : 'bg-white border border-gray-200 hover:border-gray-300 text-gray-700'
+                      }`}
+                    >
+                      {dia.label}
+                    </button>
+                  );
+                })}
               </div>
+              {!trabalhaDomingo && (
+                <p className="mt-1 text-[11px] text-gray-500">Esta rota não trabalha aos domingos.</p>
+              )}
             </div>
           )}
 

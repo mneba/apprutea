@@ -338,8 +338,8 @@ function CardEmprestimo({
             </div>
           )}
 
-          {/* Seção de Alteração de Frequência - apenas para empréstimos ATIVOS */}
-          {emprestimo.emprestimo_status === 'ATIVO' && (
+          {/* Seção de Alteração - empréstimos ATIVOS e VENCIDOS (atrasados) */}
+          {['ATIVO', 'VENCIDO'].includes(emprestimo.emprestimo_status) && (
             <CardEdicaoEmprestimo
               emprestimo={{
                 id: emprestimo.emprestimo_id,
@@ -1007,10 +1007,11 @@ export function ModalDetalhesCliente({
             {!modoEdicao && abaAtiva === 'dados' && (
               <button
                 onClick={() => setModoEdicao(true)}
-                className="p-2 rounded-full hover:bg-white/10 transition-colors text-white"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white text-blue-700 hover:bg-blue-50 font-medium text-sm shadow-sm transition-colors"
                 title="Editar cliente"
               >
-                <Edit3 className="w-5 h-5" />
+                <Edit3 className="w-4 h-4" />
+                Editar
               </button>
             )}
             <button
