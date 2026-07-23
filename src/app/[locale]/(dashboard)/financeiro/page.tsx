@@ -74,6 +74,7 @@ function CardIndicador({
   corFundo,
   loading = false,
   subtitulo,
+  onAjustar,
 }: { 
   titulo: string; 
   valor: number; 
@@ -82,24 +83,37 @@ function CardIndicador({
   corFundo: string;
   loading?: boolean;
   subtitulo?: string;
+  onAjustar?: () => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-center gap-3 mb-3">
-        <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
-          <Icone className={`w-5 h-5 ${corIcone}`} />
+      <div className="flex items-start justify-between gap-2 mb-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
+            <Icone className={`w-5 h-5 ${corIcone}`} />
+          </div>
+          <div>
+            <span className="text-sm font-medium text-gray-600">{titulo}</span>
+            {subtitulo && (
+              <p className="text-xs text-gray-400">{subtitulo}</p>
+            )}
+          </div>
         </div>
-        <div>
-          <span className="text-sm font-medium text-gray-600">{titulo}</span>
-          {subtitulo && (
-            <p className="text-xs text-gray-400">{subtitulo}</p>
-          )}
-        </div>
+        {onAjustar && (
+          <button
+            onClick={onAjustar}
+            title="Ajustar saldo"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            Ajustar
+          </button>
+        )}
       </div>
       {loading ? (
         <div className="h-8 bg-gray-200 animate-pulse rounded" />
       ) : (
-        <p className="text-2xl font-bold text-gray-900">
+        <p className={`text-2xl font-bold ${valor < 0 ? 'text-red-600' : 'text-gray-900'}`}>
           {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </p>
       )}
@@ -286,10 +300,10 @@ function FiltroPeriodo({
       <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
         <button
           onClick={() => onChange({ tipo: 'hoje', dataInicio: new Date().toISOString().split('T')[0], dataFim: new Date().toISOString().split('T')[0] })}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+          className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
             filtro.tipo === 'hoje'
-              ? 'bg-white text-blue-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
           }`}
         >
           Hoje
@@ -301,10 +315,10 @@ function FiltroPeriodo({
             const ontemStr = ontem.toISOString().split('T')[0];
             onChange({ tipo: 'ontem', dataInicio: ontemStr, dataFim: ontemStr });
           }}
-          className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
+          className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
             filtro.tipo === 'ontem'
-              ? 'bg-white text-blue-600 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
           }`}
         >
           Ontem
@@ -314,10 +328,10 @@ function FiltroPeriodo({
       <div className="relative">
         <button
           onClick={() => setShowCalendar(!showCalendar)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-all ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-semibold transition-all ${
             filtro.tipo === 'periodo'
-              ? 'bg-blue-50 border-blue-300 text-blue-700'
-              : 'bg-white border-gray-300 text-gray-700 hover:border-gray-400'
+              ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+              : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-700'
           }`}
         >
           <Calendar className="w-4 h-4" />
@@ -326,7 +340,7 @@ function FiltroPeriodo({
         </button>
 
         {showCalendar && (
-          <div className="absolute top-full left-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 min-w-[280px]">
+          <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 min-w-[280px] max-w-[calc(100vw-2rem)]">
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
@@ -430,6 +444,11 @@ function LinhaExtrato({
     return `${dia}/${mes}/${ano.slice(2)}`;
   };
 
+  // Observações sem o prefixo automático "[APROVADO aaaa-mm-dd] "
+  const observacoesLimpa = (movimento.observacoes || '')
+    .replace(/\[APROVADO[^\]]*\]\s*/gi, '')
+    .trim();
+
   // Verificar se data_lancamento é diferente de data_liquidacao
   const dataLancStr = movimento.data_lancamento?.split('T')[0];
   const dataLiqStr = (movimento as any).data_liquidacao?.split('T')[0];
@@ -437,7 +456,7 @@ function LinhaExtrato({
   
   return (
     <tr className={`hover:bg-gray-50 transition-colors ${isAnulado ? 'bg-gray-50/50' : ''}`}>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2.5">
         <div className={`text-sm ${isAnulado ? 'text-gray-400' : 'text-gray-600'}`}>
           {formatarData(movimento.data_lancamento)}
         </div>
@@ -451,20 +470,20 @@ function LinhaExtrato({
           </span>
         )}
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2.5">
         <div>
           <p className={`text-sm font-medium ${isAnulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
             {movimento.descricao}
           </p>
           {getContaDisplay()}
-          {movimento.observacoes && (
+          {observacoesLimpa && (
             <p className={`text-xs mt-0.5 ${isAnulado ? 'text-gray-400' : 'text-gray-400'}`}>
-              {movimento.observacoes}
+              {observacoesLimpa}
             </p>
           )}
         </div>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2.5">
         <span 
           className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${isAnulado ? 'opacity-50' : ''}`}
           style={{ 
@@ -475,7 +494,7 @@ function LinhaExtrato({
           {categoria?.nome_pt || movimento.categoria}
         </span>
       </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-3 py-2.5 text-right">
         <span className={`text-sm font-semibold ${
           isAnulado ? 'text-gray-400 line-through' :
           isTransferencia ? 'text-blue-600' : isEntrada ? 'text-green-600' : 'text-red-600'
@@ -484,7 +503,7 @@ function LinhaExtrato({
           {movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </span>
       </td>
-      <td className="px-4 py-3">
+      <td className="px-3 py-2.5">
         <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
           movimento.status === 'PAGO' ? 'bg-green-100 text-green-700' :
           movimento.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
@@ -498,7 +517,7 @@ function LinhaExtrato({
           {movimento.status}
         </span>
       </td>
-      <td className="px-4 py-3 text-right">
+      <td className="px-3 py-2.5 text-right">
         <div className="inline-flex items-center gap-2">
           {(movimento as any).foto_url && (
             <BotaoVerComprovante onClick={() => onVerComprovante?.((movimento as any).foto_url)} />
@@ -617,6 +636,7 @@ export default function FinanceiroPage() {
   const rotaNome = localizacao?.rota?.nome;
 
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('resumo');
+  const [modalEscolhaTransacao, setModalEscolhaTransacao] = useState(false);
   const [filtroResumo, setFiltroResumo] = useState<FiltroData>({
     tipo: 'hoje',
     dataInicio: new Date().toISOString().split('T')[0],
@@ -1000,58 +1020,45 @@ export default function FinanceiroPage() {
             </p>
           )}
         </div>
+
+        <button
+          onClick={() => setModalEscolhaTransacao(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors"
+        >
+          <Plus className="w-5 h-5" />
+          Adicionar transação
+        </button>
       </div>
 
-      <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-fit">
+      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
         <button
           onClick={() => setAbaAtiva('resumo')}
-          className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
+          className={`flex items-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all ${
             abaAtiva === 'resumo'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
           }`}
         >
+          <Wallet className="w-4 h-4" />
           Resumo
         </button>
         <button
           onClick={() => setAbaAtiva('extrato')}
-          className={`px-6 py-2.5 text-sm font-medium rounded-lg transition-all ${
+          className={`flex items-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all ${
             abaAtiva === 'extrato'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-900'
+              ? 'bg-blue-600 text-white shadow-sm'
+              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
           }`}
         >
+          <FileText className="w-4 h-4" />
           Extrato Detalhado
         </button>
       </div>
 
       {abaAtiva === 'resumo' && (
         <div className="space-y-4">
-          {/* Barra de ações + filtro de período (sempre visível, sem rolar) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white rounded-xl border border-gray-200 px-4 py-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => setModalMovimentacao(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 text-sm font-medium shadow-sm transition-colors"
-              >
-                <Plus className="w-4 h-4" />
-                Nova movimentação
-              </button>
-              <button
-                onClick={() => setModalTransferencia(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
-              >
-                <ArrowRightLeft className="w-4 h-4 text-indigo-600" />
-                Transferência
-              </button>
-              <button
-                onClick={() => setModalAjuste(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
-              >
-                <CheckSquare className="w-4 h-4 text-amber-600" />
-                Ajuste de saldo
-              </button>
-            </div>
+          {/* Filtro de período */}
+          <div className="flex items-center justify-end">
             <FiltroPeriodo filtro={filtroResumo} onChange={setFiltroResumo} />
           </div>
 
@@ -1069,6 +1076,7 @@ export default function FinanceiroPage() {
                   corFundo="bg-emerald-100"
                   loading={loadingSaldos}
                   subtitulo={rotaNome}
+                  onAjustar={() => setModalAjuste(true)}
                 />
                 <CardIndicador
                   titulo="Microseguros"
@@ -1096,6 +1104,7 @@ export default function FinanceiroPage() {
                   corIcone="text-blue-600"
                   corFundo="bg-blue-100"
                   loading={loadingSaldos}
+                  onAjustar={() => setModalAjuste(true)}
                 />
                 <CardRotasDetalhado
                   titulo="Rotas"
@@ -1360,12 +1369,12 @@ export default function FinanceiroPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Data</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Categoria</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Valor</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider"></th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Data</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-40">Categoria</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">Valor</th>
+                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
+                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-40"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -1404,6 +1413,55 @@ export default function FinanceiroPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Pré-modal: escolher tipo de transação */}
+      {modalEscolhaTransacao && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setModalEscolhaTransacao(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Adicionar transação</h2>
+                <p className="text-sm text-gray-500">O que você quer registrar?</p>
+              </div>
+              <button
+                onClick={() => setModalEscolhaTransacao(false)}
+                className="p-2 rounded-full hover:bg-gray-100 transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-3">
+              <button
+                onClick={() => { setModalEscolhaTransacao(false); setModalMovimentacao(true); }}
+                className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-blue-400 hover:bg-blue-50/50 text-left transition-all"
+              >
+                <div className="w-11 h-11 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0">
+                  <Plus className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">Nova movimentação</p>
+                  <p className="text-xs text-gray-500">Registrar uma receita ou uma despesa</p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => { setModalEscolhaTransacao(false); setModalTransferencia(true); }}
+                className="w-full flex items-center gap-3 p-4 rounded-xl border-2 border-gray-200 hover:border-indigo-400 hover:bg-indigo-50/50 text-left transition-all"
+              >
+                <div className="w-11 h-11 rounded-lg bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                  <ArrowRightLeft className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <p className="font-semibold text-gray-900">Nova transferência</p>
+                  <p className="text-xs text-gray-500">Mover valores entre contas</p>
+                </div>
+              </button>
+            </div>
           </div>
         </div>
       )}
