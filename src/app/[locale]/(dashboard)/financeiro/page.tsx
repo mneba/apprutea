@@ -53,7 +53,6 @@ import type {
 // =====================================================
 // TIPOS LOCAIS
 // =====================================================
-type AbaAtiva = 'resumo' | 'extrato';
 type TipoFiltro = 'hoje' | 'ontem' | 'periodo';
 
 interface FiltroData {
@@ -65,206 +64,6 @@ interface FiltroData {
 // =====================================================
 // COMPONENTES AUXILIARES
 // =====================================================
-
-function CardIndicador({ 
-  titulo, 
-  valor, 
-  icone: Icone, 
-  corIcone,
-  corFundo,
-  loading = false,
-  subtitulo,
-  onAjustar,
-}: { 
-  titulo: string; 
-  valor: number; 
-  icone: React.ElementType; 
-  corIcone: string;
-  corFundo: string;
-  loading?: boolean;
-  subtitulo?: string;
-  onAjustar?: () => void;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
-            <Icone className={`w-5 h-5 ${corIcone}`} />
-          </div>
-          <div>
-            <span className="text-sm font-medium text-gray-600">{titulo}</span>
-            {subtitulo && (
-              <p className="text-xs text-gray-400">{subtitulo}</p>
-            )}
-          </div>
-        </div>
-        {onAjustar && (
-          <button
-            onClick={onAjustar}
-            title="Ajustar saldo"
-            className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 hover:text-blue-700 hover:border-blue-300 transition-colors"
-          >
-            <CheckSquare className="w-3.5 h-3.5" />
-            Ajustar
-          </button>
-        )}
-      </div>
-      {loading ? (
-        <div className="h-8 bg-gray-200 animate-pulse rounded" />
-      ) : (
-        <p className={`text-2xl font-bold ${valor < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-          {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function CardRotasDetalhado({ 
-  titulo,
-  icone: Icone,
-  corIcone,
-  corFundo,
-  totalValor,
-  itens,
-  loading = false,
-  onVerTodas,
-  labelItem = 'rota',
-}: { 
-  titulo: string;
-  icone: React.ElementType;
-  corIcone: string;
-  corFundo: string;
-  totalValor: number;
-  itens: { nome: string; valor: number }[];
-  loading?: boolean;
-  onVerTodas?: () => void;
-  labelItem?: string;
-}) {
-  const MAX_ITENS_VISIVEIS = 2;
-  const temMaisItens = itens.length > MAX_ITENS_VISIVEIS;
-  const itensVisiveis = itens.slice(0, MAX_ITENS_VISIVEIS);
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center`}>
-            <Icone className={`w-5 h-5 ${corIcone}`} />
-          </div>
-          <div>
-            <span className="text-sm font-medium text-gray-600">{titulo}</span>
-            <p className="text-xs text-gray-400">{itens.length} {itens.length === 1 ? labelItem : `${labelItem}s`}</p>
-          </div>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="space-y-3">
-          <div className="h-6 bg-gray-200 animate-pulse rounded" />
-          <div className="h-4 bg-gray-200 animate-pulse rounded w-3/4" />
-        </div>
-      ) : (
-        <>
-          {/* Total */}
-          <p className="text-2xl font-bold text-gray-900 mb-4">
-            {totalValor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
-
-          {/* Lista de itens */}
-          {itens.length > 0 && (
-            <div className="space-y-2 border-t border-gray-100 pt-3">
-              {itensVisiveis.map((item, index) => (
-                <div key={index} className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600 truncate flex-1 mr-2">{item.nome}</span>
-                  <span className="font-medium text-gray-900 whitespace-nowrap">
-                    {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </span>
-                </div>
-              ))}
-
-              {/* Botão Ver Todas */}
-              {temMaisItens && onVerTodas && (
-                <button
-                  onClick={onVerTodas}
-                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-700 font-medium mt-2 w-full justify-center py-2 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
-                >
-                  <Eye className="w-4 h-4" />
-                  Ver todas ({itens.length})
-                </button>
-              )}
-            </div>
-          )}
-
-          {itens.length === 0 && (
-            <p className="text-sm text-gray-400 text-center py-2">Nenhuma {labelItem} encontrada</p>
-          )}
-        </>
-      )}
-    </div>
-  );
-}
-
-function CardMovimentacao({ 
-  tipo, 
-  titulo, 
-  valor, 
-  quantidade,
-  corValor,
-  loading = false
-}: { 
-  tipo: 'entrada' | 'saida' | 'resultado';
-  titulo: string;
-  valor: number;
-  quantidade: number;
-  corValor: string;
-  loading?: boolean;
-}) {
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-5">
-      <span className="text-sm font-medium text-gray-500">{titulo}</span>
-      {loading ? (
-        <div className="mt-2 space-y-2">
-          <div className="h-6 bg-gray-200 animate-pulse rounded w-24" />
-          <div className="h-4 bg-gray-200 animate-pulse rounded w-16" />
-        </div>
-      ) : (
-        <div className="mt-2">
-          <p className={`text-xl font-bold ${corValor}`}>
-            {tipo === 'entrada' && '+'}{tipo === 'saida' && '-'}
-            {valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-          </p>
-          <p className="text-sm text-gray-500 mt-1">
-            {quantidade} {quantidade === 1 ? 'transação' : 'transações'}
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function BotaoAcaoRapida({ 
-  icone: Icone, 
-  titulo, 
-  onClick 
-}: { 
-  icone: React.ElementType; 
-  titulo: string; 
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="flex items-center gap-3 w-full p-4 bg-white rounded-xl border border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 transition-all group"
-    >
-      <div className="w-10 h-10 rounded-lg bg-gray-100 group-hover:bg-blue-100 flex items-center justify-center transition-colors">
-        <Icone className="w-5 h-5 text-gray-600 group-hover:text-blue-600" />
-      </div>
-      <span className="font-medium text-gray-700 group-hover:text-blue-700">{titulo}</span>
-    </button>
-  );
-}
 
 function FiltroPeriodo({ 
   filtro, 
@@ -456,8 +255,8 @@ function LinhaExtrato({
   
   return (
     <tr className={`hover:bg-gray-50 transition-colors ${isAnulado ? 'bg-gray-50/50' : ''}`}>
-      <td className="px-3 py-2.5">
-        <div className={`text-sm ${isAnulado ? 'text-gray-400' : 'text-gray-600'}`}>
+      <td className="px-3 py-2.5 align-top">
+        <div className={`text-sm tabular-nums ${isAnulado ? 'text-gray-400' : 'text-gray-600'}`}>
           {formatarData(movimento.data_lancamento)}
         </div>
         {temDataLiqDiferente && (
@@ -470,55 +269,47 @@ function LinhaExtrato({
           </span>
         )}
       </td>
-      <td className="px-3 py-2.5">
-        <div>
-          <p className={`text-sm font-medium ${isAnulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-            {movimento.descricao}
-          </p>
-          {getContaDisplay()}
-          {observacoesLimpa && (
-            <p className={`text-xs mt-0.5 ${isAnulado ? 'text-gray-400' : 'text-gray-400'}`}>
-              {observacoesLimpa}
-            </p>
+
+      <td className="px-3 py-2.5 align-top">
+        <p className={`text-sm font-medium ${isAnulado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+          {movimento.descricao}
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+          <span
+            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${isAnulado ? 'opacity-50' : ''}`}
+            style={{
+              backgroundColor: categoria?.cor_hex ? `${categoria.cor_hex}20` : '#f3f4f6',
+              color: categoria?.cor_hex || '#374151'
+            }}
+          >
+            {categoria?.nome_pt || movimento.categoria}
+          </span>
+          {movimento.status !== 'PAGO' && (
+            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+              movimento.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
+              movimento.status === 'ANULADO' ? 'bg-red-50 text-red-600 border border-red-200' :
+              movimento.status === 'VENCIDO' ? 'bg-red-100 text-red-700' :
+              'bg-gray-100 text-gray-700'
+            }`}>
+              {movimento.status}
+            </span>
           )}
         </div>
+        {getContaDisplay()}
+        {observacoesLimpa && (
+          <p className="text-xs mt-0.5 text-gray-400">{observacoesLimpa}</p>
+        )}
       </td>
-      <td className="px-3 py-2.5">
-        <span 
-          className={`inline-flex items-center px-2 py-1 rounded-md text-xs font-medium ${isAnulado ? 'opacity-50' : ''}`}
-          style={{ 
-            backgroundColor: categoria?.cor_hex ? `${categoria.cor_hex}20` : '#f3f4f6',
-            color: categoria?.cor_hex || '#374151'
-          }}
-        >
-          {categoria?.nome_pt || movimento.categoria}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        <span className={`text-sm font-semibold ${
+
+      <td className="px-3 py-2.5 text-right align-top whitespace-nowrap">
+        <span className={`text-sm font-semibold tabular-nums ${
           isAnulado ? 'text-gray-400 line-through' :
           isTransferencia ? 'text-blue-600' : isEntrada ? 'text-green-600' : 'text-red-600'
         }`}>
-          {isTransferencia ? '↔' : isEntrada ? '+' : '-'} 
+          {isTransferencia ? '↔' : isEntrada ? '+' : '-'}
           {movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </span>
-      </td>
-      <td className="px-3 py-2.5">
-        <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-          movimento.status === 'PAGO' ? 'bg-green-100 text-green-700' :
-          movimento.status === 'PENDENTE' ? 'bg-yellow-100 text-yellow-700' :
-          movimento.status === 'CANCELADO' ? 'bg-gray-100 text-gray-700' :
-          movimento.status === 'ANULADO' ? 'bg-red-50 text-red-600 border border-red-200' :
-          movimento.status === 'VENCIDO' ? 'bg-red-100 text-red-700' :
-          'bg-gray-100 text-gray-700'
-        }`}>
-          {movimento.status === 'PAGO' && '✓ '}
-          {movimento.status === 'ANULADO' && '✕ '}
-          {movimento.status}
-        </span>
-      </td>
-      <td className="px-3 py-2.5 text-right">
-        <div className="inline-flex items-center gap-2">
+        <div className="flex items-center justify-end gap-1.5 mt-1">
           {(movimento as any).foto_url && (
             <BotaoVerComprovante onClick={() => onVerComprovante?.((movimento as any).foto_url)} />
           )}
@@ -526,9 +317,9 @@ function LinhaExtrato({
             <button
               onClick={() => onAnular?.(movimento)}
               title="Anular movimentação"
-              className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md transition-colors"
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
             >
-              <Ban className="w-3.5 h-3.5" />
+              <Ban className="w-3 h-3" />
               Anular
             </button>
           )}
@@ -635,7 +426,6 @@ export default function FinanceiroPage() {
   const rotaId = localizacao?.rota_id;
   const rotaNome = localizacao?.rota?.nome;
 
-  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>('resumo');
   const [modalEscolhaTransacao, setModalEscolhaTransacao] = useState(false);
   const [filtroResumo, setFiltroResumo] = useState<FiltroData>({
     tipo: 'hoje',
@@ -854,17 +644,17 @@ export default function FinanceiroPage() {
   }, [modoFiltroTemporal, rotaId, dataLiquidacao]);
 
   useEffect(() => {
-    if (empresaId && abaAtiva === 'resumo') {
+    if (empresaId) {
       carregarResumo();
       carregarGrafico();
     }
-  }, [empresaId, abaAtiva, filtroResumo, rotaId, carregarResumo, carregarGrafico]);
+  }, [empresaId, filtroResumo, rotaId, carregarResumo, carregarGrafico]);
 
   useEffect(() => {
-    if (empresaId && abaAtiva === 'extrato') {
+    if (empresaId) {
       carregarExtrato();
     }
-  }, [empresaId, abaAtiva, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
+  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
 
   const handleAnularMovimentacao = async (movimento: MovimentoFinanceiro) => {
     if (!podeAnular) return;
@@ -1009,8 +799,8 @@ export default function FinanceiroPage() {
   const modoRota = saldos.modo === 'rota' || !!rotaId;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">
+      <div className="flex items-center justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
           {modoRota && rotaNome && (
@@ -1021,401 +811,321 @@ export default function FinanceiroPage() {
           )}
         </div>
 
-        <button
-          onClick={() => setModalEscolhaTransacao(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors"
-        >
-          <Plus className="w-5 h-5" />
-          Adicionar transação
-        </button>
-      </div>
-
-      <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
-        <button
-          onClick={() => setAbaAtiva('resumo')}
-          className={`flex items-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-            abaAtiva === 'resumo'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
-          }`}
-        >
-          <Wallet className="w-4 h-4" />
-          Resumo
-        </button>
-        <button
-          onClick={() => setAbaAtiva('extrato')}
-          className={`flex items-center gap-2 px-6 py-2.5 text-sm font-semibold rounded-lg transition-all ${
-            abaAtiva === 'extrato'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
-          }`}
-        >
-          <FileText className="w-4 h-4" />
-          Extrato Detalhado
-        </button>
-      </div>
-
-      {abaAtiva === 'resumo' && (
-        <div className="space-y-4">
-          {/* Filtro de período */}
-          <div className="flex items-center justify-end">
-            <FiltroPeriodo filtro={filtroResumo} onChange={setFiltroResumo} />
-          </div>
-
-          {/* Saldos das contas */}
-          <div>
-            <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Saldos das Contas</h2>
-
-            {modoRota ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <CardIndicador
-                  titulo="Saldo Rota"
-                  valor={saldos.saldo_rotas}
-                  icone={MapPin}
-                  corIcone="text-emerald-600"
-                  corFundo="bg-emerald-100"
-                  loading={loadingSaldos}
-                  subtitulo={rotaNome}
-                  onAjustar={() => setModalAjuste(true)}
-                />
-                <CardIndicador
-                  titulo="Microseguros"
-                  valor={saldos.saldo_microseguros}
-                  icone={Shield}
-                  corIcone="text-amber-600"
-                  corFundo="bg-amber-100"
-                  loading={loadingSaldos}
-                />
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                <CardIndicador
-                  titulo="Total Consolidado"
-                  valor={saldos.total_consolidado}
-                  icone={Wallet}
-                  corIcone="text-indigo-600"
-                  corFundo="bg-indigo-100"
-                  loading={loadingSaldos}
-                />
-                <CardIndicador
-                  titulo="Empresa"
-                  valor={saldos.saldo_empresa}
-                  icone={Building2}
-                  corIcone="text-blue-600"
-                  corFundo="bg-blue-100"
-                  loading={loadingSaldos}
-                  onAjustar={() => setModalAjuste(true)}
-                />
-                <CardRotasDetalhado
-                  titulo="Rotas"
-                  icone={MapPin}
-                  corIcone="text-emerald-600"
-                  corFundo="bg-emerald-100"
-                  totalValor={saldos.saldo_rotas}
-                  itens={rotasItens}
-                  loading={loadingSaldos}
-                  onVerTodas={rotasItens.length > 2 ? () => setModalVerRotas(true) : undefined}
-                  labelItem="rota"
-                />
-                <CardRotasDetalhado
-                  titulo="Microseguros"
-                  icone={Shield}
-                  corIcone="text-amber-600"
-                  corFundo="bg-amber-100"
-                  totalValor={saldos.saldo_microseguros}
-                  itens={microsegurosItens}
-                  loading={loadingSaldos}
-                  onVerTodas={microsegurosItens.length > 2 ? () => setModalVerMicroseguros(true) : undefined}
-                  labelItem="microseguro"
-                />
-              </div>
-            )}
-          </div>
-
-          {/* Movimentações do período: números em linha + gráfico compacto */}
-          <div>
-            <h2 className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2">Movimentações do Período</h2>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              {/* Entradas / Saídas / Resultado */}
-              <div className="lg:col-span-1 grid grid-cols-3 lg:grid-cols-1 gap-3">
-                <div className="bg-white rounded-xl border border-gray-200 border-l-4 border-l-green-500 p-3">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                    <TrendingUp className="w-3.5 h-3.5 text-green-600" />
-                    Entradas
-                  </div>
-                  <p className="mt-1 text-xl font-bold text-green-600 leading-tight">
-                    {loadingResumo ? '—' : resumo.total_entradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
-                  <p className="text-[11px] text-gray-400">{resumo.qtd_entradas} transações</p>
-                </div>
-
-                <div className="bg-white rounded-xl border border-gray-200 border-l-4 border-l-red-500 p-3">
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                    <TrendingDown className="w-3.5 h-3.5 text-red-600" />
-                    Saídas
-                  </div>
-                  <p className="mt-1 text-xl font-bold text-red-600 leading-tight">
-                    {loadingResumo ? '—' : resumo.total_saidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
-                  <p className="text-[11px] text-gray-400">{resumo.qtd_saidas} transações</p>
-                </div>
-
-                <div className={`bg-white rounded-xl border border-gray-200 border-l-4 p-3 ${resumo.saldo_periodo >= 0 ? 'border-l-blue-500' : 'border-l-orange-500'}`}>
-                  <div className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 uppercase tracking-wide">
-                    <Wallet className={`w-3.5 h-3.5 ${resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-orange-600'}`} />
-                    Resultado
-                  </div>
-                  <p className={`mt-1 text-xl font-bold leading-tight ${resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                    {loadingResumo ? '—' : resumo.saldo_periodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
-                  <p className="text-[11px] text-gray-400">{resumo.qtd_total} no período</p>
-                </div>
-              </div>
-
-              {/* Gráfico */}
-              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-sm font-semibold text-gray-700">Entradas vs Saídas</h3>
-                  <div className="flex items-center gap-3 text-[11px] text-gray-500">
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-sm bg-green-500" /> Entradas
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <span className="w-2 h-2 rounded-sm bg-red-500" /> Saídas
-                    </span>
-                  </div>
-                </div>
-                <div className="h-44">
-                  {loadingGrafico ? (
-                    <div className="h-full flex items-center justify-center">
-                      <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                    </div>
-                  ) : dadosGrafico.length === 0 ? (
-                    <div className="h-full flex items-center justify-center text-sm text-gray-400">
-                      Sem dados para o período
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={dadosGrafico} barGap={4}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                        <XAxis dataKey="data_formatada" tick={{ fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-                        <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                        <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px' }} />
-                        <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                        <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
+        <div className="flex items-center gap-3">
+          <FiltroPeriodo
+            filtro={filtroResumo}
+            onChange={(f) => { setFiltroResumo(f); setFiltroExtrato(f); }}
+          />
+          <button
+            onClick={() => setModalEscolhaTransacao(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors whitespace-nowrap"
+          >
+            <Plus className="w-5 h-5" />
+            Adicionar transação
+          </button>
         </div>
-      )}
+      </div>
 
-      {abaAtiva === 'extrato' && (
-        <div className="space-y-4">
-          {/* Filtros Temporais - Toggle entre Período e Liquidação */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-              {/* Toggle Modo */}
-              <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_34%] gap-3 min-h-0">
+
+        {/* COLUNA ESQUERDA — LANÇAMENTOS (detalhe) */}
+        <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0 space-y-2">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">Lançamentos</h3>
+              <div className="relative flex-1 max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  value={buscaExtrato}
+                  onChange={(e) => setBuscaExtrato(e.target.value)}
+                  placeholder="Buscar descrição, conta ou valor..."
+                  className="w-full pl-8 pr-3 py-1.5 rounded-md border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs"
+                />
+              </div>
+              {(buscaExtrato || tipoMovimento || contaFiltro || categoriaFiltro || statusFiltro !== 'PAGO') && (
                 <button
-                  onClick={() => { setModoFiltroTemporal('periodo'); setDataLiquidacao(''); }}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
-                    modoFiltroTemporal === 'periodo'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  onClick={() => { setBuscaExtrato(''); setTipoMovimento(''); setContaFiltro(''); setCategoriaFiltro(''); setStatusFiltro('PAGO'); }}
+                  className="ml-auto px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md text-xs flex items-center gap-1"
                 >
-                  📅 Período
+                  <X className="w-3.5 h-3.5" />
+                  Limpar
                 </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5">
+              <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
                 <button
-                  onClick={() => setModoFiltroTemporal('liquidacao')}
-                  className={`px-4 py-2 text-sm font-medium rounded-md transition-all ${
-                    modoFiltroTemporal === 'liquidacao'
-                      ? 'bg-white text-gray-900 shadow-sm'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  📋 Liquidação
-                </button>
+                  onClick={() => setTipoMovimento('')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === '' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >Tudo</button>
+                <button
+                  onClick={() => setTipoMovimento('ENTRADA')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === 'ENTRADA' ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >Entradas</button>
+                <button
+                  onClick={() => setTipoMovimento('SAIDA')}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === 'SAIDA' ? 'bg-red-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                >Saídas</button>
               </div>
 
-              {/* Controles do Modo Selecionado */}
-              {modoFiltroTemporal === 'periodo' ? (
-                <FiltroPeriodo filtro={filtroExtrato} onChange={setFiltroExtrato} />
-              ) : (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-gray-600">Data da liquidação:</span>
-                  {loadingUltimaLiquidacao ? (
-                    <div className="flex items-center gap-2 text-gray-500">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span className="text-sm">Buscando...</span>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                        <input
-                          type="date"
-                          value={dataLiquidacao}
-                          onChange={(e) => setDataLiquidacao(e.target.value)}
-                          className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white min-w-[180px]"
-                        />
-                      </div>
-                      {dataLiquidacao && (
-                        <span className="text-sm text-blue-600 font-medium">
-                          {new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: 'short' })}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
+              <select
+                value={statusFiltro}
+                onChange={(e) => setStatusFiltro(e.target.value)}
+                className="px-2 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              >
+                <option value="PAGO">Pagos</option>
+                <option value="PENDENTE">Pendentes</option>
+                <option value="ANULADO">Anulados</option>
+                <option value="TODOS">Todos os status</option>
+              </select>
+
+              <select
+                value={contaFiltro}
+                onChange={(e) => setContaFiltro(e.target.value)}
+                className="px-2 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[150px]"
+              >
+                <option value="">Todas as contas</option>
+                <optgroup label="Empresa">
+                  {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                </optgroup>
+                <optgroup label="Rotas">
+                  {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                </optgroup>
+                <optgroup label="Microseguros">
+                  {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
+                </optgroup>
+              </select>
+
+              <select
+                value={categoriaFiltro}
+                onChange={(e) => setCategoriaFiltro(e.target.value)}
+                className="px-2 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[150px]"
+              >
+                <option value="">Todas as categorias</option>
+                {categorias.map(c => (<option key={c.id} value={c.codigo}>{c.nome_pt}</option>))}
+              </select>
+
+              <button
+                onClick={() => { setModoFiltroTemporal(modoFiltroTemporal === 'periodo' ? 'liquidacao' : 'periodo'); if (modoFiltroTemporal === 'liquidacao') setDataLiquidacao(''); }}
+                title={modoFiltroTemporal === 'periodo' ? 'Filtrando por período — clique para filtrar por liquidação' : 'Filtrando por liquidação — clique para filtrar por período'}
+                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-colors ${
+                  modoFiltroTemporal === 'liquidacao' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                {modoFiltroTemporal === 'liquidacao' ? 'Por liquidação' : 'Por período'}
+              </button>
+
+              {modoFiltroTemporal === 'liquidacao' && (
+                loadingUltimaLiquidacao ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                ) : (
+                  <input
+                    type="date"
+                    value={dataLiquidacao}
+                    onChange={(e) => setDataLiquidacao(e.target.value)}
+                    className="px-2 py-1 rounded-md border border-gray-300 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                )
               )}
             </div>
           </div>
 
-          {/* Filtros Adicionais */}
-          <div className="flex flex-col lg:flex-row lg:items-center gap-3">
-            {/* Busca */}
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={buscaExtrato}
-                onChange={(e) => setBuscaExtrato(e.target.value)}
-                placeholder="Buscar por descrição, observação, conta ou valor..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-            
-            {/* Tipo Movimento */}
-            <div className="relative">
-              <select 
-                value={tipoMovimento} 
-                onChange={(e) => setTipoMovimento(e.target.value)} 
-                className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              >
-                <option value="">Entradas e Saídas</option>
-                <option value="ENTRADA">📥 Entradas</option>
-                <option value="SAIDA">📤 Saídas</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-            </div>
+          <div className="flex-1 overflow-y-auto min-h-0">
+            <table className="w-full">
+              <tbody className="divide-y divide-gray-100">
+                {loadingExtrato ? (
+                  <tr><td colSpan={3} className="px-4 py-12 text-center"><Loader2 className="w-7 h-7 animate-spin text-gray-400 mx-auto" /></td></tr>
+                ) : movimentosFiltrados.length > 0 ? (
+                  movimentosFiltrados.map(m => (
+                    <LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} onVerComprovante={(url) => setComprovante(url)} />
+                  ))
+                ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
+                  <tr><td colSpan={3} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <Calendar className="w-10 h-10 text-blue-300 mb-2" />
+                      <p className="text-gray-600 text-sm font-medium">Selecione uma data de liquidação</p>
+                    </div>
+                  </td></tr>
+                ) : (
+                  <tr><td colSpan={3} className="px-4 py-12 text-center">
+                    <div className="flex flex-col items-center">
+                      <FileText className="w-10 h-10 text-gray-300 mb-2" />
+                      <p className="text-gray-500 text-sm">Nenhuma movimentação encontrada</p>
+                    </div>
+                  </td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
 
-            {/* Status */}
-            <div className="relative">
-              <select 
-                value={statusFiltro} 
-                onChange={(e) => setStatusFiltro(e.target.value)} 
-                className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              >
-                <option value="PAGO">✓ Pagos</option>
-                <option value="PENDENTE">⏳ Pendentes</option>
-                <option value="ANULADO">✕ Anulados</option>
-                <option value="TODOS">📋 Todos os Status</option>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+          <div className="bg-gray-50 border-t border-gray-200 px-3 py-2 flex-shrink-0 flex flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-gray-600">{movimentosFiltrados.length} registro(s)</span>
+            <div className="flex items-center gap-4 text-xs">
+              <span className="text-green-600 font-semibold tabular-nums">
+                entradas {totalEntradasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
+              <span className="text-red-600 font-semibold tabular-nums">
+                saídas {totalSaidasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </span>
             </div>
+          </div>
+        </div>
 
-            {/* Conta */}
-            <div className="relative">
-              <select value={contaFiltro} onChange={(e) => setContaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                <option value="">Todas as Contas</option>
-                <optgroup label="🏢 Empresa">
-                  {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                </optgroup>
-                <optgroup label="🛣️ Rotas">
-                  {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                </optgroup>
-                <optgroup label="🛡️ Microseguros">
-                  {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                </optgroup>
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+        {/* COLUNA DIREITA — SALDOS + RESULTADO (resumo) */}
+        <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
+            <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
+              <Wallet className="w-3.5 h-3.5 text-blue-600" />
             </div>
+            <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Saldos</h3>
+          </div>
 
-            {/* Categoria */}
-            <div className="relative">
-              <select value={categoriaFiltro} onChange={(e) => setCategoriaFiltro(e.target.value)} className="appearance-none pl-4 pr-10 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 cursor-pointer">
-                <option value="">Todas as Categorias</option>
-                {categorias.map(c => (<option key={c.id} value={c.codigo}>{c.nome_pt}</option>))}
-              </select>
-              <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
-            </div>
+          <div className="divide-y divide-gray-100 flex-shrink-0">
+            {loadingSaldos ? (
+              <div className="p-3 space-y-2">
+                <div className="h-8 bg-gray-100 animate-pulse rounded" />
+                <div className="h-8 bg-gray-100 animate-pulse rounded" />
+              </div>
+            ) : (
+              <>
+                {!modoRota && (
+                  <button
+                    onClick={() => setModalAjuste(true)}
+                    className="w-full px-3 py-2.5 hover:bg-blue-50/50 transition-colors flex items-center gap-2 text-left"
+                  >
+                    <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center flex-shrink-0">
+                      <Building2 className="w-3.5 h-3.5 text-blue-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] text-gray-500 uppercase font-semibold">Empresa</p>
+                    </div>
+                    <span className={`text-sm font-bold tabular-nums ${saldos.saldo_empresa < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {saldos.saldo_empresa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </button>
+                )}
 
-            {/* Limpar */}
-            {(buscaExtrato || tipoMovimento || contaFiltro || categoriaFiltro || statusFiltro !== 'PAGO') && (
-              <button
-                onClick={() => {
-                  setBuscaExtrato('');
-                  setTipoMovimento('');
-                  setContaFiltro('');
-                  setCategoriaFiltro('');
-                  setStatusFiltro('PAGO');
-                }}
-                className="px-3 py-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg text-sm flex items-center gap-1"
-              >
-                <X className="w-4 h-4" />
-                Limpar
-              </button>
+                {(modoRota ? [{ nome: rotaNome || 'Rota', valor: saldos.saldo_rotas }] : rotasItens).slice(0, modoRota ? 1 : 3).map((r, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setModalAjuste(true)}
+                    className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left"
+                  >
+                    <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center flex-shrink-0">
+                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[10px] text-gray-500 uppercase font-semibold truncate">{r.nome}</p>
+                      <p className="text-[10px] text-gray-400">ajustar saldo</p>
+                    </div>
+                    <span className={`text-sm font-bold tabular-nums ${r.valor < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {r.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                    <ChevronRight className="w-4 h-4 text-gray-300" />
+                  </button>
+                ))}
+
+                {!modoRota && rotasItens.length > 3 && (
+                  <button
+                    onClick={() => setModalVerRotas(true)}
+                    className="w-full px-3 py-1.5 text-[11px] text-blue-600 hover:bg-blue-50/50 font-medium text-left"
+                  >
+                    ver todas as {rotasItens.length} rotas
+                  </button>
+                )}
+
+                <button
+                  onClick={() => modoRota ? undefined : setModalVerMicroseguros(true)}
+                  className="w-full px-3 py-2.5 hover:bg-amber-50/50 transition-colors flex items-center gap-2 text-left"
+                >
+                  <div className="w-7 h-7 bg-amber-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-3.5 h-3.5 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Microseguros</p>
+                  </div>
+                  <span className={`text-sm font-bold tabular-nums ${saldos.saldo_microseguros < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                    {saldos.saldo_microseguros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </span>
+                  {!modoRota && <ChevronRight className="w-4 h-4 text-gray-300" />}
+                </button>
+
+                {!modoRota && (
+                  <div className="px-3 py-2.5 bg-gray-50/60 flex items-center gap-2">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold flex-1">Total consolidado</p>
+                    <span className={`text-base font-bold tabular-nums ${saldos.total_consolidado < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                      {saldos.total_consolidado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-28">Data</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Descrição</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-40">Categoria</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-32">Valor</th>
-                    <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider w-24">Status</th>
-                    <th className="px-3 py-2.5 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider w-40"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {loadingExtrato ? (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center"><Loader2 className="w-8 h-8 animate-spin text-gray-400 mx-auto" /></td></tr>
-                  ) : movimentosFiltrados.length > 0 ? (
-                    movimentosFiltrados.map(m => (<LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} onVerComprovante={(url) => setComprovante(url)} />))
-                  ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center">
-                      <div className="flex flex-col items-center">
-                        <Calendar className="w-12 h-12 text-blue-300 mb-3" />
-                        <p className="text-gray-600 font-medium">Selecione uma data de liquidação</p>
-                        <p className="text-gray-400 text-sm mt-1">Escolha a data para ver os lançamentos</p>
-                      </div>
-                    </td></tr>
-                  ) : (
-                    <tr><td colSpan={6} className="px-4 py-12 text-center">
-                      <div className="flex flex-col items-center">
-                        <FileText className="w-12 h-12 text-gray-300 mb-3" />
-                        <p className="text-gray-500">Nenhuma movimentação encontrada</p>
-                      </div>
-                    </td></tr>
-                  )}
-                </tbody>
-              </table>
+          <div className="px-3 py-2.5 border-t border-gray-200 flex items-center gap-2 flex-shrink-0">
+            <div className="w-7 h-7 bg-indigo-50 rounded-md flex items-center justify-center">
+              <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
             </div>
-            
-            {movimentosFiltrados.length > 0 && (
-              <div className="bg-gray-50 border-t border-gray-200 px-4 py-3">
-                <div className="flex flex-wrap items-center justify-between gap-4 text-sm">
-                  <span className="text-gray-600">{movimentosFiltrados.length} registros</span>
-                  <div className="flex items-center gap-6">
-                    <span className="text-green-600 font-medium">Entradas: {totalEntradasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                    <span className="text-red-600 font-medium">Saídas: {totalSaidasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
-                  </div>
-                </div>
+            <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Resultado do período</h3>
+          </div>
+
+          <div className="px-3 pb-3 flex-shrink-0">
+            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 rounded-full transition-all"
+                style={{ width: `${resumo.total_entradas + resumo.total_saidas > 0 ? Math.round((resumo.total_entradas / (resumo.total_entradas + resumo.total_saidas)) * 100) : 0}%` }}
+              />
+            </div>
+            <div className="mt-2 space-y-1 text-xs">
+              <div className="flex justify-between">
+                <span className="text-gray-500">entradas · {resumo.qtd_entradas}</span>
+                <span className="font-semibold text-green-600 tabular-nums">
+                  {resumo.total_entradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-gray-500">saídas · {resumo.qtd_saidas}</span>
+                <span className="font-semibold text-red-600 tabular-nums">
+                  {resumo.total_saidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+              <div className="flex justify-between pt-1.5 border-t border-gray-100">
+                <span className="text-gray-500">resultado</span>
+                <span className={`font-bold tabular-nums ${resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
+                  {resumo.saldo_periodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="px-3 pb-3 flex-1 min-h-[110px]">
+            {loadingGrafico ? (
+              <div className="h-full flex items-center justify-center">
+                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              </div>
+            ) : dadosGrafico.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-xs text-gray-400">
+                Sem dados no período
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height="100%" minHeight={110}>
+                <BarChart data={dadosGrafico} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="data_formatada" tick={{ fontSize: 9 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
+                  <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} width={32} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }} />
+                  <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             )}
           </div>
         </div>
-      )}
+      </div>
 
       {/* Pré-modal: escolher tipo de transação */}
       {modalEscolhaTransacao && (
