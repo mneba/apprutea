@@ -752,6 +752,35 @@ export default function FinanceiroPage() {
   const contaSelecionada = contas.find((c) => c.id === contaFiltro) || null;
   const nomeContaSelecionada = contaSelecionada?.nome || (modoRota && rotaNome ? rotaNome : 'Todas as contas');
 
+  // A conta selecionada permite ver por liquidação? (só ROTA tem liquidação)
+  // "Todas as contas" mantém habilitado (usa a rota do contexto).
+  const contaPermiteLiquidacao = !contaSelecionada || contaSelecionada.tipo_conta === 'ROTA';
+
+  // Troca de conta com regras de liquidação:
+  //  - se estava em modo liquidação e a nova conta É de rota -> abre o calendário
+  //    para escolher a liquidação da nova rota (cancelar cai para período)
+  //  - se a nova conta NÃO tem liquidação (empresa/microseguro) -> cai para período
+  const handleTrocarConta = (conta: any | null) => {
+    setContaFiltro(conta?.id || '');
+    setSeletorContaAberto(false);
+
+    const novaPermiteLiq = !conta || conta.tipo_conta === 'ROTA';
+
+    if (modoFiltroTemporal === 'liquidacao') {
+      if (novaPermiteLiq) {
+        // abre o calendário para escolher a liquidação da nova conta;
+        // limpa a data antiga (era de outra rota) para que cancelar caia em período
+        setDataLiquidacao('');
+        setDataTempCalendario(null);
+        setCalendarioAberto(true);
+      } else {
+        // empresa/microseguro não têm liquidação -> período
+        setModoFiltroTemporal('periodo');
+        setDataLiquidacao('');
+      }
+    }
+  };
+
   // Categorias que têm lançamento na tela, com contagem — para o dropdown "Categoria"
   const categoriasComContagem = React.useMemo(() => {
     const cont: Record<string, number> = {};
@@ -790,7 +819,7 @@ export default function FinanceiroPage() {
                 <div className="fixed inset-0 z-10" onClick={() => setSeletorContaAberto(false)} />
                 <div className="absolute left-0 mt-1 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-80 overflow-y-auto">
                   <button
-                    onClick={() => { setContaFiltro(''); setSeletorContaAberto(false); }}
+                    onClick={() => handleTrocarConta(null)}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
                   >
                     <Wallet className="w-4 h-4 text-gray-400" />
@@ -801,7 +830,7 @@ export default function FinanceiroPage() {
                     <>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Empresa</p>
                       {contasAcessiveis.filter(c => c.tipo_conta === 'EMPRESA').map(c => (
-                        <button key={c.id} onClick={() => { setContaFiltro(c.id); setSeletorContaAberto(false); }}
+                        <button key={c.id} onClick={() => handleTrocarConta(c)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                           <Building2 className="w-4 h-4 text-blue-600" />
                           <span className="truncate">{c.nome}</span>
@@ -814,7 +843,7 @@ export default function FinanceiroPage() {
                     <>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Rotas</p>
                       {contasAcessiveis.filter(c => c.tipo_conta === 'ROTA').map(c => (
-                        <button key={c.id} onClick={() => { setContaFiltro(c.id); setSeletorContaAberto(false); }}
+                        <button key={c.id} onClick={() => handleTrocarConta(c)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                           <MapPin className="w-4 h-4 text-emerald-600" />
                           <span className="truncate">{c.nome}</span>
@@ -827,7 +856,7 @@ export default function FinanceiroPage() {
                     <>
                       <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Microseguros</p>
                       {contasAcessiveis.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (
-                        <button key={c.id} onClick={() => { setContaFiltro(c.id); setSeletorContaAberto(false); }}
+                        <button key={c.id} onClick={() => handleTrocarConta(c)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                           <Shield className="w-4 h-4 text-amber-600" />
                           <span className="truncate">{c.nome}</span>
@@ -858,12 +887,15 @@ export default function FinanceiroPage() {
             {/* Linha 1: título + rótulo + busca + tempo + Mais */}
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-900 flex-shrink-0">Lançamentos</h3>
-              <span className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap flex-shrink-0 ${
+                modoFiltroTemporal === 'liquidacao' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+              }`}>
+                <Calendar className="w-3 h-3" />
                 {modoFiltroTemporal === 'liquidacao'
                   ? (dataLiquidacao ? `Liquidação · ${rotuloDataLiquidacao(dataLiquidacao)}` : 'Liquidação')
-                  : (filtroExtrato.tipo === 'hoje' ? 'Hoje'
-                     : filtroExtrato.tipo === 'ontem' ? 'Ontem'
-                     : `${new Date(filtroExtrato.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} – ${new Date(filtroExtrato.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`)}
+                  : (filtroExtrato.tipo === 'hoje' ? 'Período · Hoje'
+                     : filtroExtrato.tipo === 'ontem' ? 'Período · Ontem'
+                     : `Período · ${new Date(filtroExtrato.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} – ${new Date(filtroExtrato.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`)}
               </span>
 
               <div className="relative flex-1 min-w-[120px]">
@@ -932,6 +964,7 @@ export default function FinanceiroPage() {
 
                   <button
                     onClick={() => {
+                      if (!contaPermiteLiquidacao) return;
                       // Não troca o modo ainda: só abre o calendário.
                       // O modo muda apenas ao CONFIRMAR uma data (onConfirmar).
                       if (dataLiquidacao) {
@@ -940,8 +973,13 @@ export default function FinanceiroPage() {
                       }
                       setCalendarioAberto(true);
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors bg-green-100 text-green-700 hover:bg-green-200"
-                    title="Ver por liquidação"
+                    disabled={!contaPermiteLiquidacao}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      contaPermiteLiquidacao
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                    }`}
+                    title={contaPermiteLiquidacao ? 'Ver por liquidação' : 'Esta conta não possui liquidação'}
                   >
                     <Calendar className="w-3.5 h-3.5" />
                     Ver por liquidação
@@ -1207,7 +1245,15 @@ export default function FinanceiroPage() {
       {calendarioAberto && rotaId && (
         <ModalCalendarioLiquidacao
           isOpen={calendarioAberto}
-          onClose={() => { setDataTempCalendario(null); setCalendarioAberto(false); }}
+          onClose={() => {
+            setDataTempCalendario(null);
+            setCalendarioAberto(false);
+            // Se estava em modo liquidação mas não há liquidação selecionada
+            // (ex.: trocou de conta e cancelou), volta para período.
+            if (modoFiltroTemporal === 'liquidacao' && !dataLiquidacao) {
+              setModoFiltroTemporal('periodo');
+            }
+          }}
           rotaId={rotaId}
           liquidacoesMes={liquidacoesMes}
           dataSelecionada={dataTempCalendario || (dataLiquidacao ? new Date(dataLiquidacao + 'T12:00:00') : new Date())}
