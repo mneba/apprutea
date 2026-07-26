@@ -14,6 +14,7 @@ import {
   Loader2,
   Calendar,
   ChevronDown,
+  Tag,
   ChevronRight,
   FileText,
   AlertCircle,
@@ -33,6 +34,8 @@ import {
 } from 'recharts';
 import { useUser } from '@/contexts/UserContext';
 import { financeiroService } from '@/services/financeiro';
+import { liquidacaoService } from '@/services/liquidacao';
+import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendarioLiquidacao';
 import { 
   ModalNovaMovimentacao, 
   ModalTransferencia, 
@@ -419,6 +422,19 @@ function ModalVerTodas({
 // PÁGINA PRINCIPAL
 // =====================================================
 
+function rotuloDataLiquidacao(dataStr: string): string {
+  if (!dataStr) return 'Selecionar dia';
+  const hoje = new Date();
+  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
+  const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1);
+  const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, '0')}-${String(ontem.getDate()).padStart(2, '0')}`;
+  const d = dataStr.slice(0, 10);
+  if (d === hojeStr) return 'Hoje';
+  if (d === ontemStr) return 'Ontem';
+  const [a, m, dia] = d.split('-');
+  return `${dia}/${m}/${a}`;
+}
+
 export default function FinanceiroPage() {
   const { localizacao, profile, isSuperAdmin, permissoes } = useUser();
   const podeAnular = isSuperAdmin || permissoes?.['FINANCEIRO']?.pode_eliminar === true;
@@ -439,13 +455,22 @@ export default function FinanceiroPage() {
   });
   const [contaFiltro, setContaFiltro] = useState<string>('');
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
+  const [categoriaDropdownAberto, setCategoriaDropdownAberto] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   const [buscaExtrato, setBuscaExtrato] = useState<string>('');
   const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
   const [statusFiltro, setStatusFiltro] = useState<string>('PAGO'); // '', 'PAGO', 'PENDENTE', 'ANULADO', 'TODOS'
-  const [modoFiltroTemporal, setModoFiltroTemporal] = useState<'periodo' | 'liquidacao'>('periodo');
+  const [modoFiltroTemporal, setModoFiltroTemporal] = useState<'periodo' | 'liquidacao'>('liquidacao');
   const [dataLiquidacao, setDataLiquidacao] = useState<string>(''); // YYYY-MM-DD
   const [loadingUltimaLiquidacao, setLoadingUltimaLiquidacao] = useState(false);
+  // Calendário de liquidações (reaproveita o modal da tela de Liquidação)
+  const [calendarioAberto, setCalendarioAberto] = useState(false);
+  const [liquidacoesMes, setLiquidacoesMes] = useState<any[]>([]);
+  const [loadingCalendario, setLoadingCalendario] = useState(false);
+  const [mesCalendario, setMesCalendario] = useState<{ ano: number; mes: number }>(() => {
+    const h = new Date();
+    return { ano: h.getFullYear(), mes: h.getMonth() + 1 };
+  });
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingResumo, setLoadingResumo] = useState(false);
@@ -644,6 +669,28 @@ export default function FinanceiroPage() {
     buscarUltimaLiquidacao();
   }, [modoFiltroTemporal, rotaId, dataLiquidacao]);
 
+  // Carregar liquidações do mês exibido no calendário
+  const carregarLiquidacoesMes = useCallback(async (ano: number, mes: number) => {
+    if (!rotaId) return;
+    setLoadingCalendario(true);
+    try {
+      const data = await liquidacaoService.buscarLiquidacoesMes(rotaId, ano, mes);
+      setLiquidacoesMes(data || []);
+    } catch (e) {
+      console.error('Erro ao carregar liquidações do mês:', e);
+      setLiquidacoesMes([]);
+    } finally {
+      setLoadingCalendario(false);
+    }
+  }, [rotaId]);
+
+  // Ao abrir o calendário, carrega o mês da data selecionada (ou o atual)
+  useEffect(() => {
+    if (calendarioAberto) {
+      carregarLiquidacoesMes(mesCalendario.ano, mesCalendario.mes);
+    }
+  }, [calendarioAberto, mesCalendario, carregarLiquidacoesMes]);
+
   useEffect(() => {
     if (empresaId) {
       carregarResumo();
@@ -827,6 +874,23 @@ export default function FinanceiroPage() {
   const contaSelecionada = contas.find((c) => c.id === contaFiltro) || null;
   const nomeContaSelecionada = contaSelecionada?.nome || (modoRota && rotaNome ? rotaNome : 'Todas as contas');
 
+  // Categorias que têm lançamento na tela, com contagem — para o dropdown "Categoria"
+  const categoriasComContagem = React.useMemo(() => {
+    const cont: Record<string, number> = {};
+    (movimentos || []).forEach((m: any) => {
+      const cod = m.categoria;
+      if (!cod) return;
+      cont[cod] = (cont[cod] || 0) + 1;
+    });
+    return categorias
+      .filter((c: any) => cont[c.codigo] > 0)
+      .map((c: any) => ({ codigo: c.codigo, nome: c.nome_pt, count: cont[c.codigo] }))
+      .sort((a, b) => b.count - a.count);
+  }, [movimentos, categorias]);
+
+  const nomeCategoriaSelecionada = categoriasComContagem.find(c => c.codigo === categoriaFiltro)?.nome
+    || (categoriaFiltro ? categoriaFiltro : 'Todas as categorias');
+
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">
       <div className="flex items-center justify-between flex-shrink-0">
@@ -906,10 +970,58 @@ export default function FinanceiroPage() {
             )}
           </div>
 
-          <FiltroPeriodo
-            filtro={filtroResumo}
-            onChange={(f) => { setFiltroResumo(f); setFiltroExtrato(f); }}
-          />
+          {/* Bloco de tempo agrupado: modo (Liquidação/Período) + data */}
+          <div className="bg-white border border-gray-200 rounded-xl p-1.5">
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setModoFiltroTemporal('liquidacao')}
+                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all ${
+                  modoFiltroTemporal === 'liquidacao' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Liquidação
+              </button>
+              <button
+                onClick={() => setModoFiltroTemporal('periodo')}
+                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all ${
+                  modoFiltroTemporal === 'periodo' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                Período
+              </button>
+            </div>
+
+            <div className="border-t border-gray-100 mt-1.5 pt-1.5 px-0.5">
+              {modoFiltroTemporal === 'liquidacao' ? (
+                <button
+                  onClick={() => {
+                    // abrir no mês da data já selecionada, se houver
+                    if (dataLiquidacao) {
+                      const [a, m] = dataLiquidacao.split('-');
+                      setMesCalendario({ ano: Number(a), mes: Number(m) });
+                    }
+                    setCalendarioAberto(true);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-indigo-50 transition-colors"
+                >
+                  {loadingUltimaLiquidacao ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                  ) : (
+                    <>
+                      <Calendar className="w-4 h-4 text-indigo-600" />
+                      {rotuloDataLiquidacao(dataLiquidacao)}
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                    </>
+                  )}
+                </button>
+              ) : (
+                <FiltroPeriodo
+                  filtro={filtroExtrato}
+                  onChange={(f) => { setFiltroResumo(f); setFiltroExtrato(f); }}
+                />
+              )}
+            </div>
+          </div>
           <button
             onClick={() => setModalEscolhaTransacao(true)}
             className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors whitespace-nowrap"
@@ -927,6 +1039,13 @@ export default function FinanceiroPage() {
           <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0 space-y-2">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-900">Lançamentos</h3>
+              <span className="text-[11px] text-gray-400 whitespace-nowrap">
+                {modoFiltroTemporal === 'liquidacao'
+                  ? (dataLiquidacao ? `Liquidação · ${rotuloDataLiquidacao(dataLiquidacao)}` : 'Liquidação')
+                  : (filtroExtrato.tipo === 'hoje' ? 'Hoje'
+                     : filtroExtrato.tipo === 'ontem' ? 'Ontem'
+                     : `${new Date(filtroExtrato.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} – ${new Date(filtroExtrato.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`)}
+              </span>
               <div className="relative flex-1 max-w-xs">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
@@ -937,9 +1056,50 @@ export default function FinanceiroPage() {
                   className="w-full pl-8 pr-3 py-1.5 rounded-md border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs"
                 />
               </div>
-              {(buscaExtrato || tipoMovimento || contaFiltro || categoriaFiltro || statusFiltro !== 'PAGO') && (
+
+              {/* Categoria — no mesmo nível da busca, só categorias com lançamento + contador */}
+              <div className="relative">
                 <button
-                  onClick={() => { setBuscaExtrato(''); setTipoMovimento(''); setContaFiltro(''); setCategoriaFiltro(''); setStatusFiltro('PAGO'); }}
+                  onClick={() => setCategoriaDropdownAberto((v) => !v)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+                    categoriaFiltro ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span className="truncate max-w-[120px]">{nomeCategoriaSelecionada}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                </button>
+                {categoriaDropdownAberto && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setCategoriaDropdownAberto(false)} />
+                    <div className="absolute left-0 mt-1 z-20 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
+                      <button
+                        onClick={() => { setCategoriaFiltro(''); setCategoriaDropdownAberto(false); }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                      >
+                        Todas as categorias
+                        <span className="text-gray-400">{movimentos.length}</span>
+                      </button>
+                      {categoriasComContagem.length === 0 ? (
+                        <p className="px-3 py-2 text-xs text-gray-400">Nenhuma categoria nesta tela</p>
+                      ) : categoriasComContagem.map((c) => (
+                        <button
+                          key={c.codigo}
+                          onClick={() => { setCategoriaFiltro(c.codigo); setCategoriaDropdownAberto(false); }}
+                          className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === c.codigo ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                        >
+                          <span className="truncate">{c.nome}</span>
+                          <span className="text-gray-400 ml-2">({c.count})</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {(buscaExtrato || tipoMovimento || categoriaFiltro || statusFiltro !== 'PAGO') && (
+                <button
+                  onClick={() => { setBuscaExtrato(''); setTipoMovimento(''); setCategoriaFiltro(''); setStatusFiltro('PAGO'); }}
                   className="ml-auto px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md text-xs flex items-center gap-1"
                 >
                   <X className="w-3.5 h-3.5" />
@@ -974,56 +1134,6 @@ export default function FinanceiroPage() {
                 <option value="ANULADO">Anulados</option>
                 <option value="TODOS">Todos os status</option>
               </select>
-
-              <select
-                value={contaFiltro}
-                onChange={(e) => setContaFiltro(e.target.value)}
-                className="px-2 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[150px]"
-              >
-                <option value="">Todas as contas</option>
-                <optgroup label="Empresa">
-                  {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                </optgroup>
-                <optgroup label="Rotas">
-                  {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                </optgroup>
-                <optgroup label="Microseguros">
-                  {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (<option key={c.id} value={c.id}>{c.nome}</option>))}
-                </optgroup>
-              </select>
-
-              <select
-                value={categoriaFiltro}
-                onChange={(e) => setCategoriaFiltro(e.target.value)}
-                className="px-2 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer max-w-[150px]"
-              >
-                <option value="">Todas as categorias</option>
-                {categorias.map(c => (<option key={c.id} value={c.codigo}>{c.nome_pt}</option>))}
-              </select>
-
-              <button
-                onClick={() => { setModoFiltroTemporal(modoFiltroTemporal === 'periodo' ? 'liquidacao' : 'periodo'); if (modoFiltroTemporal === 'liquidacao') setDataLiquidacao(''); }}
-                title={modoFiltroTemporal === 'periodo' ? 'Filtrando por período — clique para filtrar por liquidação' : 'Filtrando por liquidação — clique para filtrar por período'}
-                className={`flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold transition-colors ${
-                  modoFiltroTemporal === 'liquidacao' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                {modoFiltroTemporal === 'liquidacao' ? 'Por liquidação' : 'Por período'}
-              </button>
-
-              {modoFiltroTemporal === 'liquidacao' && (
-                loadingUltimaLiquidacao ? (
-                  <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                ) : (
-                  <input
-                    type="date"
-                    value={dataLiquidacao}
-                    onChange={(e) => setDataLiquidacao(e.target.value)}
-                    className="px-2 py-1 rounded-md border border-gray-300 text-xs focus:ring-2 focus:ring-blue-500 bg-white"
-                  />
-                )
-              )}
             </div>
           </div>
 
@@ -1244,6 +1354,28 @@ export default function FinanceiroPage() {
           </div>
         </div>
       </div>
+
+      {/* Calendário de seleção de dia de liquidação */}
+      {calendarioAberto && rotaId && (
+        <ModalCalendarioLiquidacao
+          isOpen={calendarioAberto}
+          onClose={() => setCalendarioAberto(false)}
+          rotaId={rotaId}
+          liquidacoesMes={liquidacoesMes}
+          dataSelecionada={dataLiquidacao ? new Date(dataLiquidacao + 'T12:00:00') : new Date()}
+          onSelecionarData={(d) => {
+            const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            setDataLiquidacao(ymd);
+          }}
+          onMesChange={(ano, mes) => setMesCalendario({ ano, mes })}
+          onConfirmar={(d) => {
+            const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+            setDataLiquidacao(ymd);
+            setCalendarioAberto(false);
+          }}
+          loading={loadingCalendario}
+        />
+      )}
 
       {/* Pré-modal: escolher tipo de transação */}
       {modalEscolhaTransacao && (
