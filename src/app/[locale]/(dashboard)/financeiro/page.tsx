@@ -6,7 +6,6 @@ import {
   Building2, 
   MapPin, 
   Shield,
-  TrendingUp,
   TrendingDown,
   ArrowRightLeft,
   Plus,
@@ -26,13 +25,6 @@ import {
   Ban
 } from 'lucide-react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer
 } from 'recharts';
 import { useUser } from '@/contexts/UserContext';
 import { financeiroService } from '@/services/financeiro';
@@ -46,8 +38,6 @@ import {
 import { LightboxImagem, BotaoVerComprovante } from '@/components/liquidacao/CardsFinanceiros';
 import type {
   SaldosContas,
-  ResumoMovimentacoes,
-  DadosGrafico,
   MovimentoFinanceiro,
   CategoriaFinanceira,
   ContaComDetalhes,
@@ -417,8 +407,6 @@ export default function FinanceiroPage() {
   const [dataTempCalendario, setDataTempCalendario] = useState<Date | null>(null);
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
-  const [loadingResumo, setLoadingResumo] = useState(false);
-  const [loadingGrafico, setLoadingGrafico] = useState(false);
   const [loadingExtrato, setLoadingExtrato] = useState(false);
   const [loadingContas, setLoadingContas] = useState(false);
   
@@ -438,15 +426,6 @@ export default function FinanceiroPage() {
     rotas_detalhe: [],
     microseguros_detalhe: [],
   });
-  const [resumo, setResumo] = useState<ResumoMovimentacoes>({
-    total_entradas: 0,
-    total_saidas: 0,
-    saldo_periodo: 0,
-    qtd_entradas: 0,
-    qtd_saidas: 0,
-    qtd_total: 0,
-  });
-  const [dadosGrafico, setDadosGrafico] = useState<DadosGrafico[]>([]);
   const [movimentos, setMovimentos] = useState<MovimentoFinanceiro[]>([]);
   const [contas, setContas] = useState<ContaComDetalhes[]>([]);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
@@ -464,49 +443,6 @@ export default function FinanceiroPage() {
       setLoadingSaldos(false);
     }
   }, [empresaId, rotaId]);
-
-  const carregarResumo = useCallback(async () => {
-    if (!empresaId) return;
-    // No modo liquidação, o "período" é o dia único da liquidação
-    if (modoFiltroTemporal === 'liquidacao' && !dataLiquidacao) { setResumo({ total_entradas: 0, total_saidas: 0, saldo_periodo: 0, qtd_entradas: 0, qtd_saidas: 0, qtd_total: 0 } as any); return; }
-    setLoadingResumo(true);
-    try {
-      const usaLiq = modoFiltroTemporal === 'liquidacao';
-      const data = await financeiroService.buscarResumoMovimentacoes(
-        empresaId,
-        usaLiq ? undefined : (filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo),
-        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined),
-        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined),
-        rotaId
-      );
-      setResumo(data);
-    } catch (error) {
-      console.error('Erro ao carregar resumo:', error);
-    } finally {
-      setLoadingResumo(false);
-    }
-  }, [empresaId, filtroResumo, rotaId, modoFiltroTemporal, dataLiquidacao]);
-
-  const carregarGrafico = useCallback(async () => {
-    if (!empresaId) return;
-    if (modoFiltroTemporal === 'liquidacao' && !dataLiquidacao) { setDadosGrafico([]); return; }
-    setLoadingGrafico(true);
-    try {
-      const usaLiq = modoFiltroTemporal === 'liquidacao';
-      const data = await financeiroService.buscarDadosGrafico(
-        empresaId,
-        usaLiq ? undefined : (filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo),
-        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined),
-        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined),
-        rotaId
-      );
-      setDadosGrafico(data);
-    } catch (error) {
-      console.error('Erro ao carregar gráfico:', error);
-    } finally {
-      setLoadingGrafico(false);
-    }
-  }, [empresaId, filtroResumo, rotaId, modoFiltroTemporal, dataLiquidacao]);
 
   const carregarContas = useCallback(async () => {
     if (!empresaId) return;
@@ -642,13 +578,6 @@ export default function FinanceiroPage() {
 
   useEffect(() => {
     if (empresaId) {
-      carregarResumo();
-      carregarGrafico();
-    }
-  }, [empresaId, filtroResumo, rotaId, modoFiltroTemporal, dataLiquidacao, carregarResumo, carregarGrafico]);
-
-  useEffect(() => {
-    if (empresaId) {
       carregarExtrato();
     }
   }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
@@ -667,7 +596,7 @@ export default function FinanceiroPage() {
 
     try {
       await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
-      await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
+      await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
     } catch (e) {
       console.error('Erro ao anular movimentação:', e);
       alert('Erro ao anular a movimentação. Tente novamente.');
@@ -683,7 +612,7 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
+    await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
   };
 
   const handleSalvarTransferencia = async (dados: any) => {
@@ -695,7 +624,7 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
+    await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
   };
 
   const handleSalvarAjuste = async (dados: any) => {
@@ -707,7 +636,7 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    await Promise.all([carregarSaldos(), carregarContas(), carregarResumo(), carregarExtrato()]);
+    await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
   };
 
   if (!empresaId) {
@@ -1156,8 +1085,8 @@ export default function FinanceiroPage() {
           </div>
         </div>
 
-        {/* COLUNA DIREITA — SALDOS + RESULTADO (resumo) */}
-        <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
+        {/* COLUNA DIREITA — SALDOS */}
+        <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden self-start">
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
             <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
               <Wallet className="w-3.5 h-3.5 text-blue-600" />
@@ -1269,65 +1198,6 @@ export default function FinanceiroPage() {
                   </div>
                 )}
               </>
-            )}
-          </div>
-
-          <div className="px-3 py-2.5 border-t border-gray-200 flex items-center gap-2 flex-shrink-0">
-            <div className="w-7 h-7 bg-indigo-50 rounded-md flex items-center justify-center">
-              <TrendingUp className="w-3.5 h-3.5 text-indigo-600" />
-            </div>
-            <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Resultado do período</h3>
-          </div>
-
-          <div className="px-3 pb-3 flex-shrink-0">
-            <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-green-500 rounded-full transition-all"
-                style={{ width: `${resumo.total_entradas + resumo.total_saidas > 0 ? Math.round((resumo.total_entradas / (resumo.total_entradas + resumo.total_saidas)) * 100) : 0}%` }}
-              />
-            </div>
-            <div className="mt-2 space-y-1 text-xs">
-              <div className="flex justify-between">
-                <span className="text-gray-500">entradas · {resumo.qtd_entradas}</span>
-                <span className="font-semibold text-green-600 tabular-nums">
-                  {resumo.total_entradas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-500">saídas · {resumo.qtd_saidas}</span>
-                <span className="font-semibold text-red-600 tabular-nums">
-                  {resumo.total_saidas.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-              </div>
-              <div className="flex justify-between pt-1.5 border-t border-gray-100">
-                <span className="text-gray-500">resultado</span>
-                <span className={`font-bold tabular-nums ${resumo.saldo_periodo >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>
-                  {resumo.saldo_periodo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-3 pb-3 flex-1 min-h-[110px]">
-            {loadingGrafico ? (
-              <div className="h-full flex items-center justify-center">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
-              </div>
-            ) : dadosGrafico.length === 0 ? (
-              <div className="h-full flex items-center justify-center text-xs text-gray-400">
-                Sem dados no período
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%" minHeight={110}>
-                <BarChart data={dadosGrafico} barGap={2}>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                  <XAxis dataKey="data_formatada" tick={{ fontSize: 9 }} tickLine={false} axisLine={{ stroke: '#e5e7eb' }} />
-                  <YAxis tick={{ fontSize: 9 }} tickLine={false} axisLine={false} width={32} tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(value: number) => value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '12px' }} />
-                  <Bar dataKey="entradas" name="Entradas" fill="#22c55e" radius={[3, 3, 0, 0]} />
-                  <Bar dataKey="saidas" name="Saídas" fill="#ef4444" radius={[3, 3, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
             )}
           </div>
         </div>
