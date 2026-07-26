@@ -413,6 +413,8 @@ export default function FinanceiroPage() {
     const h = new Date();
     return { ano: h.getFullYear(), mes: h.getMonth() + 1 };
   });
+  // Data temporária enquanto o calendário está aberto (só comita no "Selecionar")
+  const [dataTempCalendario, setDataTempCalendario] = useState<Date | null>(null);
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingResumo, setLoadingResumo] = useState(false);
@@ -465,13 +467,16 @@ export default function FinanceiroPage() {
 
   const carregarResumo = useCallback(async () => {
     if (!empresaId) return;
+    // No modo liquidação, o "período" é o dia único da liquidação
+    if (modoFiltroTemporal === 'liquidacao' && !dataLiquidacao) { setResumo({ total_entradas: 0, total_saidas: 0, saldo_periodo: 0, qtd_entradas: 0, qtd_saidas: 0, qtd_total: 0 } as any); return; }
     setLoadingResumo(true);
     try {
+      const usaLiq = modoFiltroTemporal === 'liquidacao';
       const data = await financeiroService.buscarResumoMovimentacoes(
-        empresaId, 
-        filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined,
+        empresaId,
+        usaLiq ? undefined : (filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo),
+        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined),
+        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined),
         rotaId
       );
       setResumo(data);
@@ -480,17 +485,19 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingResumo(false);
     }
-  }, [empresaId, filtroResumo, rotaId]);
+  }, [empresaId, filtroResumo, rotaId, modoFiltroTemporal, dataLiquidacao]);
 
   const carregarGrafico = useCallback(async () => {
     if (!empresaId) return;
+    if (modoFiltroTemporal === 'liquidacao' && !dataLiquidacao) { setDadosGrafico([]); return; }
     setLoadingGrafico(true);
     try {
+      const usaLiq = modoFiltroTemporal === 'liquidacao';
       const data = await financeiroService.buscarDadosGrafico(
-        empresaId, 
-        filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined,
-        filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined,
+        empresaId,
+        usaLiq ? undefined : (filtroResumo.tipo === 'periodo' ? undefined : filtroResumo.tipo),
+        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataInicio : undefined),
+        usaLiq ? dataLiquidacao : (filtroResumo.tipo === 'periodo' ? filtroResumo.dataFim : undefined),
         rotaId
       );
       setDadosGrafico(data);
@@ -499,7 +506,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingGrafico(false);
     }
-  }, [empresaId, filtroResumo, rotaId]);
+  }, [empresaId, filtroResumo, rotaId, modoFiltroTemporal, dataLiquidacao]);
 
   const carregarContas = useCallback(async () => {
     if (!empresaId) return;
@@ -638,7 +645,7 @@ export default function FinanceiroPage() {
       carregarResumo();
       carregarGrafico();
     }
-  }, [empresaId, filtroResumo, rotaId, carregarResumo, carregarGrafico]);
+  }, [empresaId, filtroResumo, rotaId, modoFiltroTemporal, dataLiquidacao, carregarResumo, carregarGrafico]);
 
   useEffect(() => {
     if (empresaId) {
@@ -996,7 +1003,8 @@ export default function FinanceiroPage() {
 
                   <button
                     onClick={() => {
-                      setModoFiltroTemporal('liquidacao');
+                      // Não troca o modo ainda: só abre o calendário.
+                      // O modo muda apenas ao CONFIRMAR uma data (onConfirmar).
                       if (dataLiquidacao) {
                         const [a, m] = dataLiquidacao.split('-');
                         setMesCalendario({ ano: Number(a), mes: Number(m) });
@@ -1329,18 +1337,17 @@ export default function FinanceiroPage() {
       {calendarioAberto && rotaId && (
         <ModalCalendarioLiquidacao
           isOpen={calendarioAberto}
-          onClose={() => setCalendarioAberto(false)}
+          onClose={() => { setDataTempCalendario(null); setCalendarioAberto(false); }}
           rotaId={rotaId}
           liquidacoesMes={liquidacoesMes}
-          dataSelecionada={dataLiquidacao ? new Date(dataLiquidacao + 'T12:00:00') : new Date()}
-          onSelecionarData={(d) => {
-            const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-            setDataLiquidacao(ymd);
-          }}
+          dataSelecionada={dataTempCalendario || (dataLiquidacao ? new Date(dataLiquidacao + 'T12:00:00') : new Date())}
+          onSelecionarData={(d) => setDataTempCalendario(d)}
           onMesChange={(ano, mes) => setMesCalendario({ ano, mes })}
           onConfirmar={(d) => {
             const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
             setDataLiquidacao(ymd);
+            setModoFiltroTemporal('liquidacao'); // entra no modo só ao confirmar
+            setDataTempCalendario(null);
             setCalendarioAberto(false);
           }}
           loading={loadingCalendario}
