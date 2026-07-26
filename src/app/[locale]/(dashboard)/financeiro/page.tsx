@@ -14,6 +14,8 @@ import {
   Loader2,
   Calendar,
   ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
   Tag,
   ChevronRight,
   FileText,
@@ -67,122 +69,6 @@ interface FiltroData {
 // =====================================================
 // COMPONENTES AUXILIARES
 // =====================================================
-
-function FiltroPeriodo({ 
-  filtro, 
-  onChange 
-}: { 
-  filtro: FiltroData; 
-  onChange: (filtro: FiltroData) => void;
-}) {
-  const [showCalendar, setShowCalendar] = useState(false);
-  const [tempDataInicio, setTempDataInicio] = useState(filtro.dataInicio);
-  const [tempDataFim, setTempDataFim] = useState(filtro.dataFim);
-
-  const handleAplicarPeriodo = () => {
-    onChange({
-      tipo: 'periodo',
-      dataInicio: tempDataInicio,
-      dataFim: tempDataFim,
-    });
-    setShowCalendar(false);
-  };
-
-  const formatarPeriodo = () => {
-    if (filtro.tipo === 'hoje') return 'Hoje';
-    if (filtro.tipo === 'ontem') return 'Ontem';
-    if (filtro.dataInicio === filtro.dataFim) {
-      return new Date(filtro.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR');
-    }
-    return `${new Date(filtro.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} - ${new Date(filtro.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`;
-  };
-  
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-        <button
-          onClick={() => onChange({ tipo: 'hoje', dataInicio: new Date().toISOString().split('T')[0], dataFim: new Date().toISOString().split('T')[0] })}
-          className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
-            filtro.tipo === 'hoje'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
-          }`}
-        >
-          Hoje
-        </button>
-        <button
-          onClick={() => {
-            const ontem = new Date();
-            ontem.setDate(ontem.getDate() - 1);
-            const ontemStr = ontem.toISOString().split('T')[0];
-            onChange({ tipo: 'ontem', dataInicio: ontemStr, dataFim: ontemStr });
-          }}
-          className={`px-4 py-1.5 text-sm font-semibold rounded-md transition-all ${
-            filtro.tipo === 'ontem'
-              ? 'bg-blue-600 text-white shadow-sm'
-              : 'text-gray-600 hover:text-gray-900 hover:bg-white/70'
-          }`}
-        >
-          Ontem
-        </button>
-      </div>
-
-      <div className="relative">
-        <button
-          onClick={() => setShowCalendar(!showCalendar)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 font-semibold transition-all ${
-            filtro.tipo === 'periodo'
-              ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
-              : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400 hover:text-blue-700'
-          }`}
-        >
-          <Calendar className="w-4 h-4" />
-          <span className="text-sm font-medium">{formatarPeriodo()}</span>
-          <ChevronDown className="w-4 h-4" />
-        </button>
-
-        {showCalendar && (
-          <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-xl border border-gray-200 p-4 z-50 min-w-[280px] max-w-[calc(100vw-2rem)]">
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data Início</label>
-                <input
-                  type="date"
-                  value={tempDataInicio}
-                  onChange={(e) => setTempDataInicio(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Data Fim</label>
-                <input
-                  type="date"
-                  value={tempDataFim}
-                  onChange={(e) => setTempDataFim(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowCalendar(false)}
-                  className="flex-1 px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleAplicarPeriodo}
-                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700"
-                >
-                  Aplicar
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 function LinhaExtrato({ 
   movimento, 
@@ -422,6 +308,61 @@ function ModalVerTodas({
 // PÁGINA PRINCIPAL
 // =====================================================
 
+function FiltroPeriodoCompacto({
+  filtro,
+  onChange,
+}: {
+  filtro: FiltroData;
+  onChange: (filtro: FiltroData) => void;
+}) {
+  const [showCalendar, setShowCalendar] = useState(false);
+  const [tempInicio, setTempInicio] = useState(filtro.dataInicio);
+  const [tempFim, setTempFim] = useState(filtro.dataFim);
+
+  const ativo = filtro.tipo === 'periodo';
+  const label = ativo
+    ? (filtro.dataInicio === filtro.dataFim
+        ? new Date(filtro.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')
+        : `${new Date(filtro.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} – ${new Date(filtro.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`)
+    : 'Período';
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => setShowCalendar((v) => !v)}
+        className={`flex items-center gap-1 px-2 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+          ativo ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+        }`}
+        title="Selecionar período"
+      >
+        <Calendar className="w-3.5 h-3.5" />
+        <span className="truncate max-w-[130px]">{label}</span>
+        <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+      </button>
+      {showCalendar && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setShowCalendar(false)} />
+          <div className="absolute top-full right-0 mt-1 z-20 bg-white rounded-xl shadow-xl border border-gray-200 p-3 w-[260px] max-w-[calc(100vw-2rem)]">
+            <label className="block text-xs font-medium text-gray-600 mb-1">Início</label>
+            <input type="date" value={tempInicio} onChange={(e) => setTempInicio(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm mb-2 focus:ring-2 focus:ring-blue-500" />
+            <label className="block text-xs font-medium text-gray-600 mb-1">Fim</label>
+            <input type="date" value={tempFim} onChange={(e) => setTempFim(e.target.value)}
+              className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm mb-3 focus:ring-2 focus:ring-blue-500" />
+            <div className="flex gap-2">
+              <button onClick={() => setShowCalendar(false)}
+                className="flex-1 px-3 py-1.5 text-gray-700 text-sm font-medium hover:bg-gray-100 rounded-lg">Cancelar</button>
+              <button
+                onClick={() => { onChange({ tipo: 'periodo', dataInicio: tempInicio, dataFim: tempFim }); setShowCalendar(false); }}
+                className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700">Aplicar</button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function rotuloDataLiquidacao(dataStr: string): string {
   if (!dataStr) return 'Selecionar dia';
   const hoje = new Date();
@@ -456,6 +397,7 @@ export default function FinanceiroPage() {
   const [contaFiltro, setContaFiltro] = useState<string>('');
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
   const [categoriaDropdownAberto, setCategoriaDropdownAberto] = useState(false);
+  const [maisFiltrosAberto, setMaisFiltrosAberto] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   const [buscaExtrato, setBuscaExtrato] = useState<string>('');
   const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
@@ -893,32 +835,24 @@ export default function FinanceiroPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">
-      <div className="flex items-center justify-between flex-shrink-0">
+      <div className="flex items-start justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
-          {modoRota && rotaNome && (
-            <p className="text-sm text-blue-600 flex items-center gap-1 mt-1">
-              <MapPin className="w-4 h-4" />
-              Exibindo: Rota {rotaNome}
-            </p>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Seletor de conta (filtro local, respeita acesso) */}
-          <div className="relative">
+          {/* Exibindo: seletor de conta (filtro local, respeita acesso) */}
+          <div className="relative mt-1">
             <button
               onClick={() => setSeletorContaAberto((v) => !v)}
-              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white border border-gray-300 hover:border-gray-400 text-sm font-medium text-gray-700 transition-colors max-w-[200px]"
+              className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 font-medium max-w-[280px]"
             >
-              <MapPin className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <MapPin className="w-4 h-4 flex-shrink-0" />
+              <span className="text-gray-500">Exibindo:</span>
               <span className="truncate">{nomeContaSelecionada}</span>
               <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
             </button>
             {seletorContaAberto && (
               <>
                 <div className="fixed inset-0 z-10" onClick={() => setSeletorContaAberto(false)} />
-                <div className="absolute right-0 mt-1 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-80 overflow-y-auto">
+                <div className="absolute left-0 mt-1 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-80 overflow-y-auto">
                   <button
                     onClick={() => { setContaFiltro(''); setSeletorContaAberto(false); }}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
@@ -969,67 +903,15 @@ export default function FinanceiroPage() {
               </>
             )}
           </div>
-
-          {/* Bloco de tempo agrupado: modo (Liquidação/Período) + data */}
-          <div className="bg-white border border-gray-200 rounded-xl p-1.5">
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setModoFiltroTemporal('liquidacao')}
-                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all ${
-                  modoFiltroTemporal === 'liquidacao' ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                Liquidação
-              </button>
-              <button
-                onClick={() => setModoFiltroTemporal('periodo')}
-                className={`px-3 py-1.5 text-sm font-semibold rounded-lg transition-all ${
-                  modoFiltroTemporal === 'periodo' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'
-                }`}
-              >
-                Período
-              </button>
-            </div>
-
-            <div className="border-t border-gray-100 mt-1.5 pt-1.5 px-0.5">
-              {modoFiltroTemporal === 'liquidacao' ? (
-                <button
-                  onClick={() => {
-                    // abrir no mês da data já selecionada, se houver
-                    if (dataLiquidacao) {
-                      const [a, m] = dataLiquidacao.split('-');
-                      setMesCalendario({ ano: Number(a), mes: Number(m) });
-                    }
-                    setCalendarioAberto(true);
-                  }}
-                  className="w-full flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-gray-700 hover:bg-indigo-50 transition-colors"
-                >
-                  {loadingUltimaLiquidacao ? (
-                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                  ) : (
-                    <>
-                      <Calendar className="w-4 h-4 text-indigo-600" />
-                      {rotuloDataLiquidacao(dataLiquidacao)}
-                      <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                    </>
-                  )}
-                </button>
-              ) : (
-                <FiltroPeriodo
-                  filtro={filtroExtrato}
-                  onChange={(f) => { setFiltroResumo(f); setFiltroExtrato(f); }}
-                />
-              )}
-            </div>
-          </div>
-          <button
-            onClick={() => setModalEscolhaTransacao(true)}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors whitespace-nowrap"
-          >
-            <Plus className="w-5 h-5" />
-            Adicionar transação
-          </button>
         </div>
+
+        <button
+          onClick={() => setModalEscolhaTransacao(true)}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors whitespace-nowrap"
+        >
+          <Plus className="w-5 h-5" />
+          Adicionar transação
+        </button>
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_34%] gap-3 min-h-0">
@@ -1037,16 +919,18 @@ export default function FinanceiroPage() {
         {/* COLUNA ESQUERDA — LANÇAMENTOS (detalhe) */}
         <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
           <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0 space-y-2">
+            {/* Linha 1: título + rótulo + busca + tempo + Mais */}
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-900">Lançamentos</h3>
-              <span className="text-[11px] text-gray-400 whitespace-nowrap">
+              <h3 className="text-sm font-semibold text-gray-900 flex-shrink-0">Lançamentos</h3>
+              <span className="text-[11px] text-gray-400 whitespace-nowrap flex-shrink-0">
                 {modoFiltroTemporal === 'liquidacao'
                   ? (dataLiquidacao ? `Liquidação · ${rotuloDataLiquidacao(dataLiquidacao)}` : 'Liquidação')
                   : (filtroExtrato.tipo === 'hoje' ? 'Hoje'
                      : filtroExtrato.tipo === 'ontem' ? 'Ontem'
                      : `${new Date(filtroExtrato.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} – ${new Date(filtroExtrato.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`)}
               </span>
-              <div className="relative flex-1 max-w-xs">
+
+              <div className="relative flex-1 min-w-[120px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
                   type="text"
@@ -1057,84 +941,169 @@ export default function FinanceiroPage() {
                 />
               </div>
 
-              {/* Categoria — no mesmo nível da busca, só categorias com lançamento + contador */}
-              <div className="relative">
-                <button
-                  onClick={() => setCategoriaDropdownAberto((v) => !v)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                    categoriaFiltro ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                  }`}
-                >
-                  <Tag className="w-3.5 h-3.5" />
-                  <span className="truncate max-w-[120px]">{nomeCategoriaSelecionada}</span>
-                  <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                </button>
-                {categoriaDropdownAberto && (
-                  <>
-                    <div className="fixed inset-0 z-10" onClick={() => setCategoriaDropdownAberto(false)} />
-                    <div className="absolute left-0 mt-1 z-20 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
-                      <button
-                        onClick={() => { setCategoriaFiltro(''); setCategoriaDropdownAberto(false); }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
-                      >
-                        Todas as categorias
-                        <span className="text-gray-400">{movimentos.length}</span>
-                      </button>
-                      {categoriasComContagem.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-gray-400">Nenhuma categoria nesta tela</p>
-                      ) : categoriasComContagem.map((c) => (
-                        <button
-                          key={c.codigo}
-                          onClick={() => { setCategoriaFiltro(c.codigo); setCategoriaDropdownAberto(false); }}
-                          className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === c.codigo ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
-                        >
-                          <span className="truncate">{c.nome}</span>
-                          <span className="text-gray-400 ml-2">({c.count})</span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* Controle de tempo: chip quando liquidação selecionada; senão botões */}
+              {modoFiltroTemporal === 'liquidacao' && dataLiquidacao ? (
+                <div className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium flex-shrink-0">
+                  <Calendar className="w-3.5 h-3.5" />
+                  <button
+                    onClick={() => {
+                      const [a, m] = dataLiquidacao.split('-');
+                      setMesCalendario({ ano: Number(a), mes: Number(m) });
+                      setCalendarioAberto(true);
+                    }}
+                    className="hover:underline"
+                    title="Trocar dia de liquidação"
+                  >
+                    Liquidação {rotuloDataLiquidacao(dataLiquidacao)}
+                  </button>
+                  <button
+                    onClick={() => { setDataLiquidacao(''); setModoFiltroTemporal('periodo'); }}
+                    title="Sair do modo liquidação"
+                    className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-indigo-100"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5">
+                    <button
+                      onClick={() => {
+                        const hoje = new Date().toISOString().split('T')[0];
+                        setModoFiltroTemporal('periodo');
+                        setFiltroResumo({ tipo: 'hoje', dataInicio: hoje, dataFim: hoje });
+                        setFiltroExtrato({ tipo: 'hoje', dataInicio: hoje, dataFim: hoje });
+                      }}
+                      className={`px-2 py-1 text-xs font-semibold rounded transition-all ${modoFiltroTemporal === 'periodo' && filtroExtrato.tipo === 'hoje' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >Hoje</button>
+                    <button
+                      onClick={() => {
+                        const o = new Date(); o.setDate(o.getDate() - 1);
+                        const os = o.toISOString().split('T')[0];
+                        setModoFiltroTemporal('periodo');
+                        setFiltroResumo({ tipo: 'ontem', dataInicio: os, dataFim: os });
+                        setFiltroExtrato({ tipo: 'ontem', dataInicio: os, dataFim: os });
+                      }}
+                      className={`px-2 py-1 text-xs font-semibold rounded transition-all ${modoFiltroTemporal === 'periodo' && filtroExtrato.tipo === 'ontem' ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
+                    >Ontem</button>
+                  </div>
 
-              {(buscaExtrato || tipoMovimento || categoriaFiltro || statusFiltro !== 'PAGO') && (
-                <button
-                  onClick={() => { setBuscaExtrato(''); setTipoMovimento(''); setCategoriaFiltro(''); setStatusFiltro('PAGO'); }}
-                  className="ml-auto px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md text-xs flex items-center gap-1"
-                >
-                  <X className="w-3.5 h-3.5" />
-                  Limpar
-                </button>
+                  <FiltroPeriodoCompacto
+                    filtro={filtroExtrato}
+                    onChange={(f) => { setModoFiltroTemporal('periodo'); setFiltroResumo(f); setFiltroExtrato(f); }}
+                  />
+
+                  <button
+                    onClick={() => {
+                      setModoFiltroTemporal('liquidacao');
+                      if (dataLiquidacao) {
+                        const [a, m] = dataLiquidacao.split('-');
+                        setMesCalendario({ ano: Number(a), mes: Number(m) });
+                      }
+                      setCalendarioAberto(true);
+                    }}
+                    className="px-2 py-1.5 rounded-md border border-gray-200 text-xs font-medium text-gray-600 hover:border-indigo-300 hover:text-indigo-700 flex items-center gap-1"
+                    title="Ver por liquidação"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Liquidação
+                  </button>
+                </div>
               )}
-            </div>
 
-            <div className="flex flex-wrap items-center gap-1.5">
-              <div className="flex items-center gap-1 bg-gray-100 rounded-md p-0.5">
-                <button
-                  onClick={() => setTipoMovimento('')}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === '' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                >Tudo</button>
-                <button
-                  onClick={() => setTipoMovimento('ENTRADA')}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === 'ENTRADA' ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                >Entradas</button>
-                <button
-                  onClick={() => setTipoMovimento('SAIDA')}
-                  className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === 'SAIDA' ? 'bg-red-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                >Saídas</button>
-              </div>
-
-              <select
-                value={statusFiltro}
-                onChange={(e) => setStatusFiltro(e.target.value)}
-                className="px-2 py-1 bg-white border border-gray-300 rounded-md text-xs focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              {/* Botão Mais (acordeão) */}
+              <button
+                onClick={() => setMaisFiltrosAberto((v) => !v)}
+                className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md border text-xs font-medium flex-shrink-0 transition-colors ${
+                  maisFiltrosAberto || tipoMovimento || categoriaFiltro || statusFiltro !== 'PAGO'
+                    ? 'bg-blue-50 border-blue-300 text-blue-700'
+                    : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                }`}
               >
-                <option value="PAGO">Pagos</option>
-                <option value="PENDENTE">Pendentes</option>
-                <option value="ANULADO">Anulados</option>
-                <option value="TODOS">Todos os status</option>
-              </select>
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                Mais
+                {maisFiltrosAberto ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
             </div>
+
+            {/* Acordeão Mais: Tipo + Status + Categoria */}
+            {maisFiltrosAberto && (
+              <div className="rounded-lg bg-gray-50 border border-gray-100 p-3 space-y-2.5">
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-16 flex-shrink-0">Tipo</span>
+                  <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5">
+                    <button onClick={() => setTipoMovimento('')}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === '' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Tudo</button>
+                    <button onClick={() => setTipoMovimento('ENTRADA')}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === 'ENTRADA' ? 'bg-green-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Entradas</button>
+                    <button onClick={() => setTipoMovimento('SAIDA')}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${tipoMovimento === 'SAIDA' ? 'bg-red-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>Saídas</button>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-16 flex-shrink-0">Status</span>
+                  <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5">
+                    {[['PAGO','Pagos'],['PENDENTE','Pendentes'],['ANULADO','Anulados'],['TODOS','Todos']].map(([v, label]) => (
+                      <button key={v} onClick={() => setStatusFiltro(v)}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${statusFiltro === v ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>{label}</button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-16 flex-shrink-0">Categoria</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setCategoriaDropdownAberto((v) => !v)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors ${
+                        categoriaFiltro ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
+                      }`}
+                    >
+                      <Tag className="w-3.5 h-3.5" />
+                      <span className="truncate max-w-[140px]">{nomeCategoriaSelecionada}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+                    </button>
+                    {categoriaDropdownAberto && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setCategoriaDropdownAberto(false)} />
+                        <div className="absolute left-0 mt-1 z-20 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
+                          <button
+                            onClick={() => { setCategoriaFiltro(''); setCategoriaDropdownAberto(false); }}
+                            className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                          >
+                            Todas as categorias
+                            <span className="text-gray-400">{movimentos.length}</span>
+                          </button>
+                          {categoriasComContagem.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-gray-400">Nenhuma categoria nesta tela</p>
+                          ) : categoriasComContagem.map((c) => (
+                            <button
+                              key={c.codigo}
+                              onClick={() => { setCategoriaFiltro(c.codigo); setCategoriaDropdownAberto(false); }}
+                              className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === c.codigo ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                            >
+                              <span className="truncate">{c.nome}</span>
+                              <span className="text-gray-400 ml-2">({c.count})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  {(tipoMovimento || categoriaFiltro || statusFiltro !== 'PAGO') && (
+                    <button
+                      onClick={() => { setTipoMovimento(''); setCategoriaFiltro(''); setStatusFiltro('PAGO'); }}
+                      className="ml-auto px-2 py-1 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-md text-xs flex items-center gap-1"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto min-h-0">
