@@ -438,6 +438,7 @@ export default function FinanceiroPage() {
     dataFim: new Date().toISOString().split('T')[0],
   });
   const [contaFiltro, setContaFiltro] = useState<string>('');
+  const [seletorContaAberto, setSeletorContaAberto] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   const [buscaExtrato, setBuscaExtrato] = useState<string>('');
   const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
@@ -798,6 +799,34 @@ export default function FinanceiroPage() {
   // Determinar se está no modo rota
   const modoRota = saldos.modo === 'rota' || !!rotaId;
 
+  // ---------------------------------------------------------------
+  // PARTE 1 — Seletor de conta no topo (respeita acesso do usuário)
+  // ---------------------------------------------------------------
+  // Regras de acesso (espelham o UserContext):
+  //  - SUPER_ADMIN: todas as contas
+  //  - rotas_ids preenchido: só as rotas permitidas (+ microseguro delas)
+  //  - rotas_ids vazio: acesso amplo às rotas da empresa
+  //  - conta EMPRESA: visível para quem tem a empresa (flag futura refina)
+  const rotasPermitidas: string[] = (profile as any)?.rotas_ids || [];
+  const temAcessoRota = (rId: string | null | undefined): boolean => {
+    if (isSuperAdmin) return true;
+    if (rotasPermitidas.length === 0) return true; // vazio = todas
+    return !!rId && rotasPermitidas.includes(rId);
+  };
+
+  const contasAcessiveis = React.useMemo(() => {
+    return contas.filter((c) => {
+      if (c.tipo_conta === 'EMPRESA') return true; // tem a empresa (flag futura)
+      // ROTA e MICROSEGURO seguem o acesso da rota
+      return temAcessoRota((c as any).rota_id);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contas, isSuperAdmin, profile]);
+
+  // Se a rota do contexto define uma conta-rota, ela é o default do seletor
+  const contaSelecionada = contas.find((c) => c.id === contaFiltro) || null;
+  const nomeContaSelecionada = contaSelecionada?.nome || (modoRota && rotaNome ? rotaNome : 'Todas as contas');
+
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">
       <div className="flex items-center justify-between flex-shrink-0">
@@ -812,6 +841,71 @@ export default function FinanceiroPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {/* Seletor de conta (filtro local, respeita acesso) */}
+          <div className="relative">
+            <button
+              onClick={() => setSeletorContaAberto((v) => !v)}
+              className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white border border-gray-300 hover:border-gray-400 text-sm font-medium text-gray-700 transition-colors max-w-[200px]"
+            >
+              <MapPin className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+              <span className="truncate">{nomeContaSelecionada}</span>
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+            </button>
+            {seletorContaAberto && (
+              <>
+                <div className="fixed inset-0 z-10" onClick={() => setSeletorContaAberto(false)} />
+                <div className="absolute right-0 mt-1 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-80 overflow-y-auto">
+                  <button
+                    onClick={() => { setContaFiltro(''); setSeletorContaAberto(false); }}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                  >
+                    <Wallet className="w-4 h-4 text-gray-400" />
+                    Todas as contas
+                  </button>
+
+                  {contasAcessiveis.filter(c => c.tipo_conta === 'EMPRESA').length > 0 && (
+                    <>
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Empresa</p>
+                      {contasAcessiveis.filter(c => c.tipo_conta === 'EMPRESA').map(c => (
+                        <button key={c.id} onClick={() => { setContaFiltro(c.id); setSeletorContaAberto(false); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
+                          <Building2 className="w-4 h-4 text-blue-600" />
+                          <span className="truncate">{c.nome}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {contasAcessiveis.filter(c => c.tipo_conta === 'ROTA').length > 0 && (
+                    <>
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Rotas</p>
+                      {contasAcessiveis.filter(c => c.tipo_conta === 'ROTA').map(c => (
+                        <button key={c.id} onClick={() => { setContaFiltro(c.id); setSeletorContaAberto(false); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
+                          <MapPin className="w-4 h-4 text-emerald-600" />
+                          <span className="truncate">{c.nome}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+
+                  {contasAcessiveis.filter(c => c.tipo_conta === 'MICROSEGURO').length > 0 && (
+                    <>
+                      <p className="px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">Microseguros</p>
+                      {contasAcessiveis.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (
+                        <button key={c.id} onClick={() => { setContaFiltro(c.id); setSeletorContaAberto(false); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
+                          <Shield className="w-4 h-4 text-amber-600" />
+                          <span className="truncate">{c.nome}</span>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+
           <FiltroPeriodo
             filtro={filtroResumo}
             onChange={(f) => { setFiltroResumo(f); setFiltroExtrato(f); }}
@@ -980,7 +1074,9 @@ export default function FinanceiroPage() {
             <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
               <Wallet className="w-3.5 h-3.5 text-blue-600" />
             </div>
-            <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Saldos</h3>
+            <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide truncate">
+              {contaSelecionada ? `Saldos · ${contaSelecionada.nome}` : 'Saldos'}
+            </h3>
           </div>
 
           <div className="divide-y divide-gray-100 flex-shrink-0">
@@ -989,6 +1085,28 @@ export default function FinanceiroPage() {
                 <div className="h-8 bg-gray-100 animate-pulse rounded" />
                 <div className="h-8 bg-gray-100 animate-pulse rounded" />
               </div>
+            ) : contaSelecionada ? (
+              // Conta específica selecionada: mostra só ela
+              <button
+                onClick={() => setModalAjuste(true)}
+                className="w-full px-3 py-3 hover:bg-gray-50 transition-colors flex items-center gap-2 text-left"
+              >
+                <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
+                  contaSelecionada.tipo_conta === 'EMPRESA' ? 'bg-blue-50' :
+                  contaSelecionada.tipo_conta === 'MICROSEGURO' ? 'bg-amber-50' : 'bg-emerald-50'
+                }`}>
+                  {contaSelecionada.tipo_conta === 'EMPRESA' ? <Building2 className="w-3.5 h-3.5 text-blue-600" /> :
+                   contaSelecionada.tipo_conta === 'MICROSEGURO' ? <Shield className="w-3.5 h-3.5 text-amber-600" /> :
+                   <MapPin className="w-3.5 h-3.5 text-emerald-600" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold truncate">{contaSelecionada.nome}</p>
+                  <p className="text-[10px] text-gray-400">ajustar saldo</p>
+                </div>
+                <span className={`text-base font-bold tabular-nums ${((contaSelecionada as any).saldo_atual ?? 0) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                  {((contaSelecionada as any).saldo_atual ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                </span>
+              </button>
             ) : (
               <>
                 {!modoRota && (
