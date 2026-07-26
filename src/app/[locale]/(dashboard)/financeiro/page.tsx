@@ -943,7 +943,7 @@ export default function FinanceiroPage() {
 
               {/* Controle de tempo: chip quando liquidação selecionada; senão botões */}
               {modoFiltroTemporal === 'liquidacao' && dataLiquidacao ? (
-                <div className="flex items-center gap-1 pl-2 pr-1 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium flex-shrink-0">
+                <div className="flex items-center gap-1.5 pl-2.5 pr-2.5 py-1 rounded-full bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs font-medium flex-shrink-0">
                   <Calendar className="w-3.5 h-3.5" />
                   <button
                     onClick={() => {
@@ -956,12 +956,13 @@ export default function FinanceiroPage() {
                   >
                     Liquidação {rotuloDataLiquidacao(dataLiquidacao)}
                   </button>
+                  <span className="text-indigo-300">|</span>
                   <button
                     onClick={() => { setDataLiquidacao(''); setModoFiltroTemporal('periodo'); }}
-                    title="Sair do modo liquidação"
-                    className="ml-0.5 w-4 h-4 flex items-center justify-center rounded-full hover:bg-indigo-100"
+                    title="Voltar a filtrar por período"
+                    className="hover:underline text-indigo-600"
                   >
-                    <X className="w-3 h-3" />
+                    Ver por período
                   </button>
                 </div>
               ) : (
@@ -1002,11 +1003,11 @@ export default function FinanceiroPage() {
                       }
                       setCalendarioAberto(true);
                     }}
-                    className="px-2 py-1.5 rounded-md border border-gray-200 text-xs font-medium text-gray-600 hover:border-indigo-300 hover:text-indigo-700 flex items-center gap-1"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors bg-green-100 text-green-700 hover:bg-green-200"
                     title="Ver por liquidação"
                   >
                     <Calendar className="w-3.5 h-3.5" />
-                    Liquidação
+                    Ver por liquidação
                   </button>
                 </div>
               )}
