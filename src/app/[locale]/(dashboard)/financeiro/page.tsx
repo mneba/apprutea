@@ -410,6 +410,7 @@ export default function FinanceiroPage() {
   const [dropdownLiquidacaoAberto, setDropdownLiquidacaoAberto] = useState(false);
   const [historicoLiquidacoes, setHistoricoLiquidacoes] = useState<any[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [mesMiniCal, setMesMiniCal] = useState<{ ano: number; mes: number } | null>(null);
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingExtrato, setLoadingExtrato] = useState(false);
@@ -575,6 +576,16 @@ export default function FinanceiroPage() {
   }, [rotaId]);
 
   // Carregar histórico de liquidações da rota (para o dropdown "Ver por liquidação")
+  // Set de dias (YYYY-MM-DD) com liquidação + mapa dia->liquidação, para o mini-calendário
+  const { diasComLiq, mapaDiaLiq, ultimaLiqYmd } = React.useMemo(() => {
+    const ymd = (l: any) => (l.data_liquidacao?.split('T')[0] || l.data_abertura?.split('T')[0] || '');
+    const set = new Set<string>();
+    const mapa: Record<string, any> = {};
+    historicoLiquidacoes.forEach(l => { const d = ymd(l); if (d) { set.add(d); if (!mapa[d]) mapa[d] = l; } });
+    const ultima = [...set].sort((a, b) => (a < b ? 1 : -1))[0] || '';
+    return { diasComLiq: set, mapaDiaLiq: mapa, ultimaLiqYmd: ultima };
+  }, [historicoLiquidacoes]);
+
   const carregarHistoricoLiquidacoes = useCallback(async () => {
     if (!rotaId) { setHistoricoLiquidacoes([]); return; }
     setLoadingHistorico(true);
@@ -791,18 +802,7 @@ export default function FinanceiroPage() {
   // "Todas as contas" mantém habilitado (usa a rota do contexto).
   const contaPermiteLiquidacao = !contaSelecionada || contaSelecionada.tipo_conta === 'ROTA';
 
-  // Set de dias (YYYY-MM-DD) com liquidação + mapa dia->liquidação, para o mini-calendário
-  const { diasComLiq, mapaDiaLiq, ultimaLiqYmd } = React.useMemo(() => {
-    const ymd = (l: any) => (l.data_liquidacao?.split('T')[0] || l.data_abertura?.split('T')[0] || '');
-    const set = new Set<string>();
-    const mapa: Record<string, any> = {};
-    historicoLiquidacoes.forEach(l => { const d = ymd(l); if (d) { set.add(d); if (!mapa[d]) mapa[d] = l; } });
-    const ultima = [...set].sort((a, b) => (a < b ? 1 : -1))[0] || '';
-    return { diasComLiq: set, mapaDiaLiq: mapa, ultimaLiqYmd: ultima };
-  }, [historicoLiquidacoes]);
-
   // Mês exibido no mini-calendário do dropdown
-  const [mesMiniCal, setMesMiniCal] = useState<{ ano: number; mes: number } | null>(null);
   const NOMES_MES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
   const selecionarDiaLiquidacao = (dataStr: string) => {
