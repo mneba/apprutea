@@ -387,7 +387,6 @@ export default function FinanceiroPage() {
   });
   const [contaFiltro, setContaFiltro] = useState<string>('');
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
-  const [categoriaDropdownAberto, setCategoriaDropdownAberto] = useState(false);
   const [maisFiltrosAberto, setMaisFiltrosAberto] = useState(false);
   const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
   const [buscaExtrato, setBuscaExtrato] = useState<string>('');
@@ -485,7 +484,8 @@ export default function FinanceiroPage() {
     try {
       const params: any = {
         conta_id: contaFiltro || undefined,
-        categoria: categoriaFiltro || undefined,
+        // categoria NÃO vai ao backend: filtramos no front para o resumo
+        // por categoria refletir todas as categorias da conta/período.
         rota_id: rotaId,
         // Passar status para o backend (se não for TODOS, filtra)
         status: statusFiltro === 'TODOS' ? undefined : (statusFiltro || undefined),
@@ -512,7 +512,7 @@ export default function FinanceiroPage() {
     } finally {
       setLoadingExtrato(false);
     }
-  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, statusFiltro]);
+  }, [empresaId, filtroExtrato, contaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, statusFiltro]);
 
   useEffect(() => {
     if (empresaId) {
@@ -626,7 +626,7 @@ export default function FinanceiroPage() {
     if (empresaId) {
       carregarExtrato();
     }
-  }, [empresaId, filtroExtrato, contaFiltro, categoriaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
+  }, [empresaId, filtroExtrato, contaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
 
   const handleAnularMovimentacao = async (movimento: MovimentoFinanceiro) => {
     if (!podeAnular) return;
@@ -708,6 +708,9 @@ export default function FinanceiroPage() {
       if (tipoMovimento === 'ENTRADA' && m.tipo !== 'RECEBER') return false;
       if (tipoMovimento === 'SAIDA' && m.tipo !== 'PAGAR') return false;
 
+      // Filtro por categoria (local, para o resumo por categoria ficar completo)
+      if (categoriaFiltro && m.categoria !== categoriaFiltro) return false;
+
       // Filtro por status (local, já que o backend pode não suportar)
       if (statusFiltro && statusFiltro !== 'TODOS') {
         if (m.status !== statusFiltro) return false;
@@ -750,7 +753,7 @@ export default function FinanceiroPage() {
 
       return true;
     });
-  }, [movimentos, tipoMovimento, buscaExtrato, statusFiltro]);
+  }, [movimentos, tipoMovimento, categoriaFiltro, buscaExtrato, statusFiltro]);
 
   // Recalcular totais com base nos filtrados (excluindo ANULADOS)
   const totalEntradasFiltrado = movimentosFiltrados
@@ -839,20 +842,26 @@ export default function FinanceiroPage() {
 
   // Categorias que têm lançamento na tela, com contagem — para o dropdown "Categoria"
   const categoriasComContagem = React.useMemo(() => {
-    const cont: Record<string, number> = {};
+    const agg: Record<string, { count: number; total: number }> = {};
     (movimentos || []).forEach((m: any) => {
       const cod = m.categoria;
       if (!cod) return;
-      cont[cod] = (cont[cod] || 0) + 1;
+      if (!agg[cod]) agg[cod] = { count: 0, total: 0 };
+      agg[cod].count += 1;
+      agg[cod].total += Number(m.valor) || 0;
     });
     return categorias
-      .filter((c: any) => cont[c.codigo] > 0)
-      .map((c: any) => ({ codigo: c.codigo, nome: c.nome_pt, count: cont[c.codigo] }))
-      .sort((a, b) => b.count - a.count);
+      .filter((c: any) => agg[c.codigo]?.count > 0)
+      .map((c: any) => ({
+        codigo: c.codigo,
+        nome: c.nome_pt,
+        cor: c.cor_hex || null,
+        count: agg[c.codigo].count,
+        total: agg[c.codigo].total,
+      }))
+      .sort((a, b) => b.total - a.total);
   }, [movimentos, categorias]);
 
-  const nomeCategoriaSelecionada = categoriasComContagem.find(c => c.codigo === categoriaFiltro)?.nome
-    || (categoriaFiltro ? categoriaFiltro : 'Todas as categorias');
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">
@@ -940,20 +949,8 @@ export default function FinanceiroPage() {
         {/* COLUNA ESQUERDA — LANÇAMENTOS (detalhe) */}
         <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden">
           <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0 space-y-2">
-            {/* Linha 1: título + rótulo + busca + tempo + Mais */}
+            {/* Linha 1: busca + tempo + Mais */}
             <div className="flex items-center gap-2">
-              <h3 className="text-sm font-semibold text-gray-900 flex-shrink-0">Lançamentos</h3>
-              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium whitespace-nowrap flex-shrink-0 ${
-                modoFiltroTemporal === 'liquidacao' ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
-              }`}>
-                <Calendar className="w-3 h-3" />
-                {modoFiltroTemporal === 'liquidacao'
-                  ? (dataLiquidacao ? `Liquidação · ${rotuloDataLiquidacao(dataLiquidacao)}` : 'Liquidação')
-                  : (filtroExtrato.tipo === 'hoje' ? 'Período · Hoje'
-                     : filtroExtrato.tipo === 'ontem' ? 'Período · Ontem'
-                     : `Período · ${new Date(filtroExtrato.dataInicio + 'T12:00:00').toLocaleDateString('pt-BR')} – ${new Date(filtroExtrato.dataFim + 'T12:00:00').toLocaleDateString('pt-BR')}`)}
-              </span>
-
               <div className="relative flex-1 min-w-[120px]">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
                 <input
@@ -1057,48 +1054,6 @@ export default function FinanceiroPage() {
                       <button key={v} onClick={() => setStatusFiltro(v)}
                         className={`px-2.5 py-1 text-xs font-semibold rounded transition-all ${statusFiltro === v ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}>{label}</button>
                     ))}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3">
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-16 flex-shrink-0">Categoria</span>
-                  <div className="relative">
-                    <button
-                      onClick={() => setCategoriaDropdownAberto((v) => !v)}
-                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-medium transition-colors ${
-                        categoriaFiltro ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-gray-200 text-gray-600 hover:border-gray-300'
-                      }`}
-                    >
-                      <Tag className="w-3.5 h-3.5" />
-                      <span className="truncate max-w-[140px]">{nomeCategoriaSelecionada}</span>
-                      <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-                    </button>
-                    {categoriaDropdownAberto && (
-                      <>
-                        <div className="fixed inset-0 z-10" onClick={() => setCategoriaDropdownAberto(false)} />
-                        <div className="absolute left-0 mt-1 z-20 w-56 bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
-                          <button
-                            onClick={() => { setCategoriaFiltro(''); setCategoriaDropdownAberto(false); }}
-                            className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === '' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
-                          >
-                            Todas as categorias
-                            <span className="text-gray-400">{movimentos.length}</span>
-                          </button>
-                          {categoriasComContagem.length === 0 ? (
-                            <p className="px-3 py-2 text-xs text-gray-400">Nenhuma categoria nesta tela</p>
-                          ) : categoriasComContagem.map((c) => (
-                            <button
-                              key={c.codigo}
-                              onClick={() => { setCategoriaFiltro(c.codigo); setCategoriaDropdownAberto(false); }}
-                              className={`w-full flex items-center justify-between px-3 py-2 text-xs text-left hover:bg-gray-50 ${categoriaFiltro === c.codigo ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
-                            >
-                              <span className="truncate">{c.nome}</span>
-                              <span className="text-gray-400 ml-2">({c.count})</span>
-                            </button>
-                          ))}
-                        </div>
-                      </>
-                    )}
                   </div>
 
                   {(tipoMovimento || categoriaFiltro || statusFiltro !== 'PAGO') && (
@@ -1379,6 +1334,57 @@ export default function FinanceiroPage() {
                   </div>
                 )}
               </>
+            )}
+          </div>
+        </div>
+
+        {/* Resumo por categoria — clicável, filtra a lista (combina com a conta) */}
+        <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden self-start">
+          <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 bg-purple-50 rounded-md flex items-center justify-center">
+                <Tag className="w-3.5 h-3.5 text-purple-600" />
+              </div>
+              <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Por categoria</h3>
+            </div>
+            {categoriaFiltro && (
+              <button
+                onClick={() => setCategoriaFiltro('')}
+                className="text-[10px] text-blue-600 hover:text-blue-700 font-medium flex items-center gap-0.5"
+              >
+                <X className="w-3 h-3" /> limpar
+              </button>
+            )}
+          </div>
+
+          <div className="divide-y divide-gray-50 max-h-[40vh] overflow-y-auto">
+            {loadingExtrato ? (
+              <div className="p-4 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+            ) : categoriasComContagem.length === 0 ? (
+              <p className="px-3 py-6 text-xs text-gray-400 text-center">Nenhum lançamento no período</p>
+            ) : (
+              categoriasComContagem.map((c) => {
+                const ativa = categoriaFiltro === c.codigo;
+                return (
+                  <button
+                    key={c.codigo}
+                    onClick={() => setCategoriaFiltro(ativa ? '' : c.codigo)}
+                    className={`w-full flex items-center gap-2 px-3 py-2 text-left transition-colors ${ativa ? 'bg-purple-50' : 'hover:bg-gray-50'}`}
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: c.cor || '#9ca3af' }}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-xs font-medium truncate ${ativa ? 'text-purple-700' : 'text-gray-700'}`}>{c.nome}</p>
+                      <p className="text-[10px] text-gray-400">{c.count} lançamento{c.count > 1 ? 's' : ''}</p>
+                    </div>
+                    <span className={`text-xs font-semibold tabular-nums ${ativa ? 'text-purple-700' : 'text-gray-900'}`}>
+                      {c.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    </span>
+                  </button>
+                );
+              })
             )}
           </div>
         </div>
