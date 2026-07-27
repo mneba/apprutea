@@ -842,23 +842,26 @@ export default function FinanceiroPage() {
 
   // Categorias que têm lançamento na tela, com contagem — para o dropdown "Categoria"
   const categoriasComContagem = React.useMemo(() => {
-    const agg: Record<string, { count: number; total: number }> = {};
+    const agg: Record<string, { count: number; total: number; nome: string; cor: string | null }> = {};
     (movimentos || []).forEach((m: any) => {
       const cod = m.categoria;
       if (!cod) return;
-      if (!agg[cod]) agg[cod] = { count: 0, total: 0 };
+      if (!agg[cod]) {
+        // Enriquece com nome/cor da tabela de categorias, se houver match;
+        // senão usa o próprio código como rótulo (garante que apareça).
+        const catRef = categorias.find((c: any) => c.codigo === cod || c.nome_pt === cod || c.nome === cod);
+        agg[cod] = {
+          count: 0,
+          total: 0,
+          nome: (catRef as any)?.nome_pt || (catRef as any)?.nome || (m.categoria_nome) || cod,
+          cor: (catRef as any)?.cor_hex || null,
+        };
+      }
       agg[cod].count += 1;
       agg[cod].total += Number(m.valor) || 0;
     });
-    return categorias
-      .filter((c: any) => agg[c.codigo]?.count > 0)
-      .map((c: any) => ({
-        codigo: c.codigo,
-        nome: c.nome_pt,
-        cor: c.cor_hex || null,
-        count: agg[c.codigo].count,
-        total: agg[c.codigo].total,
-      }))
+    return Object.entries(agg)
+      .map(([codigo, v]) => ({ codigo, nome: v.nome, cor: v.cor, count: v.count, total: v.total }))
       .sort((a, b) => b.total - a.total);
   }, [movimentos, categorias]);
 
@@ -1221,8 +1224,9 @@ export default function FinanceiroPage() {
           </div>
         </div>
 
-        {/* COLUNA DIREITA — SALDOS */}
-        <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden self-start">
+        {/* COLUNA DIREITA — SALDOS + POR CATEGORIA */}
+        <div className="flex flex-col gap-3 min-h-0 overflow-y-auto">
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden flex-shrink-0">
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center gap-2 flex-shrink-0">
             <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
               <Wallet className="w-3.5 h-3.5 text-blue-600" />
@@ -1339,7 +1343,7 @@ export default function FinanceiroPage() {
         </div>
 
         {/* Resumo por categoria — clicável, filtra a lista (combina com a conta) */}
-        <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden self-start">
+        <div className="bg-white rounded-lg border border-gray-200 flex flex-col overflow-hidden flex-shrink-0">
           <div className="px-3 py-2.5 border-b border-gray-100 flex items-center justify-between gap-2 flex-shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-7 h-7 bg-purple-50 rounded-md flex items-center justify-center">
@@ -1387,6 +1391,7 @@ export default function FinanceiroPage() {
               })
             )}
           </div>
+        </div>
         </div>
       </div>
 
