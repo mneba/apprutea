@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   Tag,
   ChevronRight,
+  ChevronLeft,
   FileText,
   AlertCircle,
   X,
@@ -405,6 +406,10 @@ export default function FinanceiroPage() {
   });
   // Data temporária enquanto o calendário está aberto (só comita no "Selecionar")
   const [dataTempCalendario, setDataTempCalendario] = useState<Date | null>(null);
+  // Dropdown "Ver por liquidação" (dentro do Mais) + histórico da rota
+  const [dropdownLiquidacaoAberto, setDropdownLiquidacaoAberto] = useState(false);
+  const [historicoLiquidacoes, setHistoricoLiquidacoes] = useState<any[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
   
   const [loadingSaldos, setLoadingSaldos] = useState(false);
   const [loadingExtrato, setLoadingExtrato] = useState(false);
@@ -568,6 +573,36 @@ export default function FinanceiroPage() {
       setLoadingCalendario(false);
     }
   }, [rotaId]);
+
+  // Carregar histórico de liquidações da rota (para o dropdown "Ver por liquidação")
+  const carregarHistoricoLiquidacoes = useCallback(async () => {
+    if (!rotaId) { setHistoricoLiquidacoes([]); return; }
+    setLoadingHistorico(true);
+    try {
+      const data = await liquidacaoService.listarHistoricoLiquidacoes(rotaId);
+      setHistoricoLiquidacoes(data || []);
+    } catch (e) {
+      console.error('Erro ao carregar histórico de liquidações:', e);
+      setHistoricoLiquidacoes([]);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  }, [rotaId]);
+
+  useEffect(() => {
+    if (dropdownLiquidacaoAberto) {
+      carregarHistoricoLiquidacoes();
+      // posiciona o mini-calendário no mês da data selecionada, ou da última liquidação, ou hoje
+      const base = dataLiquidacao || ultimaLiqYmd;
+      if (base) {
+        const [a, m] = base.split('-').map(Number);
+        setMesMiniCal({ ano: a, mes: m });
+      } else {
+        const h = new Date();
+        setMesMiniCal({ ano: h.getFullYear(), mes: h.getMonth() + 1 });
+      }
+    }
+  }, [dropdownLiquidacaoAberto, carregarHistoricoLiquidacoes, dataLiquidacao, ultimaLiqYmd]);
 
   // Ao abrir o calendário, carrega o mês da data selecionada (ou o atual)
   useEffect(() => {
@@ -755,6 +790,27 @@ export default function FinanceiroPage() {
   // A conta selecionada permite ver por liquidação? (só ROTA tem liquidação)
   // "Todas as contas" mantém habilitado (usa a rota do contexto).
   const contaPermiteLiquidacao = !contaSelecionada || contaSelecionada.tipo_conta === 'ROTA';
+
+  // Set de dias (YYYY-MM-DD) com liquidação + mapa dia->liquidação, para o mini-calendário
+  const { diasComLiq, mapaDiaLiq, ultimaLiqYmd } = React.useMemo(() => {
+    const ymd = (l: any) => (l.data_liquidacao?.split('T')[0] || l.data_abertura?.split('T')[0] || '');
+    const set = new Set<string>();
+    const mapa: Record<string, any> = {};
+    historicoLiquidacoes.forEach(l => { const d = ymd(l); if (d) { set.add(d); if (!mapa[d]) mapa[d] = l; } });
+    const ultima = [...set].sort((a, b) => (a < b ? 1 : -1))[0] || '';
+    return { diasComLiq: set, mapaDiaLiq: mapa, ultimaLiqYmd: ultima };
+  }, [historicoLiquidacoes]);
+
+  // Mês exibido no mini-calendário do dropdown
+  const [mesMiniCal, setMesMiniCal] = useState<{ ano: number; mes: number } | null>(null);
+  const NOMES_MES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+
+  const selecionarDiaLiquidacao = (dataStr: string) => {
+    setDataLiquidacao(dataStr);
+    setModoFiltroTemporal('liquidacao');
+    setDropdownLiquidacaoAberto(false);
+    setMaisFiltrosAberto(false);
+  };
 
   // Troca de conta com regras de liquidação:
   //  - se estava em modo liquidação e a nova conta É de rota -> abre o calendário
@@ -961,29 +1017,6 @@ export default function FinanceiroPage() {
                     filtro={filtroExtrato}
                     onChange={(f) => { setModoFiltroTemporal('periodo'); setFiltroResumo(f); setFiltroExtrato(f); }}
                   />
-
-                  <button
-                    onClick={() => {
-                      if (!contaPermiteLiquidacao) return;
-                      // Não troca o modo ainda: só abre o calendário.
-                      // O modo muda apenas ao CONFIRMAR uma data (onConfirmar).
-                      if (dataLiquidacao) {
-                        const [a, m] = dataLiquidacao.split('-');
-                        setMesCalendario({ ano: Number(a), mes: Number(m) });
-                      }
-                      setCalendarioAberto(true);
-                    }}
-                    disabled={!contaPermiteLiquidacao}
-                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      contaPermiteLiquidacao
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                    }`}
-                    title={contaPermiteLiquidacao ? 'Ver por liquidação' : 'Esta conta não possui liquidação'}
-                  >
-                    <Calendar className="w-3.5 h-3.5" />
-                    Ver por liquidação
-                  </button>
                 </div>
               )}
 
@@ -1077,6 +1110,116 @@ export default function FinanceiroPage() {
                       Limpar
                     </button>
                   )}
+                </div>
+
+                {/* Ver por liquidação — dropdown inteligente */}
+                <div className="flex items-start gap-3 pt-2.5 border-t border-gray-200">
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide w-16 flex-shrink-0 mt-1.5">Liquidação</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => { if (contaPermiteLiquidacao) setDropdownLiquidacaoAberto(v => !v); }}
+                      disabled={!contaPermiteLiquidacao}
+                      className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                        !contaPermiteLiquidacao ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : modoFiltroTemporal === 'liquidacao' ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-green-50 text-green-700 hover:bg-green-100 border border-green-200'
+                      }`}
+                      title={contaPermiteLiquidacao ? 'Ver por liquidação' : 'Esta conta não possui liquidação'}
+                    >
+                      <Calendar className="w-3.5 h-3.5" />
+                      {modoFiltroTemporal === 'liquidacao' && dataLiquidacao
+                        ? `Liquidação · ${rotuloDataLiquidacao(dataLiquidacao)}`
+                        : 'Ver por liquidação'}
+                      <ChevronDown className="w-3.5 h-3.5" />
+                    </button>
+
+                    {dropdownLiquidacaoAberto && contaPermiteLiquidacao && mesMiniCal && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setDropdownLiquidacaoAberto(false)} />
+                        <div className="absolute left-0 mt-1 z-20 w-64 bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden p-2">
+                          {loadingHistorico ? (
+                            <div className="py-8 flex justify-center"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+                          ) : (
+                            <>
+                              {/* Navegação de mês */}
+                              <div className="flex items-center justify-between px-1 py-1">
+                                <button
+                                  onClick={() => setMesMiniCal(mc => { if (!mc) return mc; const d = new Date(mc.ano, mc.mes - 2, 1); return { ano: d.getFullYear(), mes: d.getMonth() + 1 }; })}
+                                  className="p-1 rounded hover:bg-gray-100 text-gray-500"
+                                ><ChevronLeft className="w-4 h-4" /></button>
+                                <span className="text-xs font-semibold text-gray-700">
+                                  {NOMES_MES[mesMiniCal.mes - 1]} {mesMiniCal.ano}
+                                </span>
+                                <button
+                                  onClick={() => setMesMiniCal(mc => { if (!mc) return mc; const d = new Date(mc.ano, mc.mes, 1); return { ano: d.getFullYear(), mes: d.getMonth() + 1 }; })}
+                                  className="p-1 rounded hover:bg-gray-100 text-gray-500"
+                                ><ChevronRight className="w-4 h-4" /></button>
+                              </div>
+
+                              {/* Cabeçalho dos dias da semana */}
+                              <div className="grid grid-cols-7 gap-0.5 px-1 mb-0.5">
+                                {['D','S','T','Q','Q','S','S'].map((d, i) => (
+                                  <div key={i} className="text-center text-[9px] font-semibold text-gray-400 py-0.5">{d}</div>
+                                ))}
+                              </div>
+
+                              {/* Grade de dias */}
+                              <div className="grid grid-cols-7 gap-0.5 px-1">
+                                {(() => {
+                                  const { ano, mes } = mesMiniCal;
+                                  const primeiroDiaSemana = new Date(ano, mes - 1, 1).getDay();
+                                  const diasNoMes = new Date(ano, mes, 0).getDate();
+                                  const celulas: React.ReactNode[] = [];
+                                  for (let i = 0; i < primeiroDiaSemana; i++) celulas.push(<div key={`v${i}`} />);
+                                  for (let dia = 1; dia <= diasNoMes; dia++) {
+                                    const ds = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+                                    const temLiq = diasComLiq.has(ds);
+                                    const liq = mapaDiaLiq[ds];
+                                    const selecionado = dataLiquidacao === ds;
+                                    const aberta = liq && ['ABERTO', 'REABERTO'].includes(liq.status);
+                                    celulas.push(
+                                      <button
+                                        key={ds}
+                                        disabled={!temLiq}
+                                        onClick={() => temLiq && selecionarDiaLiquidacao(ds)}
+                                        title={temLiq ? `Liquidação ${liq?.status || ''}` : 'Sem liquidação'}
+                                        className={`aspect-square flex items-center justify-center text-[11px] rounded-md transition-colors relative ${
+                                          selecionado ? 'bg-green-600 text-white font-semibold'
+                                            : !temLiq ? 'text-gray-300 cursor-default'
+                                            : aberta ? 'text-green-700 font-semibold hover:bg-green-50'
+                                            : 'text-gray-700 hover:bg-gray-100'
+                                        }`}
+                                      >
+                                        {dia}
+                                        {temLiq && !selecionado && (
+                                          <span className={`absolute bottom-0.5 w-1 h-1 rounded-full ${aberta ? 'bg-green-500' : 'bg-gray-400'}`} />
+                                        )}
+                                      </button>
+                                    );
+                                  }
+                                  return celulas;
+                                })()}
+                              </div>
+
+                              <div className="flex items-center gap-3 px-2 pt-2 mt-1 border-t border-gray-100 text-[9px] text-gray-400">
+                                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-green-500" /> aberta</span>
+                                <span className="flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-gray-400" /> fechada</span>
+                              </div>
+
+                              {modoFiltroTemporal === 'liquidacao' && (
+                                <button
+                                  onClick={() => { setDataLiquidacao(''); setModoFiltroTemporal('periodo'); setDropdownLiquidacaoAberto(false); }}
+                                  className="w-full px-2 py-1.5 mt-1 text-xs text-indigo-600 hover:bg-indigo-50 rounded-md text-left font-medium"
+                                >
+                                  ← Voltar a ver por período
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
