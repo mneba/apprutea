@@ -1480,6 +1480,8 @@ export default function FinanceiroPage() {
         contas={contas}
         categorias={categorias}
         onSalvar={handleSalvarMovimentacao}
+        contaPadraoId={contaFiltro || (contaSelecionada?.id) || ''}
+        rotaId={rotaId || undefined}
       />
       <ModalTransferencia
         isOpen={modalTransferencia}

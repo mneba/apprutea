@@ -16,6 +16,10 @@ import {
   AlertCircle,
   ArrowRightLeft,
   CheckSquare,
+  Calendar,
+  Upload,
+  Camera,
+  Trash2,
 } from 'lucide-react';
 import type { ContaComDetalhes, CategoriaFinanceira } from '@/types/financeiro';
 
@@ -29,6 +33,8 @@ interface ModalNovaMovimentacaoProps {
   contas: ContaComDetalhes[];
   categorias: CategoriaFinanceira[];
   onSalvar: (dados: any) => Promise<void>;
+  contaPadraoId?: string;   // conta em uso no header (pré-seleção)
+  rotaId?: string;          // rota atual (para buscar liquidações)
 }
 
 export function ModalNovaMovimentacao({ 
@@ -36,7 +42,9 @@ export function ModalNovaMovimentacao({
   onClose, 
   contas,
   categorias,
-  onSalvar 
+  onSalvar,
+  contaPadraoId,
+  rotaId,
 }: ModalNovaMovimentacaoProps) {
   const [tipo, setTipo] = useState<'RECEBER' | 'PAGAR'>('RECEBER');
   const [contaId, setContaId] = useState('');
@@ -47,6 +55,14 @@ export function ModalNovaMovimentacao({
   const [observacoes, setObservacoes] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  // Comprovante (só anexa; upload no salvar)
+  const [comprovanteFile, setComprovanteFile] = useState<File | null>(null);
+  const [comprovantePreview, setComprovantePreview] = useState<string>('');
+  // Liquidações da rota (o modal busca sozinho)
+  const [liquidacoesRota, setLiquidacoesRota] = useState<any[]>([]);
+  const [liquidacaoAberta, setLiquidacaoAberta] = useState<any | null>(null);
+  const [liquidacaoSelId, setLiquidacaoSelId] = useState<string>(''); // '' = usar a aberta
+  const [loadingLiq, setLoadingLiq] = useState(false);
 
   const contaSelecionada = contas.find(c => c.id === contaId);
   const categoriasFiltradas = categorias.filter(c => {
@@ -60,15 +76,41 @@ export function ModalNovaMovimentacao({
   useEffect(() => {
     if (isOpen) {
       setTipo('RECEBER');
-      setContaId('');
+      setContaId(contaPadraoId || '');   // pré-seleciona a conta do header
       setCategoria('');
       setDescricao('');
       setValor('');
       setFormaPagamento('DINHEIRO');
       setObservacoes('');
       setErro('');
+      setComprovanteFile(null);
+      setComprovantePreview('');
+      setLiquidacaoSelId('');
     }
-  }, [isOpen]);
+  }, [isOpen, contaPadraoId]);
+
+  // Buscar liquidações da rota (o modal busca sozinho)
+  useEffect(() => {
+    let ativo = true;
+    async function buscar() {
+      if (!isOpen || !rotaId) { setLiquidacoesRota([]); setLiquidacaoAberta(null); return; }
+      setLoadingLiq(true);
+      try {
+        const { liquidacaoService } = await import('@/services/liquidacao');
+        const lista = await liquidacaoService.listarHistoricoLiquidacoes(rotaId);
+        if (!ativo) return;
+        setLiquidacoesRota(lista || []);
+        const aberta = (lista || []).find((l: any) => ['ABERTO', 'REABERTO'].includes(l.status)) || null;
+        setLiquidacaoAberta(aberta);
+      } catch (e) {
+        if (ativo) { setLiquidacoesRota([]); setLiquidacaoAberta(null); }
+      } finally {
+        if (ativo) setLoadingLiq(false);
+      }
+    }
+    buscar();
+    return () => { ativo = false; };
+  }, [isOpen, rotaId]);
 
   const handleSalvar = async () => {
     if (!contaId || !categoria || !descricao || !valor) {
@@ -79,6 +121,22 @@ export function ModalNovaMovimentacao({
     setSalvando(true);
     setErro('');
     try {
+      // Upload do comprovante (se anexado) — só agora, no salvar
+      let fotoUrl: string | null = null;
+      if (comprovanteFile) {
+        const { createClient } = await import('@/lib/supabase/client');
+        const supabase = createClient();
+        const ext = comprovanteFile.name.split('.').pop();
+        const fileName = `${contaId}-${Date.now()}.${ext}`;
+        const filePath = `movimentacoes/${fileName}`;
+        const { error: upErr } = await supabase.storage
+          .from('fotos')
+          .upload(filePath, comprovanteFile, { cacheControl: '3600', upsert: true });
+        if (upErr) throw new Error('Falha ao enviar o comprovante: ' + upErr.message);
+        const { data: urlData } = supabase.storage.from('fotos').getPublicUrl(filePath);
+        fotoUrl = urlData.publicUrl;
+      }
+
       await onSalvar({
         tipo,
         conta_destino_id: contaId,
@@ -87,6 +145,9 @@ export function ModalNovaMovimentacao({
         valor: parseFloat(valor),
         forma_pagamento: formaPagamento,
         observacoes,
+        // liquidação escolhida (vazio = usar a aberta, decidido no backend)
+        liquidacao_id: liquidacaoSelId || undefined,
+        foto_url: fotoUrl || undefined,
       });
       onClose();
     } catch (e: any) {
@@ -95,6 +156,20 @@ export function ModalNovaMovimentacao({
       setSalvando(false);
     }
   };
+
+  // Helpers do comprovante
+  const handleSelecionarComprovante = (file: File | null) => {
+    setErro('');
+    if (!file) { setComprovanteFile(null); setComprovantePreview(''); return; }
+    if (!file.type.startsWith('image/')) { setErro('Selecione um arquivo de imagem'); return; }
+    if (file.size > 5 * 1024 * 1024) { setErro('A imagem deve ter no máximo 5MB'); return; }
+    setComprovanteFile(file);
+    setComprovantePreview(URL.createObjectURL(file));
+  };
+
+  // Formatação de data da liquidação para o dropdown
+  const ymdLiq = (l: any) => (l?.data_liquidacao?.split('T')[0] || l?.data_abertura?.split('T')[0] || '');
+  const fmtData = (s: string) => s ? new Date(s + 'T12:00:00').toLocaleDateString('pt-BR') : '';
 
   // Ícone e cor baseados no tipo de conta
   const getIconeConta = (tipoConta: string) => {
@@ -140,6 +215,46 @@ export function ModalNovaMovimentacao({
             <div className="flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200">
               <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
               <p className="text-sm text-red-700">{erro}</p>
+            </div>
+          )}
+
+          {/* Liquidação: mostra a aberta e permite escolher outra */}
+          {rotaId && (
+            <div className="p-4 rounded-xl border-2 border-indigo-100 bg-indigo-50/50">
+              <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                <Calendar className="w-4 h-4 text-indigo-500" />
+                Liquidação
+              </label>
+              {loadingLiq ? (
+                <p className="text-sm text-gray-400">Carregando liquidações...</p>
+              ) : (
+                <>
+                  <p className="text-xs text-gray-600 mb-2">
+                    {liquidacaoAberta
+                      ? <>Liquidação aberta: <span className="font-semibold text-indigo-700">{fmtData(ymdLiq(liquidacaoAberta))}</span></>
+                      : <span className="text-amber-600">Não há liquidação aberta nesta rota.</span>}
+                  </p>
+                  <select
+                    value={liquidacaoSelId}
+                    onChange={(e) => setLiquidacaoSelId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-indigo-500 bg-white"
+                  >
+                    <option value="">
+                      {liquidacaoAberta ? `Usar a liquidação aberta (${fmtData(ymdLiq(liquidacaoAberta))})` : 'Nenhuma (sem vínculo de liquidação)'}
+                    </option>
+                    {liquidacoesRota.map((l: any) => (
+                      <option key={l.id} value={l.id}>
+                        {fmtData(ymdLiq(l))} · {l.status}
+                      </option>
+                    ))}
+                  </select>
+                  {liquidacaoSelId && liquidacaoSelId !== (liquidacaoAberta?.id || '') && (
+                    <p className="mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1.5 border border-amber-200">
+                      Este lançamento irá movimentar a liquidação selecionada, não a aberta.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -292,6 +407,41 @@ export function ModalNovaMovimentacao({
                 className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+          </div>
+
+          {/* Comprovante (anexa agora, upload ao salvar) */}
+          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+              <Upload className="w-4 h-4 text-gray-500" />
+              Comprovante (opcional)
+            </label>
+            {comprovantePreview ? (
+              <div className="flex items-center gap-3">
+                <img src={comprovantePreview} alt="Comprovante" className="w-16 h-16 rounded-lg object-cover border border-gray-200" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-gray-600 truncate">{comprovanteFile?.name}</p>
+                  <p className="text-[10px] text-gray-400">Será enviado ao salvar</p>
+                </div>
+                <button
+                  onClick={() => handleSelecionarComprovante(null)}
+                  className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"
+                  title="Remover"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-gray-300 text-sm text-gray-500 hover:border-blue-400 hover:text-blue-600 cursor-pointer transition-colors">
+                <Camera className="w-4 h-4" />
+                Anexar imagem
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleSelecionarComprovante(e.target.files?.[0] || null)}
+                />
+              </label>
+            )}
           </div>
         </div>
 
