@@ -641,15 +641,11 @@ export default function FinanceiroPage() {
     if (motivo === null) return; // cancelou
 
     try {
-      const result = await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
-      if (!result.success) {
-        alert(result.error || 'Não foi possível anular a movimentação.');
-        return;
-      }
+      await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
       await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
-    } catch (e) {
+    } catch (e: any) {
       console.error('Erro ao anular movimentação:', e);
-      alert('Erro ao anular a movimentação. Tente novamente.');
+      alert(e?.message || 'Erro ao anular a movimentação. Tente novamente.');
     }
   };
 
