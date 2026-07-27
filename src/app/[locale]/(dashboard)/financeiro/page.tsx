@@ -641,7 +641,11 @@ export default function FinanceiroPage() {
     if (motivo === null) return; // cancelou
 
     try {
-      await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
+      const result = await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
+      if (!result.success) {
+        alert(result.error || 'Não foi possível anular a movimentação.');
+        return;
+      }
       await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
     } catch (e) {
       console.error('Erro ao anular movimentação:', e);

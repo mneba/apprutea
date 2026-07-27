@@ -27,13 +27,19 @@ export const financeiroService = {
   // ANULAR MOVIMENTAÇÃO (marca ANULADO e reverte saldo da conta + caixa_final)
   // A RPC fn_anular_lancamento_financeiro já reverte os dois efeitos.
   // ==================================================
+  // ==================================================
+  // ANULAR MOVIMENTAÇÃO (WEBAPP)
+  // Usa fn_anular_lancamento_financeiro_web, que permite anular mesmo com
+  // a liquidação FECHADA (o app mobile usa a versão que bloqueia).
+  // Reverte saldo da conta + caixa_final; os totais são recalculados por trigger.
+  // ==================================================
   async anularMovimentacao(
     financeiroId: string,
     motivo?: string | null,
     userId?: string | null
   ): Promise<void> {
     const supabase = createClient();
-    const { error } = await supabase.rpc('fn_anular_lancamento_financeiro', {
+    const { data, error } = await supabase.rpc('fn_anular_lancamento_financeiro_web', {
       p_financeiro_id: financeiroId,
       p_motivo: motivo || null,
       p_user_id: userId || null,
@@ -41,6 +47,11 @@ export const financeiroService = {
     if (error) {
       console.error('Erro ao anular movimentação:', error);
       throw error;
+    }
+    // A função pode recusar via { sucesso: false, mensagem } (ex.: já anulado)
+    const resultado = Array.isArray(data) ? data[0] : data;
+    if (resultado && (resultado.sucesso === false || resultado.success === false)) {
+      throw new Error(resultado.mensagem || resultado.error || 'Não foi possível anular a movimentação.');
     }
   },
 
