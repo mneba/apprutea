@@ -699,6 +699,7 @@ export default function LiquidacaoDiariaPage() {
   const [modalAjustes, setModalAjustes] = useState(false);
   const [ajustesDia, setAjustesDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
   const [modalCobrancas, setModalCobrancas] = useState(false);
+  const [estornandoId, setEstornandoId] = useState<string | null>(null);
   const [cobrancasDia, setCobrancasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
 
   // Info pra abertura de nova liquidação (data prevista + dias pulados)
@@ -758,7 +759,7 @@ export default function LiquidacaoDiariaPage() {
           .neq('categoria', 'AJUSTE_ABERTURA').order('created_at', { ascending: false }),
         supabase
           .from('financeiro')
-          .select('id, categoria, descricao, valor, forma_pagamento, cliente_nome, data_lancamento, created_at')
+          .select('id, categoria, descricao, valor, forma_pagamento, cliente_nome, data_lancamento, created_at, ref_parcela_id, ref_emprestimo_id')
           .eq('liquidacao_id', liq.id).eq('tipo', 'RECEBER').eq('status', 'PAGO')
           .eq('categoria', 'COBRANCA_PARCELAS').order('created_at', { ascending: false }),
         supabase.from('ordem_rota_cliente').select('cliente_id, ordem').eq('rota_id', rotaId),
@@ -859,6 +860,47 @@ export default function LiquidacaoDiariaPage() {
       console.error('Erro ao carregar dados da liquidação:', error);
     }
   }, []);
+
+  // Estornar uma cobrança (parcela paga) — versão WEB (permite liquidação fechada)
+  const handleEstornarCobranca = useCallback(async (c: any) => {
+    if (!c?.ref_parcela_id) {
+      alert('Esta cobrança não está vinculada a uma parcela e não pode ser estornada por aqui.');
+      return;
+    }
+    const nome = c.cliente_nome || c.descricao || 'esta cobrança';
+    if (!confirm(`Estornar o pagamento de ${nome} (${formatarMoeda(Number(c.valor || 0))})?\n\nIsto reverterá o valor da conta e os indicadores da liquidação.`)) {
+      return;
+    }
+    const motivo = prompt('Motivo do estorno (obrigatório):');
+    if (motivo === null) return; // cancelou
+    if (!motivo.trim()) { alert('O motivo é obrigatório para estornar.'); return; }
+
+    setEstornandoId(c.id);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data, error } = await supabase.rpc('fn_estornar_pagamento_web', {
+        p_parcela_id: c.ref_parcela_id,
+        p_motivo: motivo.trim(),
+        p_vendedor_id: vendedor?.id || null,
+        p_user_id: userId || null,
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Não foi possível estornar o pagamento.');
+        return;
+      }
+      // Recarrega os dados da liquidação para refletir o estorno
+      if (liquidacao && rota) {
+        await carregarDadosLiquidacao(liquidacao, rota.id);
+      }
+    } catch (e: any) {
+      console.error('Erro ao estornar cobrança:', e);
+      alert(e?.message || 'Erro ao estornar o pagamento. Tente novamente.');
+    } finally {
+      setEstornandoId(null);
+    }
+  }, [vendedor, userId, liquidacao, rota, carregarDadosLiquidacao]);
 
   const carregarDados = useCallback(async () => {
     if (!userId) return;
@@ -2228,7 +2270,21 @@ export default function LiquidacaoDiariaPage() {
                               {c.forma_pagamento || 'Dinheiro'}
                             </p>
                           </div>
-                          <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
+                            {c.ref_parcela_id && (
+                              <button
+                                onClick={() => handleEstornarCobranca(c)}
+                                disabled={estornandoId === c.id}
+                                className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                title="Estornar pagamento"
+                              >
+                                {estornandoId === c.id
+                                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                                  : <RotateCcw className="w-4 h-4" />}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
