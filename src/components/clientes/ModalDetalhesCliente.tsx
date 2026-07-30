@@ -180,6 +180,17 @@ function Toggle({
   );
 }
 
+// ── Padrão de exibição de pagamentos (ver PADRAO_exibicao_pagamentos.md) ──
+// Resumo da parcela a partir dos REGISTROS INDIVIDUAIS (não do agregado).
+// Dinheiro = soma de valor_pago_total dos NÃO estornados (inclui IMPORTACAO).
+function resumoPagamentosParcela(pags: any[] | undefined) {
+  const ativos = (pags || []).filter((p) => !p.estornado);
+  const dinheiro = ativos.reduce((s, p) => s + (Number(p.valor) || 0), 0);
+  const creditoUsado = ativos.reduce((s, p) => s + (Number(p.credito_usado) || 0), 0);
+  const creditoGerado = ativos.reduce((s, p) => s + (Number(p.credito_gerado) || 0), 0);
+  return { ativos, temAtivos: ativos.length > 0, dinheiro, creditoUsado, creditoGerado };
+}
+
 // Card de Empréstimo com parcelas já expandidas e botão quitar
 function CardEmprestimo({
   emprestimo,
@@ -195,6 +206,7 @@ function CardEmprestimo({
   clienteNome,
   datasLiquidacao = {},
   totalPagoRealValor,
+  pagamentosPorParcela = {},
 }: {
   emprestimo: EmprestimoHistorico;
   expandido: boolean;
@@ -209,6 +221,7 @@ function CardEmprestimo({
   clienteNome?: string;
   datasLiquidacao?: Record<string, string>;
   totalPagoRealValor?: number;
+  pagamentosPorParcela?: Record<string, any[]>;
 }) {
   const percentualPago = emprestimo.percentual_valor_pago || 0;
   const temParcelasPendentes = parcelas.length === 0 || parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
@@ -312,21 +325,36 @@ function CardEmprestimo({
                     <tbody className="divide-y divide-gray-100">
                       {parcelas.map((parcela) => {
                         const liqData = (parcela as any).liquidacao_id ? datasLiquidacao[(parcela as any).liquidacao_id] : null;
-                        const credito = Number((parcela as any).saldo_excedente || 0);
+                        const pags = pagamentosPorParcela[parcela.id];
+                        const resumo = resumoPagamentosParcela(pags);
+                        const autoQuitacao = typeof (parcela as any).observacoes === 'string'
+                          && (parcela as any).observacoes.includes('[AUTO-QUITAÇÃO]');
                         const fmtDataLiq = (s?: string | null) => {
                           if (!s) return '—';
                           const p = s.slice(0, 10).split('-');
                           return p.length === 3 ? `${p[2]}/${p[1]}` : '—';
                         };
                         return (
-                          <tr key={parcela.id} className="hover:bg-gray-50">
+                          <tr key={parcela.id} className="hover:bg-gray-50 align-top">
                             <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
                             <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
                             <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
                             <td className="px-3 py-2 text-right">
-                              <span className="text-green-600">{formatarMoeda(parcela.valor_pago)}</span>
-                              {credito > 0 && (
-                                <span className="block text-[10px] text-blue-600">crédito {formatarMoeda(credito)}</span>
+                              {resumo.temAtivos ? (
+                                <>
+                                  <span className="text-green-600">{formatarMoeda(resumo.dinheiro)}</span>
+                                  {resumo.creditoUsado > 0 && (
+                                    <span className="block text-[10px] text-blue-600">crédito usado {formatarMoeda(resumo.creditoUsado)}</span>
+                                  )}
+                                  {resumo.creditoGerado > 0 && !autoQuitacao && (
+                                    <span className="block text-[10px] text-purple-600">crédito gerado {formatarMoeda(resumo.creditoGerado)}</span>
+                                  )}
+                                  {autoQuitacao && (
+                                    <span className="block text-[10px] text-purple-600">Quitado por crédito</span>
+                                  )}
+                                </>
+                              ) : (
+                                <span className="text-gray-400">{formatarMoeda(parcela.valor_pago)}</span>
                               )}
                             </td>
                             <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
@@ -806,6 +834,8 @@ export function ModalDetalhesCliente({
   const [carregandoParcelas, setCarregandoParcelas] = useState<string | null>(null);
   // Datas das liquidações referenciadas (liquidacao_id -> 'YYYY-MM-DD')
   const [datasLiquidacao, setDatasLiquidacao] = useState<Record<string, string>>({});
+  // Pagamentos individuais por parcela: emprestimoId -> (parcelaId -> pagamentos[])
+  const [pagamentosPorParcela, setPagamentosPorParcela] = useState<Record<string, Record<string, any[]>>>({});
   
   // Dados auxiliares
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
@@ -918,14 +948,35 @@ export function ModalDetalhesCliente({
       const data = await clientesService.buscarParcelasViaView(emprestimoId);
       setParcelas(prev => ({ ...prev, [emprestimoId]: data }));
 
-      // Resolver as datas das liquidações referenciadas pelas parcelas
-      const liqIds = Array.from(new Set(
-        (data || []).map((p: any) => p.liquidacao_id).filter(Boolean)
-      ));
+      // Pagamentos individuais (TODOS, inclui estornados) — base do padrão
+      const parcelaIds = (data || []).map((p: any) => p.id).filter(Boolean);
+      const pagamentos = await clientesService.buscarPagamentosParcelas(parcelaIds);
+
+      // Datas de liquidação (das parcelas ∪ dos pagamentos)
+      const liqIds = Array.from(new Set([
+        ...(data || []).map((p: any) => p.liquidacao_id).filter(Boolean),
+        ...(pagamentos || []).map((p: any) => p.liquidacao_id).filter(Boolean),
+      ]));
+      let mapaDatas: Record<string, string> = {};
       if (liqIds.length > 0) {
-        const mapa = await clientesService.buscarDatasLiquidacoes(liqIds);
-        setDatasLiquidacao(prev => ({ ...prev, ...mapa }));
+        mapaDatas = await clientesService.buscarDatasLiquidacoes(liqIds);
+        setDatasLiquidacao(prev => ({ ...prev, ...mapaDatas }));
       }
+
+      // Agrupar pagamentos por parcela
+      const porParcela: Record<string, any[]> = {};
+      (pagamentos || []).forEach((p: any) => {
+        (porParcela[p.parcela_id] ||= []).push({
+          valor: Number(p.valor_pago_atual) || 0,
+          credito_usado: Number(p.valor_credito_usado) || 0,
+          credito_gerado: Number(p.valor_credito_gerado) || 0,
+          forma: p.forma_pagamento || null,
+          created_at: p.created_at,
+          estornado: !!p.estornado,
+          liq_data: p.liquidacao_id ? (mapaDatas[p.liquidacao_id] || null) : null,
+        });
+      });
+      setPagamentosPorParcela(prev => ({ ...prev, [emprestimoId]: porParcela }));
     } catch (error) {
       console.error('Erro ao carregar parcelas:', error);
     } finally {
@@ -1329,6 +1380,7 @@ export function ModalDetalhesCliente({
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
                         datasLiquidacao={datasLiquidacao}
                         totalPagoRealValor={totalPagoReal[emp.emprestimo_id]}
+                        pagamentosPorParcela={pagamentosPorParcela[emp.emprestimo_id] || {}}
                         onRecarregar={() => recarregarTudo(emp.emprestimo_id)}
                         onRenegociar={(emprestimoId) => {
                           console.log('Renegociar empréstimo:', emprestimoId);
@@ -1368,6 +1420,7 @@ export function ModalDetalhesCliente({
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
                         datasLiquidacao={datasLiquidacao}
                         totalPagoRealValor={totalPagoReal[emp.emprestimo_id]}
+                        pagamentosPorParcela={pagamentosPorParcela[emp.emprestimo_id] || {}}
                       />
                     ))
                   ) : (
