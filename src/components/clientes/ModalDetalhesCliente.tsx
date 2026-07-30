@@ -234,13 +234,15 @@ function pontualidade(dataPagamento?: string | null, dataVencimento?: string | n
 }
 
 // Resumo da parcela a partir dos REGISTROS INDIVIDUAIS (não do agregado).
-// Dinheiro = soma de valor_pago_total dos NÃO estornados (inclui IMPORTACAO).
+// totalPago = soma de valor_pago_total (inclui o que foi pago via crédito).
+// dinheiro  = dinheiro real = valor_pago_total - crédito usado (não conta crédito).
 function resumoPagamentosParcela(pags: any[] | undefined) {
   const ativos = (pags || []).filter((p) => !p.estornado);
-  const dinheiro = ativos.reduce((s, p) => s + (Number(p.valor) || 0), 0);
+  const totalPago = ativos.reduce((s, p) => s + (Number(p.valor) || 0), 0);
   const creditoUsado = ativos.reduce((s, p) => s + (Number(p.credito_usado) || 0), 0);
   const creditoGerado = ativos.reduce((s, p) => s + (Number(p.credito_gerado) || 0), 0);
-  return { ativos, temAtivos: ativos.length > 0, dinheiro, creditoUsado, creditoGerado };
+  const dinheiro = totalPago - creditoUsado;
+  return { ativos, temAtivos: ativos.length > 0, totalPago, dinheiro, creditoUsado, creditoGerado };
 }
 
 // Card de Empréstimo com parcelas já expandidas e botão quitar
@@ -388,7 +390,7 @@ function CardEmprestimo({
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-sm font-bold text-green-600">
-                            {formatarMoeda(resumo.temAtivos ? (resumo.dinheiro + resumo.creditoUsado) : parcela.valor_pago)}
+                            {formatarMoeda(resumo.temAtivos ? resumo.totalPago : parcela.valor_pago)}
                           </span>
                           <BadgeStatus status={parcela.status} tipo="parcela" />
                         </div>
