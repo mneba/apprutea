@@ -193,6 +193,8 @@ function CardEmprestimo({
   podeQuitar = false,
   liquidacaoId,
   clienteNome,
+  detalhesPorParcela,
+  onAbrirDetalhe,
 }: {
   emprestimo: EmprestimoHistorico;
   expandido: boolean;
@@ -205,6 +207,8 @@ function CardEmprestimo({
   podeQuitar?: boolean;
   liquidacaoId?: string;
   clienteNome?: string;
+  detalhesPorParcela?: Record<string, any[]>;
+  onAbrirDetalhe?: (parcela: ParcelaView, pagamentos: any[]) => void;
 }) {
   const percentualPago = emprestimo.percentual_valor_pago || 0;
   const temParcelasPendentes = parcelas.length === 0 || parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
@@ -304,18 +308,32 @@ function CardEmprestimo({
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {parcelas.map((parcela) => (
-                        <tr key={parcela.id} className="hover:bg-gray-50">
-                          <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
-                          <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
-                          <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
-                          <td className="px-3 py-2 text-right text-green-600">{formatarMoeda(parcela.valor_pago)}</td>
-                          <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
-                          <td className="px-3 py-2 text-center">
-                            <BadgeStatus status={parcela.status} tipo="parcela" />
-                          </td>
-                        </tr>
-                      ))}
+                      {parcelas.map((parcela) => {
+                        const pags = detalhesPorParcela?.[parcela.id] || [];
+                        const temPagamento = parcela.status === 'PAGO'
+                          || (['PARCIAL', 'VENCIDO'].includes(parcela.status) && (parcela.valor_pago || 0) > 0);
+                        const clicavel = temPagamento && !!onAbrirDetalhe;
+                        return (
+                          <tr
+                            key={parcela.id}
+                            className={`hover:bg-gray-50 ${clicavel ? 'cursor-pointer' : ''}`}
+                            onClick={clicavel ? () => onAbrirDetalhe!(parcela, pags) : undefined}
+                            title={clicavel ? 'Ver detalhes do pagamento' : undefined}
+                          >
+                            <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
+                            <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
+                            <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
+                            <td className="px-3 py-2 text-right text-green-600">{formatarMoeda(parcela.valor_pago)}</td>
+                            <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
+                            <td className="px-3 py-2 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <BadgeStatus status={parcela.status} tipo="parcela" />
+                                {clicavel && <ChevronRight className="w-3.5 h-3.5 text-gray-300" />}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -776,6 +794,9 @@ export function ModalDetalhesCliente({
   const [emprestimoExpandido, setEmprestimoExpandido] = useState<string | null>(null);
   const [parcelas, setParcelas] = useState<Record<string, ParcelaView[]>>({});
   const [carregandoParcelas, setCarregandoParcelas] = useState<string | null>(null);
+  // Detalhes de pagamento por parcela (DetalhesPopup, só leitura)
+  const [detalhesPagamento, setDetalhesPagamento] = useState<Record<string, Record<string, any[]>>>({}); // emprestimoId -> (parcelaId -> pagamentos[])
+  const [popupParcela, setPopupParcela] = useState<{ parcela: ParcelaView; pagamentos: any[] } | null>(null);
   
   // Dados auxiliares
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
@@ -875,8 +896,37 @@ export function ModalDetalhesCliente({
   const carregarParcelas = async (emprestimoId: string) => {
     setCarregandoParcelas(emprestimoId);
     try {
+      // 1) parcelas
       const data = await clientesService.buscarParcelasViaView(emprestimoId);
       setParcelas(prev => ({ ...prev, [emprestimoId]: data }));
+
+      // 2) pagamentos das parcelas (inclui estornados)
+      const parcelaIds = (data || []).map((p: any) => p.id).filter(Boolean);
+      const pagamentos = await clientesService.buscarPagamentosParcelas(parcelaIds);
+
+      // 3) datas das liquidações (parcelas ∪ pagamentos), deduplicadas
+      const liqIds = Array.from(new Set([
+        ...(data || []).map((p: any) => p.liquidacao_id).filter(Boolean),
+        ...(pagamentos || []).map((p: any) => p.liquidacao_id).filter(Boolean),
+      ]));
+      const liqDataMap = await clientesService.buscarDatasLiquidacoes(liqIds);
+
+      // 4) montar detMap: parcela_id -> PagamentoDetalhe[]
+      const detMap: Record<string, any[]> = {};
+      (pagamentos || []).forEach((p: any) => {
+        const entry = {
+          valor_pago_total: p.valor_pago_atual || 0,
+          valor_credito_usado: p.valor_credito_usado || 0,
+          valor_credito_gerado: p.valor_credito_gerado || 0,
+          forma_pagamento: p.forma_pagamento || undefined,
+          created_at: p.created_at,
+          estornado: p.estornado || false,
+          data_liquidacao: p.liquidacao_id ? (liqDataMap[p.liquidacao_id] || null) : null,
+        };
+        if (!detMap[p.parcela_id]) detMap[p.parcela_id] = [];
+        detMap[p.parcela_id].push(entry);
+      });
+      setDetalhesPagamento(prev => ({ ...prev, [emprestimoId]: detMap }));
     } catch (error) {
       console.error('Erro ao carregar parcelas:', error);
     } finally {
@@ -1278,6 +1328,8 @@ export function ModalDetalhesCliente({
                         )}
                         parcelas={parcelas[emp.emprestimo_id] || []}
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
+                        detalhesPorParcela={detalhesPagamento[emp.emprestimo_id] || {}}
+                        onAbrirDetalhe={(parcela, pagamentos) => setPopupParcela({ parcela, pagamentos })}
                         onRecarregar={() => recarregarTudo(emp.emprestimo_id)}
                         onRenegociar={(emprestimoId) => {
                           console.log('Renegociar empréstimo:', emprestimoId);
@@ -1315,6 +1367,8 @@ export function ModalDetalhesCliente({
                         )}
                         parcelas={parcelas[emp.emprestimo_id] || []}
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
+                        detalhesPorParcela={detalhesPagamento[emp.emprestimo_id] || {}}
+                        onAbrirDetalhe={(parcela, pagamentos) => setPopupParcela({ parcela, pagamentos })}
                       />
                     ))
                   ) : (
@@ -1349,6 +1403,119 @@ export function ModalDetalhesCliente({
       {fotoAmpliada && (
         <LightboxImagem url={fotoAmpliada} onClose={() => setFotoAmpliada(null)} />
       )}
+
+      {popupParcela && (
+        <DetalhesPagamentoPopup
+          parcela={popupParcela.parcela}
+          pagamentos={popupParcela.pagamentos}
+          onClose={() => setPopupParcela(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// =====================================================
+// POPUP DE DETALHES DE PAGAMENTO (somente leitura)
+// Regras conforme DETALHES_PAGAMENTOS_PARA_WEBAPP.md (seção 3)
+// =====================================================
+function DetalhesPagamentoPopup({
+  parcela,
+  pagamentos,
+  onClose,
+}: {
+  parcela: ParcelaView;
+  pagamentos: any[];
+  onClose: () => void;
+}) {
+  const [mostrarEstornados, setMostrarEstornados] = useState(false);
+
+  const pagsAtivos = (pagamentos || []).filter((p) => !p.estornado);
+  const pagsEstornados = (pagamentos || []).filter((p) => p.estornado);
+
+  // 3.2 "Saldo importado": parcela paga mas sem registro individual ativo
+  const parcelaPaga = parcela.status === 'PAGO'
+    || (['PARCIAL', 'VENCIDO'].includes(parcela.status) && (parcela.valor_pago || 0) > 0);
+  const importado = parcelaPaga && pagsAtivos.length === 0;
+
+  const fmtDataHora = (iso?: string) => {
+    if (!iso) return '';
+    // Exibe data/hora local sem depender de fuso na string YYYY-MM-DD
+    try {
+      const d = new Date(iso);
+      return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch { return ''; }
+  };
+  const fmtDataLiq = (s?: string | null) => {
+    if (!s) return '';
+    const p = s.slice(0, 10).split('-'); // YYYY-MM-DD -> DD/MM/YYYY (sem new Date)
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s;
+  };
+
+  const LinhaPagamento = ({ p, estornado = false }: { p: any; estornado?: boolean }) => (
+    <div className={`p-3 rounded-lg border ${estornado ? 'border-red-100 bg-red-50/40' : 'border-gray-100 bg-white'}`}>
+      <div className="flex items-center justify-between">
+        <span className={`text-sm font-semibold ${estornado ? 'text-red-600 line-through' : 'text-gray-900'}`}>
+          {formatarMoeda(p.valor_pago_total || 0)}
+        </span>
+        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+          {p.forma_pagamento === 'DINHEIRO' ? 'Dinheiro' : 'Transferência'}
+        </span>
+      </div>
+      <div className="mt-1 space-y-0.5 text-[11px] text-gray-500">
+        {!importado && p.created_at && <p>{fmtDataHora(p.created_at)}</p>}
+        {p.data_liquidacao && <p>Liq. {fmtDataLiq(p.data_liquidacao)}</p>}
+        {(p.valor_credito_usado || 0) > 0 && <p className="text-blue-600">Crédito usado: {formatarMoeda(p.valor_credito_usado)}</p>}
+        {(p.valor_credito_gerado || 0) > 0 && <p className="text-emerald-600">Crédito gerado: {formatarMoeda(p.valor_credito_gerado)}</p>}
+        {estornado && <p className="text-red-500 font-medium">Estornado</p>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-sm max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900">Parcela {parcela.numero_parcela}</h3>
+            <p className="text-[11px] text-gray-500">Vencimento {formatarData(parcela.data_vencimento)} · {formatarMoeda(parcela.valor_parcela)}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="p-4 overflow-y-auto space-y-2">
+          {importado ? (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-gray-50 border border-gray-100 text-gray-500 text-sm">
+              <FileText className="w-4 h-4 flex-shrink-0" />
+              Saldo importado (sem registro individual)
+            </div>
+          ) : pagsAtivos.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-4">Nenhum pagamento registrado</p>
+          ) : (
+            pagsAtivos.map((p, i) => <LinhaPagamento key={i} p={p} />)
+          )}
+
+          {pagsEstornados.length > 0 && (
+            <div className="pt-2 border-t border-gray-100">
+              <button
+                onClick={() => setMostrarEstornados((v) => !v)}
+                className="w-full flex items-center justify-between text-xs text-gray-500 hover:text-gray-700 py-1"
+              >
+                <span>{pagsEstornados.length} estornado(s)</span>
+                {mostrarEstornados ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {mostrarEstornados && (
+                <div className="space-y-2 mt-1">
+                  {pagsEstornados.map((p, i) => <LinhaPagamento key={i} p={p} estornado />)}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

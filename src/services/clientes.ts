@@ -648,8 +648,52 @@ export const clientesService = {
   },
 
   // ==================================================
-  // BUSCAR CLIENTE COMPLETO (dados + empréstimos)
+  // BUSCAR PAGAMENTOS DAS PARCELAS (inclui estornados)
+  // Para o DetalhesPopup do webapp (histórico por parcela).
   // ==================================================
+  async buscarPagamentosParcelas(parcelaIds: string[]): Promise<any[]> {
+    if (!parcelaIds || parcelaIds.length === 0) return [];
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from('pagamentos_parcelas')
+      .select('parcela_id, valor_pago_atual, valor_credito_usado, valor_credito_gerado, liquidacao_id, forma_pagamento, estornado, created_at')
+      .in('parcela_id', parcelaIds)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Erro ao buscar pagamentos das parcelas:', error);
+      return [];
+    }
+    return data || [];
+  },
+
+  // ==================================================
+  // BUSCAR DATAS DAS LIQUIDAÇÕES (id -> data)
+  // Regra de fuso: data_liquidacao (DATE) tem precedência; senão
+  // data_abertura truncada por substring(0,10). Nunca usar new Date() aqui.
+  // ==================================================
+  async buscarDatasLiquidacoes(liqIds: string[]): Promise<Record<string, string>> {
+    if (!liqIds || liqIds.length === 0) return {};
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from('liquidacoes_diarias')
+      .select('id, data_abertura, data_liquidacao')
+      .in('id', liqIds);
+
+    if (error) {
+      console.error('Erro ao buscar datas das liquidações:', error);
+      return {};
+    }
+
+    const mapa: Record<string, string> = {};
+    (data || []).forEach((l: any) => {
+      const bruto = l.data_liquidacao || l.data_abertura || '';
+      mapa[l.id] = typeof bruto === 'string' ? bruto.slice(0, 10) : '';
+    });
+    return mapa;
+  },
   async buscarClienteCompleto(clienteId: string): Promise<{
     cliente: Cliente | null;
     emprestimos: { ativos: EmprestimoHistorico[]; finalizados: EmprestimoHistorico[] };
