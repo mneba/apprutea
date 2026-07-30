@@ -628,6 +628,38 @@ export const clientesService = {
   },
 
   // ==================================================
+  // TOTAL PAGO REAL (em lote) — dinheiro efetivamente recebido
+  // Corrige a inflação de emprestimo_parcelas.valor_pago (que conta o crédito
+  // em dobro). Fonte: pagamentos_parcelas, descontando crédito usado, só não
+  // estornados. Ver BRIEFING_correcao_total_pago_webapp.md.
+  // NOTA: correção de LEITURA no front. A raiz é a view
+  // vw_historico_emprestimos_cliente (total_pago_parcelas); corrigir lá quando
+  // o corpo da view estiver disponível.
+  // ==================================================
+  async buscarTotalPagoRealLote(emprestimoIds: string[]): Promise<Record<string, number>> {
+    if (!emprestimoIds || emprestimoIds.length === 0) return {};
+    const supabase = createClient();
+
+    const { data, error } = await supabase
+      .from('pagamentos_parcelas')
+      .select('emprestimo_id, valor_pago_atual, valor_credito_usado')
+      .in('emprestimo_id', emprestimoIds)
+      .eq('estornado', false);
+
+    if (error) {
+      console.error('Erro ao buscar total pago real:', error);
+      return {};
+    }
+
+    const mapa: Record<string, number> = {};
+    (data || []).forEach((pp: any) => {
+      const real = (Number(pp.valor_pago_atual) || 0) - (Number(pp.valor_credito_usado) || 0);
+      mapa[pp.emprestimo_id] = (mapa[pp.emprestimo_id] || 0) + real;
+    });
+    return mapa;
+  },
+
+  // ==================================================
   // BUSCAR PARCELAS DE UM EMPRÉSTIMO (via view)
   // ==================================================
   async buscarParcelasViaView(emprestimoId: string): Promise<ParcelaView[]> {

@@ -194,6 +194,7 @@ function CardEmprestimo({
   liquidacaoId,
   clienteNome,
   datasLiquidacao = {},
+  totalPagoRealValor,
 }: {
   emprestimo: EmprestimoHistorico;
   expandido: boolean;
@@ -207,6 +208,7 @@ function CardEmprestimo({
   liquidacaoId?: string;
   clienteNome?: string;
   datasLiquidacao?: Record<string, string>;
+  totalPagoRealValor?: number;
 }) {
   const percentualPago = emprestimo.percentual_valor_pago || 0;
   const temParcelasPendentes = parcelas.length === 0 || parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
@@ -263,7 +265,7 @@ function CardEmprestimo({
             </div>
             <div className="bg-white p-3 rounded-lg">
               <p className="text-xs text-gray-500">Total Pago</p>
-              <p className="font-semibold text-green-600">{formatarMoeda(emprestimo.total_pago_parcelas)}</p>
+              <p className="font-semibold text-green-600">{formatarMoeda(totalPagoRealValor ?? emprestimo.total_pago_parcelas)}</p>
             </div>
             <div className="bg-white p-3 rounded-lg">
               <p className="text-xs text-gray-500">Saldo Restante</p>
@@ -796,6 +798,8 @@ export function ModalDetalhesCliente({
   const [clienteCompleto, setClienteCompleto] = useState<Cliente | null>(null);
   const [emprestimosAtivos, setEmprestimosAtivos] = useState<EmprestimoHistorico[]>([]);
   const [emprestimosFinalizados, setEmprestimosFinalizados] = useState<EmprestimoHistorico[]>([]);
+  // Total pago real por empréstimo (corrige inflação do crédito) — emprestimo_id -> valor
+  const [totalPagoReal, setTotalPagoReal] = useState<Record<string, number>>({});
   const [carregando, setCarregando] = useState(false);
   const [emprestimoExpandido, setEmprestimoExpandido] = useState<string | null>(null);
   const [parcelas, setParcelas] = useState<Record<string, ParcelaView[]>>({});
@@ -870,6 +874,16 @@ export function ModalDetalhesCliente({
       setClienteCompleto(resultado.cliente);
       setEmprestimosAtivos(resultado.emprestimos.ativos);
       setEmprestimosFinalizados(resultado.emprestimos.finalizados);
+
+      // Total pago REAL em lote (corrige inflação do crédito) — uma query só
+      const todosIds = [
+        ...resultado.emprestimos.ativos,
+        ...resultado.emprestimos.finalizados,
+      ].map((e: any) => e.emprestimo_id).filter(Boolean);
+      if (todosIds.length > 0) {
+        const mapa = await clientesService.buscarTotalPagoRealLote(todosIds);
+        setTotalPagoReal(mapa);
+      }
     } catch (error) {
       console.error('Erro ao carregar dados do cliente:', error);
     } finally {
@@ -1314,6 +1328,7 @@ export function ModalDetalhesCliente({
                         parcelas={parcelas[emp.emprestimo_id] || []}
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
                         datasLiquidacao={datasLiquidacao}
+                        totalPagoRealValor={totalPagoReal[emp.emprestimo_id]}
                         onRecarregar={() => recarregarTudo(emp.emprestimo_id)}
                         onRenegociar={(emprestimoId) => {
                           console.log('Renegociar empréstimo:', emprestimoId);
@@ -1352,6 +1367,7 @@ export function ModalDetalhesCliente({
                         parcelas={parcelas[emp.emprestimo_id] || []}
                         carregandoParcelas={carregandoParcelas === emp.emprestimo_id}
                         datasLiquidacao={datasLiquidacao}
+                        totalPagoRealValor={totalPagoReal[emp.emprestimo_id]}
                       />
                     ))
                   ) : (
