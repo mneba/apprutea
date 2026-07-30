@@ -181,6 +181,58 @@ function Toggle({
 }
 
 // ── Padrão de exibição de pagamentos (ver PADRAO_exibicao_pagamentos.md) ──
+// Mapeamento explícito de forma (corrige CREDITO virando "Transferência")
+function rotuloFormaPagamento(forma?: string | null): string | null {
+  switch (forma) {
+    case 'DINHEIRO': return 'Dinheiro';
+    case 'CREDITO': return 'Pago com crédito';
+    case 'TRANSFERENCIA':
+    case 'PIX': return 'Transferência';
+    case 'IMPORTACAO': return 'Importado';
+    default: return null;
+  }
+}
+
+// Data 'YYYY-MM-DD' -> 'DD/MM/YY' sem new Date (evita shift de fuso)
+function fmtDataCurta(s?: string | null): string {
+  if (!s) return '';
+  const p = s.slice(0, 10).split('-');
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0].slice(2)}` : '';
+}
+
+// Data/hora de um created_at (timestamp) -> 'DD/MM/YY, HH:MM'
+function fmtDataHora(iso?: string | null): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    const dia = String(d.getDate()).padStart(2, '0');
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const ano = String(d.getFullYear()).slice(2);
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${dia}/${mes}/${ano}, ${h}:${min}`;
+  } catch { return ''; }
+}
+
+// Pontualidade: compara data de pagamento x vencimento por COMPONENTES YYYY-MM-DD
+// (nunca new Date(string) — shift de fuso). Retorna {texto, cor}.
+function pontualidade(dataPagamento?: string | null, dataVencimento?: string | null):
+  { texto: string; classe: string } | null {
+  if (!dataPagamento || !dataVencimento) return null;
+  const toNum = (s: string) => {
+    const p = s.slice(0, 10).split('-');
+    if (p.length !== 3) return null;
+    return Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2]));
+  };
+  const a = toNum(dataPagamento), b = toNum(dataVencimento);
+  if (a == null || b == null) return null;
+  const dias = Math.round((a - b) / 86400000);
+  if (dias === 0) return { texto: 'No dia', classe: 'text-green-600' };
+  if (dias > 0) return { texto: `${dias} ${dias === 1 ? 'dia' : 'dias'} de atraso`, classe: 'text-red-600' };
+  const n = Math.abs(dias);
+  return { texto: `${n} ${n === 1 ? 'dia' : 'dias'} antes`, classe: 'text-green-600' };
+}
+
 // Resumo da parcela a partir dos REGISTROS INDIVIDUAIS (não do agregado).
 // Dinheiro = soma de valor_pago_total dos NÃO estornados (inclui IMPORTACAO).
 function resumoPagamentosParcela(pags: any[] | undefined) {
@@ -307,72 +359,108 @@ function CardEmprestimo({
                 <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
               </div>
             ) : parcelas.length > 0 ? (
-              <div className="bg-white rounded-lg overflow-hidden border border-gray-200">
-                <div className="max-h-64 overflow-y-auto">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0 bg-gray-50 z-10">
-                      <tr className="border-b">
-                        <th className="px-3 py-2 text-left font-medium text-gray-700">#</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-700">Vencimento</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-700">Valor</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-700">Pago</th>
-                        <th className="px-3 py-2 text-right font-medium text-gray-700">Saldo</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-700">Pgto</th>
-                        <th className="px-3 py-2 text-left font-medium text-gray-700">Liq.</th>
-                        <th className="px-3 py-2 text-center font-medium text-gray-700">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {parcelas.map((parcela) => {
-                        const liqData = (parcela as any).liquidacao_id ? datasLiquidacao[(parcela as any).liquidacao_id] : null;
-                        const pags = pagamentosPorParcela[parcela.id];
-                        const resumo = resumoPagamentosParcela(pags);
-                        const autoQuitacao = typeof (parcela as any).observacoes === 'string'
-                          && (parcela as any).observacoes.includes('[AUTO-QUITAÇÃO]');
-                        const fmtDataLiq = (s?: string | null) => {
-                          if (!s) return '—';
-                          const p = s.slice(0, 10).split('-');
-                          return p.length === 3 ? `${p[2]}/${p[1]}` : '—';
-                        };
-                        return (
-                          <tr key={parcela.id} className="hover:bg-gray-50 align-top">
-                            <td className="px-3 py-2 text-gray-600">{parcela.numero_parcela}</td>
-                            <td className="px-3 py-2 text-gray-600">{formatarData(parcela.data_vencimento)}</td>
-                            <td className="px-3 py-2 text-right text-gray-900">{formatarMoeda(parcela.valor_parcela)}</td>
-                            <td className="px-3 py-2 text-right">
-                              {resumo.temAtivos ? (
-                                <>
-                                  <span className="text-green-600">{formatarMoeda(resumo.dinheiro)}</span>
-                                  {resumo.creditoUsado > 0 && (
-                                    <span className="block text-[10px] text-blue-600">crédito usado {formatarMoeda(resumo.creditoUsado)}</span>
+              <div className="space-y-2 max-h-[28rem] overflow-y-auto pr-1">
+                {parcelas.map((parcela) => {
+                  const pid = (parcela as any).id ?? (parcela as any).parcela_id;
+                  const pags = pagamentosPorParcela[pid];
+                  const resumo = resumoPagamentosParcela(pags);
+                  const obs = (parcela as any).observacoes;
+                  const autoQuitacao = typeof obs === 'string' && obs.includes('[AUTO-QUITAÇÃO]');
+                  const pont = pontualidade((parcela as any).data_pagamento, parcela.data_vencimento);
+                  const saldo = Number(parcela.valor_saldo) || 0;
+                  const estornados = (pags || []).filter((p: any) => p.estornado);
+
+                  return (
+                    <div key={pid} className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                      {/* Cabeçalho */}
+                      <div className="flex items-start justify-between gap-2 px-3 py-2 bg-gray-50/60">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-gray-900">#{parcela.numero_parcela}</span>
+                            <span className="text-[11px] text-gray-400">{formatarData(parcela.data_vencimento)}</span>
+                          </div>
+                          {pont && (
+                            <div className={`flex items-center gap-1 mt-0.5 text-[11px] font-medium ${pont.classe}`}>
+                              <span className={`inline-block w-1.5 h-1.5 rounded-full ${pont.classe.includes('red') ? 'bg-red-500' : 'bg-green-500'}`} />
+                              {pont.texto}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-sm font-bold text-green-600">
+                            {formatarMoeda(resumo.temAtivos ? (resumo.dinheiro + resumo.creditoUsado) : parcela.valor_pago)}
+                          </span>
+                          <BadgeStatus status={parcela.status} tipo="parcela" />
+                        </div>
+                      </div>
+
+                      {/* Corpo */}
+                      <div className="px-3 py-2 space-y-1">
+                        {/* Saldo importado: paga mas sem registro ativo */}
+                        {resumo.temAtivos === false && (parcela.status === 'PAGO' || (parcela.valor_pago || 0) > 0) ? (
+                          <div className="flex items-center gap-2 text-[12px] text-gray-500">
+                            <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+                            Saldo importado (sem registro individual)
+                          </div>
+                        ) : resumo.temAtivos ? (
+                          <>
+                            {/* Se a parcela gerou crédito, mostra o desmembramento */}
+                            {resumo.creditoGerado > 0 && !autoQuitacao && (
+                              <p className="text-[12px] text-gray-600">
+                                Parcela: {formatarMoeda(parcela.valor_parcela)}
+                              </p>
+                            )}
+                            {/* Cada pagamento ativo */}
+                            {resumo.ativos.map((pg: any, i: number) => {
+                              const forma = rotuloFormaPagamento(pg.forma);
+                              return (
+                                <div key={i} className="text-[12px] text-gray-600">
+                                  <span>Pago em: {fmtDataHora(pg.created_at)}</span>
+                                  {forma && <span> · {forma}</span>}
+                                  {pg.liq_data && <span className="text-indigo-500"> · Liq. {fmtDataCurta(pg.liq_data)}</span>}
+                                  {pg.credito_usado > 0 && (
+                                    <span className="block text-blue-600">crédito usado {formatarMoeda(pg.credito_usado)}</span>
                                   )}
-                                  {resumo.creditoGerado > 0 && !autoQuitacao && (
-                                    <span className="block text-[10px] text-purple-600">crédito gerado {formatarMoeda(resumo.creditoGerado)}</span>
+                                  {pg.credito_gerado > 0 && !autoQuitacao && (
+                                    <span className="block text-purple-600">+{formatarMoeda(pg.credito_gerado)} crédito</span>
                                   )}
-                                  {autoQuitacao && (
-                                    <span className="block text-[10px] text-purple-600">Quitado por crédito</span>
-                                  )}
-                                </>
-                              ) : (
-                                <span className="text-gray-400">{formatarMoeda(parcela.valor_pago)}</span>
-                              )}
-                            </td>
-                            <td className="px-3 py-2 text-right text-amber-600">{formatarMoeda(parcela.valor_saldo)}</td>
-                            <td className="px-3 py-2 text-left text-gray-500 text-xs whitespace-nowrap">
-                              {(parcela as any).data_pagamento ? formatarData((parcela as any).data_pagamento) : '—'}
-                            </td>
-                            <td className="px-3 py-2 text-left text-gray-500 text-xs whitespace-nowrap">
-                              {fmtDataLiq(liqData)}
-                            </td>
-                            <td className="px-3 py-2 text-center">
-                              <BadgeStatus status={parcela.status} tipo="parcela" />
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
+                                </div>
+                              );
+                            })}
+                            {autoQuitacao && (
+                              <p className="text-[12px] text-purple-600 font-medium">Quitado por crédito</p>
+                            )}
+                            {saldo > 0 && (
+                              <p className="text-[12px] text-amber-600">Saldo restante: {formatarMoeda(saldo)}</p>
+                            )}
+                          </>
+                        ) : (
+                          <p className="text-[12px] text-gray-400">Sem pagamento registrado</p>
+                        )}
+
+                        {/* Estornados — sempre visíveis */}
+                        {estornados.length > 0 && (
+                          <div className="pt-1.5 mt-1.5 border-t border-gray-100 space-y-1">
+                            <p className="text-[11px] font-medium text-gray-500">Estornados ({estornados.length})</p>
+                            {estornados.map((pg: any, i: number) => (
+                              <div key={i} className="text-[11px] text-gray-400">
+                                <div className="flex items-center gap-1">
+                                  <RotateCcw className="w-3 h-3 text-red-400 flex-shrink-0" />
+                                  <span className="line-through">{formatarMoeda(pg.valor)}</span>
+                                  {rotuloFormaPagamento(pg.forma) && <span> · {rotuloFormaPagamento(pg.forma)}</span>}
+                                  {pg.data_estorno && <span> · {fmtDataHora(pg.data_estorno)}</span>}
+                                </div>
+                                {pg.motivo_estorno && (
+                                  <p className="pl-4 text-red-400">Motivo: {pg.motivo_estorno}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <p className="text-center text-gray-500 py-4">Nenhuma parcela encontrada</p>
@@ -949,7 +1037,8 @@ export function ModalDetalhesCliente({
       setParcelas(prev => ({ ...prev, [emprestimoId]: data }));
 
       // Pagamentos individuais (TODOS, inclui estornados) — base do padrão
-      const parcelaIds = (data || []).map((p: any) => p.id).filter(Boolean);
+      const idDaParcela = (p: any) => p.id ?? p.parcela_id;
+      const parcelaIds = (data || []).map(idDaParcela).filter(Boolean);
       const pagamentos = await clientesService.buscarPagamentosParcelas(parcelaIds);
 
       // Datas de liquidação (das parcelas ∪ dos pagamentos)
@@ -974,6 +1063,9 @@ export function ModalDetalhesCliente({
           created_at: p.created_at,
           estornado: !!p.estornado,
           liq_data: p.liquidacao_id ? (mapaDatas[p.liquidacao_id] || null) : null,
+          motivo_estorno: p.motivo_estorno || null,
+          estornado_por: p.estornado_por || null,
+          data_estorno: p.data_estorno || null,
         });
       });
       setPagamentosPorParcela(prev => ({ ...prev, [emprestimoId]: porParcela }));
