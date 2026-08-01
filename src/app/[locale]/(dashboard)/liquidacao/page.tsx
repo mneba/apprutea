@@ -788,11 +788,34 @@ export default function LiquidacaoDiariaPage() {
         qtd: ajustesItens.length, itens: ajustesItens,
       });
 
-      // Cobranças
+      // Cobranças — enriquecer com número da parcela e total de parcelas do empréstimo
       const cobrancasItens = cobrancasRes.data || [];
+      const parcelaIdsCob = Array.from(new Set(cobrancasItens.map((c: any) => c.ref_parcela_id).filter(Boolean)));
+      const empIdsCob = Array.from(new Set(cobrancasItens.map((c: any) => c.ref_emprestimo_id).filter(Boolean)));
+      let mapaParcela: Record<string, number> = {};
+      let mapaTotalParc: Record<string, number> = {};
+      if (parcelaIdsCob.length > 0) {
+        const { data: parcRows } = await supabase
+          .from('emprestimo_parcelas')
+          .select('id, numero_parcela, emprestimo_id')
+          .in('id', parcelaIdsCob);
+        (parcRows || []).forEach((p: any) => { mapaParcela[p.id] = p.numero_parcela; });
+      }
+      if (empIdsCob.length > 0) {
+        const { data: empRows } = await supabase
+          .from('emprestimos')
+          .select('id, numero_parcelas')
+          .in('id', empIdsCob);
+        (empRows || []).forEach((e: any) => { mapaTotalParc[e.id] = e.numero_parcelas; });
+      }
+      const cobrancasEnriquecidas = cobrancasItens.map((c: any) => ({
+        ...c,
+        numero_parcela: c.ref_parcela_id ? (mapaParcela[c.ref_parcela_id] ?? null) : null,
+        total_parcelas: c.ref_emprestimo_id ? (mapaTotalParc[c.ref_emprestimo_id] ?? null) : null,
+      }));
       setCobrancasDia({
-        total: cobrancasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
-        qtd: cobrancasItens.length, itens: cobrancasItens,
+        total: cobrancasEnriquecidas.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: cobrancasEnriquecidas.length, itens: cobrancasEnriquecidas,
       });
 
       // Ordem dos clientes na rota
@@ -868,7 +891,10 @@ export default function LiquidacaoDiariaPage() {
       return;
     }
     const nome = c.cliente_nome || c.descricao || 'esta cobrança';
-    if (!confirm(`Estornar o pagamento de ${nome} (${formatarMoeda(Number(c.valor || 0))})?\n\nIsto reverterá o valor da conta e os indicadores da liquidação.`)) {
+    const desc = c.numero_parcela
+      ? `${nome} — parcela ${c.numero_parcela}${c.total_parcelas ? `/${c.total_parcelas}` : ''}`
+      : nome;
+    if (!confirm(`Estornar o pagamento de ${desc} (${formatarMoeda(Number(c.valor || 0))})?\n\nIsto reverterá o valor da conta e os indicadores da liquidação.`)) {
       return;
     }
     const motivo = prompt('Motivo do estorno (obrigatório):');
@@ -2261,32 +2287,70 @@ export default function LiquidacaoDiariaPage() {
                 </div>
                 <div className="flex-1 overflow-y-auto p-4">
                   {cobrancasDia.itens.length > 0 ? (
-                    <div className="space-y-2">
-                      {cobrancasDia.itens.map((c: any) => (
-                        <div key={c.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{c.cliente_nome || c.descricao || 'Cobrança'}</p>
-                            <p className="text-[11px] text-gray-400">
-                              {c.forma_pagamento || 'Dinheiro'}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
-                            {c.ref_parcela_id && (
-                              <button
-                                onClick={() => handleEstornarCobranca(c)}
-                                disabled={estornandoId === c.id}
-                                className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                title="Estornar pagamento"
-                              >
-                                {estornandoId === c.id
-                                  ? <Loader2 className="w-4 h-4 animate-spin" />
-                                  : <RotateCcw className="w-4 h-4" />}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      ))}
+                    <div className="space-y-3">
+                      {(() => {
+                        // Agrupar por cliente (chave: emprestimo_id, senão cliente_nome)
+                        const grupos: { chave: string; nome: string; itens: any[] }[] = [];
+                        const idx: Record<string, number> = {};
+                        cobrancasDia.itens.forEach((c: any) => {
+                          const chave = c.ref_emprestimo_id || c.cliente_nome || c.id;
+                          if (idx[chave] === undefined) {
+                            idx[chave] = grupos.length;
+                            grupos.push({ chave, nome: c.cliente_nome || c.descricao || 'Cobrança', itens: [] });
+                          }
+                          grupos[idx[chave]].itens.push(c);
+                        });
+                        // Ordena parcelas dentro do grupo por número
+                        grupos.forEach(g => g.itens.sort((a, b) => (a.numero_parcela || 0) - (b.numero_parcela || 0)));
+
+                        return grupos.map((g) => {
+                          const totalGrupo = g.itens.reduce((s, c) => s + Number(c.valor || 0), 0);
+                          const varias = g.itens.length > 1;
+                          return (
+                            <div key={g.chave} className="rounded-lg border border-gray-200 overflow-hidden">
+                              {/* Cabeçalho do cliente */}
+                              <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{g.nome}</p>
+                                {varias && (
+                                  <span className="text-xs text-gray-500 flex-shrink-0">
+                                    {g.itens.length} parcelas · {formatarMoeda(totalGrupo)}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Parcelas do cliente */}
+                              <div className="divide-y divide-gray-100">
+                                {g.itens.map((c: any) => (
+                                  <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-gray-50">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-gray-800">
+                                        {c.numero_parcela
+                                          ? <>Parcela {c.numero_parcela}{c.total_parcelas ? `/${c.total_parcelas}` : ''}</>
+                                          : (c.descricao || 'Cobrança')}
+                                      </p>
+                                      <p className="text-[11px] text-gray-400">{c.forma_pagamento || 'Dinheiro'}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
+                                      {c.ref_parcela_id && (
+                                        <button
+                                          onClick={() => handleEstornarCobranca(c)}
+                                          disabled={estornandoId === c.id}
+                                          className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                          title="Estornar pagamento"
+                                        >
+                                          {estornandoId === c.id
+                                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : <RotateCcw className="w-4 h-4" />}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500 text-sm">
