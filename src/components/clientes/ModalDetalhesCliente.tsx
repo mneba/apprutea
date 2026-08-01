@@ -389,9 +389,14 @@ function CardEmprestimo({
                           )}
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
-                          <span className="text-sm font-bold text-green-600">
-                            {formatarMoeda(resumo.temAtivos ? resumo.totalPago : parcela.valor_pago)}
-                          </span>
+                          <div className="text-right">
+                            <div className="text-[11px] text-gray-500">
+                              Parcela {formatarMoeda(parcela.valor_parcela)}
+                            </div>
+                            <div className="text-sm font-bold text-green-600">
+                              Pago {formatarMoeda(resumo.temAtivos ? resumo.totalPago : parcela.valor_pago)}
+                            </div>
+                          </div>
                           <BadgeStatus status={parcela.status} tipo="parcela" />
                         </div>
                       </div>
