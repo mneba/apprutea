@@ -112,10 +112,17 @@ export function CalendarioLiquidacao({
     const dias = gerarDiasDoMes(anoAtual, mesAtual);
 
     const liquidacoesPorData = new Map<string, LiquidacaoDiaria>();
+    // Normaliza a data para 'YYYY-MM-DD' pegando os 10 primeiros chars da string
+    // do banco. Funciona tanto para data_liquidacao (DATE, "2026-07-30") quanto
+    // para data_abertura (timestamp "2026-07-31 02:42:13" — separador é espaço,
+    // não 'T', por isso split('T') falhava e a chave ficava malformada).
+    const ymd = (v: any): string | null => {
+      if (!v || typeof v !== 'string') return null;
+      const s = v.slice(0, 10);
+      return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+    };
     liquidacoesMes.forEach((liq) => {
-      const dataStr =
-        (liq as any).data_liquidacao?.split('T')[0] ||
-        liq.data_abertura?.split('T')[0];
+      const dataStr = ymd((liq as any).data_liquidacao) || ymd(liq.data_abertura);
       if (dataStr) {
         liquidacoesPorData.set(dataStr, liq);
       }
