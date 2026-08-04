@@ -660,13 +660,17 @@ export const liquidacaoService = {
     const ultimoDia = new Date(ano, mes, 0).getDate();
     const ultimoDiaStr = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
     
+    // Filtra pela DATA A QUE A LIQUIDAÇÃO SE REFERE (data_liquidacao), não pela
+    // data de criação (data_abertura). Aberturas retroativas têm data_abertura
+    // em outro mês, e filtrar por ela cortava dias do calendário (ex.: dias
+    // referentes a julho mas abertos em agosto sumiam). data_liquidacao é DATE.
     const { data, error } = await supabase
       .from('liquidacoes_diarias')
       .select('*')
       .eq('rota_id', rotaId)
-      .gte('data_abertura', primeiroDia)
-      .lte('data_abertura', ultimoDiaStr + 'T23:59:59')
-      .order('data_abertura', { ascending: true });
+      .gte('data_liquidacao', primeiroDia)
+      .lte('data_liquidacao', ultimoDiaStr)
+      .order('data_liquidacao', { ascending: true });
     
     if (error) {
       console.error('Erro ao buscar liquidações do mês:', error);
