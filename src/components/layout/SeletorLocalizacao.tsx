@@ -268,7 +268,7 @@ export function SeletorLocalizacao() {
       <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
         <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0" />
         {label ? (
-          <span className="text-sm text-gray-700 font-medium truncate max-w-[240px]">
+          <span title={label} className="text-sm text-gray-700 font-medium truncate max-w-[240px]">
             {label}
           </span>
         ) : (
@@ -283,21 +283,26 @@ export function SeletorLocalizacao() {
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors max-w-2xl"
+        className="flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-gray-100 rounded-lg border border-gray-200 transition-colors max-w-2xl min-w-0 overflow-hidden"
       >
         <MapPin className="w-4 h-4 text-blue-600 flex-shrink-0" />
         {breadcrumb.length > 0 ? (
-          <div className="flex items-center gap-1 text-sm min-w-0">
+          <div className="flex items-center gap-1 text-sm min-w-0 overflow-hidden">
             {breadcrumb.map((item, index) => {
               const isLast = index === breadcrumb.length - 1;
               return (
+                // Todo nível tem largura teto e trunca: o último (rota) tem um
+                // teto maior por ser o mais relevante, mas também cede quando o
+                // conjunto passa do `max-w-2xl` do botão — antes ele era
+                // `whitespace-nowrap` e vazava para fora da caixa.
                 <span key={index} className="flex items-center gap-1 min-w-0">
                   {index > 0 && <ChevronRight className="w-3 h-3 text-gray-400 flex-shrink-0" />}
                   <span
+                    title={item}
                     className={
                       isLast
-                        ? 'text-blue-600 font-medium whitespace-nowrap'
-                        : 'truncate text-gray-600'
+                        ? 'truncate text-blue-600 font-medium max-w-[280px]'
+                        : 'truncate text-gray-600 max-w-[110px]'
                     }
                   >
                     {item}
