@@ -1,11 +1,21 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MapPin, ChevronRight, X, Building2, Navigation, Check, Loader2 } from 'lucide-react';
+import { MapPin, ChevronRight, X, Building2, Navigation, Check, Loader2, Search } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { usuariosService } from '@/services/usuarios';
 import { organizacaoService } from '@/services/organizacao';
 import type { Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
+
+// Normaliza para busca: minúsculas e sem acentos, para que "noreña"
+// encontre "Noreña" e "fenix" encontre "Fênix".
+function normalizarBusca(texto: string): string {
+  return texto
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '')
+    .toLowerCase()
+    .trim();
+}
 
 export function SeletorLocalizacao() {
   const { profile, isSuperAdmin, localizacao, setLocalizacao } = useUser();
@@ -24,6 +34,9 @@ export function SeletorLocalizacao() {
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingRotas, setLoadingRotas] = useState(false);
+  // Busca de rotas — só aparece para SUPER_ADMIN, que é quem enxerga
+  // empresas com dezenas de rotas. Demais perfis veem só as suas.
+  const [buscaRota, setBuscaRota] = useState('');
 
   // Seleções temporárias
   const [paisSelecionado, setPaisSelecionado] = useState<string | null>(null);
@@ -142,6 +155,13 @@ export function SeletorLocalizacao() {
   const empresasDaCidade = (cidadeId: string | null) =>
     cidadeId ? empresas.filter((e) => e.cidade_id === cidadeId) : [];
 
+  // Rotas exibidas no rodapé. A busca só existe para SUPER_ADMIN, então
+  // para os demais perfis `rotasFiltradas` é sempre a lista completa.
+  const termoBusca = isSuperAdmin ? normalizarBusca(buscaRota) : '';
+  const rotasFiltradas = termoBusca
+    ? rotas.filter((r) => normalizarBusca(r.nome).includes(termoBusca))
+    : rotas;
+
   // Selecionar empresa - SÓ FECHA SE NÃO TIVER ROTAS
   const handleSelecionarEmpresa = async (empresa: Empresa) => {
     const hierarquia = hierarquias.find(h => h.id === empresa.hierarquia_id);
@@ -159,6 +179,7 @@ export function SeletorLocalizacao() {
     });
 
     setEmpresaIdSelecionada(empresa.id);
+    setBuscaRota(''); // rotas mudaram: termo antigo não faz mais sentido
 
     // Carregar rotas para verificar se tem
     setLoadingRotas(true);
@@ -525,9 +546,43 @@ export function SeletorLocalizacao() {
                 </div>
               ) : rotas.length > 0 ? (
                 <>
-                  <div className="text-xs text-gray-500 mb-2">Selecione a rota (opcional):</div>
-                  <div className="flex flex-wrap gap-2">
-                    {/* Opção "Todas as rotas" */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs text-gray-500">Selecione a rota (opcional):</span>
+                    {termoBusca && (
+                      <span className="text-xs text-gray-400">
+                        {rotasFiltradas.length} de {rotas.length}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Busca de rotas — exclusiva do SUPER_ADMIN */}
+                  {isSuperAdmin && (
+                    <div className="relative mb-2">
+                      <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={buscaRota}
+                        onChange={(e) => setBuscaRota(e.target.value)}
+                        placeholder="Buscar rota..."
+                        className="w-full pl-8 pr-8 py-1.5 text-xs bg-white border border-gray-300 rounded-lg placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {buscaRota && (
+                        <button
+                          type="button"
+                          onClick={() => setBuscaRota('')}
+                          className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 hover:bg-gray-100 rounded"
+                          title="Limpar busca"
+                        >
+                          <X className="w-3 h-3 text-gray-500" />
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Teto de altura: com dezenas de rotas o wrap crescia para
+                      fora da viewport e as últimas ficavam inalcançáveis. */}
+                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
+                    {/* Opção "Todas as rotas" — não participa do filtro */}
                     <button
                       onClick={handleLimparRota}
                       className={`
@@ -539,7 +594,7 @@ export function SeletorLocalizacao() {
                     >
                       Todas
                     </button>
-                    {rotas.map((rota) => (
+                    {rotasFiltradas.map((rota) => (
                       <button
                         key={rota.id}
                         onClick={() => handleSelecionarRota(rota)}
@@ -554,6 +609,11 @@ export function SeletorLocalizacao() {
                         {rota.nome}
                       </button>
                     ))}
+                    {rotasFiltradas.length === 0 && (
+                      <span className="text-xs text-gray-400 italic py-1.5">
+                        Nenhuma rota encontrada para &quot;{buscaRota}&quot;
+                      </span>
+                    )}
                   </div>
                 </>
               ) : (
