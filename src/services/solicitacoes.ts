@@ -51,6 +51,8 @@ export interface Solicitacao {
   cliente_id: string | null;
   cliente_nome: string | null;
   emprestimo_id: string | null;
+  parcela_id: string | null;
+  venda_pendente_id: string | null;
   valor_solicitado: number | null;
   valor_limite: number | null;
   resolvido_por: string | null;
@@ -209,6 +211,60 @@ export const solicitacoesService = {
       message: solicitacao.tipo_solicitacao === 'RENEGOCIACAO' 
         ? 'Renegociação autorizada com sucesso' 
         : 'Empréstimo adicional autorizado com sucesso' 
+    };
+  },
+
+  // Aprovar solicitação de ESTORNO_PAGAMENTO
+  // Executa o estorno de fato (fn_estornar_pagamento_web) e, só se der certo,
+  // marca a solicitação como aprovada. Se o estorno falhar (ex.: fora de ordem,
+  // parcela já estornada), NÃO aprova e devolve o motivo.
+  async aprovarEstornoPagamento(
+    solicitacao: Solicitacao,
+    userId: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!solicitacao.parcela_id) {
+      return { success: false, message: 'Solicitação não possui parcela vinculada para estornar' };
+    }
+
+    const motivo = solicitacao.motivo_solicitacao?.trim()
+      ? `Estorno autorizado: ${solicitacao.motivo_solicitacao.trim()}`
+      : 'Estorno autorizado pelo administrador';
+
+    const { data: estData, error: estErr } = await supabase.rpc('fn_estornar_pagamento_web', {
+      p_parcela_id: solicitacao.parcela_id,
+      p_motivo: motivo,
+      p_vendedor_id: solicitacao.vendedor_id || null,
+      p_user_id: userId,
+    });
+
+    if (estErr) {
+      console.error('Erro ao efetivar estorno:', estErr);
+      return { success: false, message: estErr.message };
+    }
+
+    const estRes = Array.isArray(estData) ? estData[0] : estData;
+    if (estRes && estRes.sucesso === false) {
+      return { success: false, message: estRes.mensagem || 'Não foi possível efetivar o estorno' };
+    }
+
+    const { data: aprData, error: aprErr } = await supabase.rpc('fn_aprovar_solicitacao', {
+      p_solicitacao_id: solicitacao.id,
+      p_user_id: userId,
+      p_motivo: 'Estorno efetivado',
+    });
+
+    if (aprErr) {
+      console.error('Estorno efetivado, mas falhou ao marcar solicitação:', aprErr);
+      return {
+        success: true,
+        message: 'Estorno efetivado. Atenção: a solicitação não pôde ser marcada como aprovada automaticamente.',
+      };
+    }
+
+    const aprRes = aprData?.[0];
+    return {
+      success: aprRes?.sucesso ?? true,
+      message: estRes?.mensagem || aprRes?.mensagem || 'Estorno efetivado e solicitação aprovada',
     };
   },
 
