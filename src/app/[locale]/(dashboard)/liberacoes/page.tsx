@@ -1268,6 +1268,7 @@ export default function LiberacoesPage() {
   // Aprovar solicitação
   const handleAprovar = async (motivo?: string) => {
     if (!solicitacaoSelecionada || !user) return;
+    console.log('[APROVAR] tipo=', solicitacaoSelecionada.tipo_solicitacao, '| parcela_id=', (solicitacaoSelecionada as any).parcela_id);
     setLoadingAcao(true);
     try {
       let resultado;
@@ -1275,6 +1276,11 @@ export default function LiberacoesPage() {
       // Para RENEGOCIACAO e EMPRESTIMO_ADICIONAL, usar função especial
       if (['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL'].includes(solicitacaoSelecionada.tipo_solicitacao)) {
         resultado = await solicitacoesService.aprovarAutorizacaoCliente(solicitacaoSelecionada, user.id);
+      } else if (solicitacaoSelecionada.tipo_solicitacao === 'ESTORNO_PAGAMENTO') {
+        // Estorno: aprovar efetiva o estorno de fato (reverte a parcela)
+        console.log('[APROVAR] entrando no ramo ESTORNO_PAGAMENTO');
+        resultado = await solicitacoesService.aprovarEstornoPagamento(solicitacaoSelecionada, user.id);
+        console.log('[APROVAR] resultado estorno=', resultado);
       } else {
         resultado = await solicitacoesService.aprovar(solicitacaoSelecionada.id, user.id, motivo);
       }
