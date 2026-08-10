@@ -1,1671 +1,2487 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { 
-  FileText, 
-  Clock, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle,
-  Filter,
-  Search,
-  ChevronDown,
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  Play,
+  Square,
+  Clock,
+  Users,
+  AlertCircle,
   Loader2,
+  Shield,
+  Wallet,
+  TrendingUp,
   Calendar,
-  User,
-  MapPin,
+  Banknote,
+  CreditCard,
+  Target,
+  Receipt,
   DollarSign,
+  MapPin,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  FileText,
+  RotateCcw,
+  AlertTriangle,
+  Search,
+  MessageSquare,
+  X,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
+  CheckCircle2,
+  Check,
   RefreshCw,
-  PlusCircle,
-  Eye
+  Undo2,
+  Plus,
+  ArrowDownAZ,
+  ListOrdered,
+  Ban,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
-import { createClient } from '@/lib/supabase/client';
-import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
-import { ModalDetalhesCliente } from '@/components/clientes';
+import { liquidacaoService } from '@/services/liquidacao';
+import { TIPO_SOLICITACAO_LABELS } from '@/services/solicitacoes';
+import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendarioLiquidacao';
+import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
+import { ModalExtratoLiquidacao } from '@/components/liquidacao/ModalExtratoLiquidacao';
+import { FaixaLiquidacaoReaberta } from '@/components/liquidacao/FaixaLiquidacaoReaberta';
+import { ModalNotasCliente, ModalNotasLiquidacao } from '@/components/liquidacao/NotasLiquidacao';
+import {
+  ModalEmprestimos,
+  ModalDespesas,
+  ModalMicroseguros,
+} from '@/components/liquidacao/CardsFinanceiros';
+import type {
+  LiquidacaoDiaria,
+  VendedorLiquidacao,
+  RotaLiquidacao,
+  ClienteDoDia,
+  EstatisticasClientesDia,
+} from '@/types/liquidacao';
+import type { ClienteComTotais } from '@/types/clientes';
 
-// Labels e ícones por tipo de solicitação
-const TIPO_CONFIG: Record<string, { titulo: string; subtitulo: string; icone: string; cor: string }> = {
-  'ABERTURA_RETROATIVA': { 
-    titulo: 'Abertura de Liquidação', 
-    subtitulo: 'Abertura Retroativa',
-    icone: '📅',
-    cor: 'amber'
-  },
-  'ABERTURA_DIAS_FALTANTES': { 
-    titulo: 'Abertura de Liquidação', 
-    subtitulo: 'Dias Faltantes',
-    icone: '📅',
-    cor: 'amber'
-  },
-  'ESTORNO_PAGAMENTO': { 
-    titulo: 'Exclusão de Parcela', 
-    subtitulo: 'Estorno de Pagamento',
-    icone: '🗑️',
-    cor: 'red'
-  },
-  'VENDA_EXCEDE_LIMITE': { 
-    titulo: 'Limite Excedido', 
-    subtitulo: 'Venda',
-    icone: '💰',
-    cor: 'blue'
-  },
-  'RENOVACAO_EXCEDE_LIMITE': { 
-    titulo: 'Limite Excedido', 
-    subtitulo: 'Renovação',
-    icone: '🔄',
-    cor: 'blue'
-  },
-  'RENOVACAO_EXCEDE_ANTERIOR': { 
-    titulo: 'Renovação Excede Último Empréstimo', 
-    subtitulo: 'Valor acima do anterior',
-    icone: '📈',
-    cor: 'amber'
-  },
-  'DESPESA_EXCEDE_LIMITE': { 
-    titulo: 'Limite Excedido', 
-    subtitulo: 'Despesa',
-    icone: '📤',
-    cor: 'red'
-  },
-  'RECEITA_EXCEDE_LIMITE': { 
-    titulo: 'Limite Excedido', 
-    subtitulo: 'Receita',
-    icone: '📥',
-    cor: 'green'
-  },
-  'CANCELAR_EMPRESTIMO': { 
-    titulo: 'Cancelar Empréstimo', 
-    subtitulo: 'Cancelamento',
-    icone: '❌',
-    cor: 'red'
-  },
-  'REABRIR_LIQUIDACAO': { 
-    titulo: 'Reabrir Liquidação', 
-    subtitulo: 'Reabertura',
-    icone: '🔓',
-    cor: 'amber'
-  },
-  'QUITAR_COM_DESCONTO': { 
-    titulo: 'Quitação com Desconto', 
-    subtitulo: 'Desconto',
-    icone: '💵',
-    cor: 'green'
-  },
-  'CLIENTE_OUTRA_ROTA': { 
-    titulo: 'Cliente de Outra Rota', 
-    subtitulo: 'Rota Diferente',
-    icone: '🔀',
-    cor: 'purple'
-  },
-  'RENEGOCIACAO': { 
-    titulo: 'Renegociação', 
-    subtitulo: 'Autorização de Renegociação',
-    icone: '🔄',
-    cor: 'blue'
-  },
-  'EMPRESTIMO_ADICIONAL': { 
-    titulo: 'Empréstimo Adicional', 
-    subtitulo: 'Autorização de Empréstimo Adicional',
-    icone: '➕',
-    cor: 'green'
-  },
-};
+// =====================================================
+// HELPERS
+// =====================================================
 
-// Modal de Detalhes/Ação
-function ModalDetalhesSolicitacao({
-  solicitacao,
-  onClose,
-  onAprovar,
-  onRejeitar,
-  onVendaResolvida,
-  loading,
-}: {
-  solicitacao: Solicitacao;
-  onClose: () => void;
-  onAprovar: (motivo?: string) => void;
-  onRejeitar: (motivo: string) => void;
-  onVendaResolvida?: () => void;
-  loading: boolean;
-}) {
-  const [motivoRejeicao, setMotivoRejeicao] = useState('');
-  const [motivoAprovacao, setMotivoAprovacao] = useState('');
-  const [mostrarMotivoRejeicao, setMostrarMotivoRejeicao] = useState(false);
-  const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
-  const [detalhesEmprestimo, setDetalhesEmprestimo] = useState<any>(null);
-  const [loadingDetalhes, setLoadingDetalhes] = useState(false);
-  // Venda pendente (VENDA_EXCEDE_LIMITE)
-  const [vendaPendente, setVendaPendente] = useState<any>(null);
-  const [loadingVenda, setLoadingVenda] = useState(false);
-  const [editVenda, setEditVenda] = useState<any>(null);
-
-  const [movimentacaoPendente, setMovimentacaoPendente] = useState<any>(null);
-  const [movimentacaoId, setMovimentacaoId] = useState<string | null>(null);
-  // Modal de detalhes do cliente
-  const [mostrarDetalhesCliente, setMostrarDetalhesCliente] = useState(false);
-  const [clienteParaModal, setClienteParaModal] = useState<any>(null);
-  const [loadingCliente, setLoadingCliente] = useState(false);
-
-  // Buscar dados completos do cliente para o modal
-  const abrirDetalhesCliente = async () => {
-    if (!solicitacao.cliente_id) return;
-    
-    setLoadingCliente(true);
-    try {
-      const supabase = createClient();
-      const { data, error } = await supabase
-        .from('clientes')
-        .select('*')
-        .eq('id', solicitacao.cliente_id)
-        .single();
-      
-      if (error) throw error;
-      
-      if (data) {
-        setClienteParaModal(data);
-        setMostrarDetalhesCliente(true);
-      }
-    } catch (err) {
-      console.error('Erro ao buscar cliente:', err);
-    } finally {
-      setLoadingCliente(false);
-    }
-  };
-
-  const statusColors = STATUS_SOLICITACAO_COLORS[solicitacao.status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
-  const tipoConfig = TIPO_CONFIG[solicitacao.tipo_solicitacao] || { 
-    titulo: solicitacao.tipo_solicitacao, 
-    subtitulo: '', 
-    icone: '📋',
-    cor: 'gray'
-  };
-
-  const formatarDataHora = (data: string | null) => {
-    if (!data) return '-';
-    return new Date(data).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
-
-  const formatarDataSimples = (data: string | null) => {
-    if (!data) return '-';
-    const [ano, mes, dia] = data.split('-');
-    return `${dia}/${mes}/${ano}`;
-  };
-
-  const formatarMoeda = (valor: number | null) => {
-    if (valor === null || valor === undefined) return '-';
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
-  };
-
-  // Verificar tipo de solicitação
-  const isAbertura = ['ABERTURA_RETROATIVA', 'ABERTURA_DIAS_FALTANTES'].includes(solicitacao.tipo_solicitacao);
-  const isExclusaoParcela = solicitacao.tipo_solicitacao === 'ESTORNO_PAGAMENTO';
-  const isRenegociacao = solicitacao.tipo_solicitacao === 'RENEGOCIACAO';
-  const isEmprestimoAdicional = solicitacao.tipo_solicitacao === 'EMPRESTIMO_ADICIONAL';
-  const isAutorizacaoCliente = isRenegociacao || isEmprestimoAdicional;
-  const isVendaExcedeLimite = solicitacao.tipo_solicitacao === 'VENDA_EXCEDE_LIMITE';
-  const isMovimentacaoExcedeLimite =
-    solicitacao.tipo_solicitacao === 'DESPESA_EXCEDE_LIMITE' ||
-    solicitacao.tipo_solicitacao === 'RECEITA_EXCEDE_LIMITE';
-
-  // Carregar detalhes do empréstimo para renegociação
-  useEffect(() => {
-    const carregarDetalhesEmprestimo = async () => {
-      if (!isRenegociacao || !solicitacao.emprestimo_id) return;
-      
-      setLoadingDetalhes(true);
-      try {
-        const supabase = createClient();
-        
-        // Usar RPC para evitar problemas de RLS
-        const { data, error } = await supabase.rpc('fn_buscar_detalhes_emprestimo_solicitacao', {
-          p_emprestimo_id: solicitacao.emprestimo_id
-        });
-
-        if (error) {
-          console.error('Erro ao buscar empréstimo:', error);
-          setLoadingDetalhes(false);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          setDetalhesEmprestimo(data[0]);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar detalhes do empréstimo:', err);
-      } finally {
-        setLoadingDetalhes(false);
-      }
-    };
-
-    carregarDetalhesEmprestimo();
-  }, [isRenegociacao, solicitacao.emprestimo_id]);
-
-  // Carregar detalhes da venda pendente (VENDA_EXCEDE_LIMITE)
-  useEffect(() => {
-    const carregarVendaPendente = async () => {
-      if (!isVendaExcedeLimite || !(solicitacao as any).venda_pendente_id) return;
-
-      setLoadingVenda(true);
-      try {
-        const supabase = createClient();
-        const { data, error } = await supabase.rpc('fn_buscar_detalhes_venda_pendente', {
-          p_venda_pendente_id: (solicitacao as any).venda_pendente_id,
-        });
-
-        if (error) {
-          console.error('Erro ao buscar venda pendente:', error);
-          setLoadingVenda(false);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const vp = data[0];
-          setVendaPendente(vp);
-          // Estado editável inicializado com os valores atuais
-          setEditVenda({
-            cliente_nome: vp.cliente_nome ?? '',
-            cliente_telefone: vp.cliente_telefone ?? '',
-            cliente_telefone_fixo: vp.cliente_telefone_fixo ?? '',
-            cliente_email: vp.cliente_email ?? '',
-            cliente_endereco: vp.cliente_endereco ?? '',
-            cliente_endereco_comercial: vp.cliente_endereco_comercial ?? '',
-            cliente_observacoes: vp.cliente_observacoes ?? '',
-            valor_principal: vp.valor_principal ?? 0,
-            numero_parcelas: vp.numero_parcelas ?? 1,
-            taxa_juros: vp.taxa_juros ?? 0,
-            frequencia: vp.frequencia ?? 'DIARIO',
-            data_primeiro_vencimento: vp.data_primeiro_vencimento ?? '',
-            dia_semana_cobranca: vp.dia_semana_cobranca ?? null,
-            dia_mes_cobranca: vp.dia_mes_cobranca ?? null,
-            iniciar_proximo_mes: vp.iniciar_proximo_mes ?? false,
-            observacoes_emprestimo: vp.observacoes_emprestimo ?? '',
-            microseguro_valor: vp.microseguro_valor ?? null,
-          });
-        }
-      } catch (err) {
-        console.error('Erro ao carregar venda pendente:', err);
-      } finally {
-        setLoadingVenda(false);
-      }
-    };
-
-    carregarVendaPendente();
-  }, [isVendaExcedeLimite, (solicitacao as any).venda_pendente_id]);
-
-  // Carrega a movimentação pendente (despesa/receita) vinculada à solicitação
-  useEffect(() => {
-    const carregarMovimentacao = async () => {
-      if (!isMovimentacaoExcedeLimite || !solicitacao.id) return;
-      try {
-        const mp = await solicitacoesService.buscarMovimentacaoPendente(solicitacao.id);
-        if (mp) {
-          setMovimentacaoPendente(mp);
-          setMovimentacaoId(mp.id);
-        }
-      } catch (err) {
-        console.error('Erro ao carregar movimentação pendente:', err);
-      }
-    };
-    carregarMovimentacao();
-  }, [isMovimentacaoExcedeLimite, solicitacao.id]);
-
-  // Handler para confirmar aprovação de autorização de cliente
-  const handleConfirmarAprovacao = () => {
-    if (isAutorizacaoCliente) {
-      setMostrarConfirmacao(true);
-    } else {
-      onAprovar(motivoAprovacao || undefined);
-    }
-  };
-
-  const handleAprovacaoConfirmada = () => {
-    setMostrarConfirmacao(false);
-    onAprovar(motivoAprovacao || undefined);
-  };
-
-  // Handlers específicos para VENDA_EXCEDE_LIMITE (chamam a RPC fn_resolver_venda_pendente)
-  const [salvandoVenda, setSalvandoVenda] = useState(false);
-
-  const handleAprovarVenda = async () => {
-    if (!(solicitacao as any).venda_pendente_id || !editVenda) return;
-    setSalvandoVenda(true);
-    try {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const adminId = userData.user?.id;
-
-      const { data, error } = await supabase.rpc('fn_resolver_venda_pendente', {
-        p_venda_pendente_id: (solicitacao as any).venda_pendente_id,
-        p_acao: 'APROVAR',
-        p_admin_user_id: adminId,
-        p_motivo: motivoAprovacao || null,
-        p_dados_editados: editVenda,
-      });
-
-      if (error) throw error;
-      const res = Array.isArray(data) ? data[0] : data;
-      if (res && res.sucesso === false) {
-        alert(res.mensagem || 'Erro ao aprovar venda');
-        return;
-      }
-      // Avisa o pai que terminou — ele fecha o modal e recarrega a lista.
-      // (NÃO chamar onClose aqui antes do onAprovar, senão o pai perde a referência da solicitação)
-      onVendaResolvida?.();
-    } catch (err: any) {
-      console.error('Erro ao aprovar venda:', err);
-      alert(err.message || 'Erro ao aprovar venda');
-    } finally {
-      setSalvandoVenda(false);
-    }
-  };
-
-  const handleRejeitarVenda = async () => {
-    if (!(solicitacao as any).venda_pendente_id) return;
-    setSalvandoVenda(true);
-    try {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const adminId = userData.user?.id;
-
-      const { data, error } = await supabase.rpc('fn_resolver_venda_pendente', {
-        p_venda_pendente_id: (solicitacao as any).venda_pendente_id,
-        p_acao: 'REJEITAR',
-        p_admin_user_id: adminId,
-        p_motivo: motivoRejeicao,
-        p_dados_editados: null,
-      });
-
-      if (error) throw error;
-      const res = Array.isArray(data) ? data[0] : data;
-      if (res && res.sucesso === false) {
-        alert(res.mensagem || 'Erro ao rejeitar venda');
-        return;
-      }
-      onVendaResolvida?.();
-    } catch (err: any) {
-      console.error('Erro ao rejeitar venda:', err);
-      alert(err.message || 'Erro ao rejeitar venda');
-    } finally {
-      setSalvandoVenda(false);
-    }
-  };
-
-  const handleAprovarMovimentacao = async () => {
-    if (!movimentacaoId) {
-      alert('Movimentação não encontrada.');
-      return;
-    }
-    setSalvandoVenda(true);
-    try {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const adminId = userData.user?.id;
-      if (!adminId) throw new Error('Usuário não autenticado');
-
-      const res = await solicitacoesService.aprovarMovimentacaoPendente(movimentacaoId, adminId);
-      if (!res.success) {
-        alert(res.message || 'Erro ao aprovar movimentação');
-        return;
-      }
-      onVendaResolvida?.();
-    } catch (err: any) {
-      console.error('Erro ao aprovar movimentação:', err);
-      alert(err.message || 'Erro ao aprovar movimentação');
-    } finally {
-      setSalvandoVenda(false);
-    }
-  };
-
-  const handleRejeitarMovimentacao = async () => {
-    if (!movimentacaoId) {
-      alert('Movimentação não encontrada.');
-      return;
-    }
-    setSalvandoVenda(true);
-    try {
-      const supabase = createClient();
-      const { data: userData } = await supabase.auth.getUser();
-      const adminId = userData.user?.id;
-      if (!adminId) throw new Error('Usuário não autenticado');
-
-      const res = await solicitacoesService.rejeitarMovimentacaoPendente(
-        movimentacaoId,
-        adminId,
-        motivoRejeicao
-      );
-      if (!res.success) {
-        alert(res.message || 'Erro ao rejeitar movimentação');
-        return;
-      }
-      onVendaResolvida?.();
-    } catch (err: any) {
-      console.error('Erro ao rejeitar movimentação:', err);
-      alert(err.message || 'Erro ao rejeitar movimentação');
-    } finally {
-      setSalvandoVenda(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">{tipoConfig.icone}</span>
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">{tipoConfig.titulo}</h2>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${statusColors.bg} ${statusColors.text}`}>
-                {statusColors.label}
-              </span>
-            </div>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-200 rounded-lg transition-colors">
-            <XCircle className="w-5 h-5 text-gray-500" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          
-          {/* === ABERTURA DE LIQUIDAÇÃO === */}
-          {isAbertura && (
-            <>
-              {/* Info Grid */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Vendedor</span>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
-                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-                  </div>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Rota</span>
-                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Data</span>
-                  <p className="font-medium text-gray-900 text-lg">{formatarDataSimples(solicitacao.data_solicitada)}</p>
-                </div>
-              </div>
-
-              {/* Motivo */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo}</span>
-                </div>
-                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                  <p className="text-xs text-amber-600 mb-1">Comentário do vendedor:</p>
-                  <p className="text-sm text-amber-900 whitespace-pre-wrap">
-                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* === EXCLUSÃO DE PARCELA === */}
-          {isExclusaoParcela && (
-            <>
-              {/* Info Grid */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Vendedor</span>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
-                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-                  </div>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Rota</span>
-                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Cliente</span>
-                  <p className="font-medium text-gray-900">{solicitacao.cliente_nome || '-'}</p>
-                </div>
-                {solicitacao.valor_solicitado !== null && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Valor</span>
-                      <p className="font-semibold text-red-600 text-lg">{formatarMoeda(solicitacao.valor_solicitado)}</p>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Motivo */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo}</span>
-                </div>
-                <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                  <p className="text-xs text-red-600 mb-1">Comentário do vendedor:</p>
-                  <p className="text-sm text-red-900 whitespace-pre-wrap">
-                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* === RENEGOCIAÇÃO ou EMPRÉSTIMO ADICIONAL === */}
-          {isAutorizacaoCliente && (
-            <>
-              {/* Info Grid */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Cliente</span>
-                  <p className="font-medium text-gray-900 text-lg">{solicitacao.cliente_nome || '-'}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Vendedor</span>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
-                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-                  </div>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Rota</span>
-                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
-                </div>
-              </div>
-
-              {/* Detalhes do Empréstimo (apenas para renegociação) */}
-              {isRenegociacao && (
-                <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                  <h4 className="text-sm font-medium text-blue-800 mb-3 flex items-center gap-2">
-                    <RefreshCw className="w-4 h-4" />
-                    Empréstimo a Renegociar
-                  </h4>
-                  {loadingDetalhes ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-500" />
-                    </div>
-                  ) : detalhesEmprestimo ? (
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">Valor Principal:</span>
-                        <span className="font-medium text-blue-900">{formatarMoeda(detalhesEmprestimo.valor_principal)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">Valor Total:</span>
-                        <span className="font-medium text-blue-900">{formatarMoeda(detalhesEmprestimo.valor_total)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">Saldo Devedor:</span>
-                        <span className="font-semibold text-blue-900">{formatarMoeda(detalhesEmprestimo.valor_saldo)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">Data do Empréstimo:</span>
-                        <span className="text-blue-900">{formatarDataSimples(detalhesEmprestimo.data_emprestimo)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-600">Status:</span>
-                        <span className={`font-medium ${detalhesEmprestimo.status === 'VENCIDO' ? 'text-red-600' : 'text-blue-900'}`}>
-                          {detalhesEmprestimo.status}
-                        </span>
-                      </div>
-                      {detalhesEmprestimo.parcelas_vencidas > 0 && (
-                        <div className="flex justify-between">
-                          <span className="text-blue-600">Parcelas Vencidas:</span>
-                          <span className="font-medium text-red-600">{detalhesEmprestimo.parcelas_vencidas}</span>
-                        </div>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-blue-600">Detalhes do empréstimo não disponíveis</p>
-                  )}
-                </div>
-              )}
-
-              {/* Info para Empréstimo Adicional */}
-              {isEmprestimoAdicional && (
-                <div className="bg-green-50 border border-green-200 rounded-xl p-4">
-                  <h4 className="text-sm font-medium text-green-800 mb-2 flex items-center gap-2">
-                    <PlusCircle className="w-4 h-4" />
-                    Empréstimo Adicional
-                  </h4>
-                  <p className="text-sm text-green-700">
-                    O cliente já possui um empréstimo ativo e o vendedor está solicitando autorização para conceder um empréstimo adicional.
-                  </p>
-                </div>
-              )}
-
-              {/* Motivo */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-gray-700">Motivo da Solicitação</span>
-                </div>
-                <div className={`${isRenegociacao ? 'bg-blue-50 border-blue-200' : 'bg-green-50 border-green-200'} border rounded-xl p-4`}>
-                  <p className={`text-xs ${isRenegociacao ? 'text-blue-600' : 'text-green-600'} mb-1`}>Comentário do vendedor:</p>
-                  <p className={`text-sm ${isRenegociacao ? 'text-blue-900' : 'text-green-900'} whitespace-pre-wrap`}>
-                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* === OUTROS TIPOS (layout genérico) === */}
-          {!isAbertura && !isExclusaoParcela && !isAutorizacaoCliente && !isVendaExcedeLimite && (
-            <>
-              {/* Info Grid */}
-              <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Vendedor</span>
-                  <div className="text-right">
-                    <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
-                    <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-                  </div>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                </div>
-                <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-500">Rota</span>
-                  <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
-                </div>
-                {solicitacao.cliente_nome && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Cliente</span>
-                      <div className="flex items-center gap-2">
-                        <p className="font-medium text-gray-900">{solicitacao.cliente_nome}</p>
-                        {solicitacao.cliente_id && (
-                          <button
-                            onClick={abrirDetalhesCliente}
-                            disabled={loadingCliente}
-                            className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
-                            title="Ver detalhes do cliente"
-                          >
-                            {loadingCliente ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Eye className="w-4 h-4" />
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-                {solicitacao.data_solicitada && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Data</span>
-                      <p className="font-medium text-gray-900">{formatarDataSimples(solicitacao.data_solicitada)}</p>
-                    </div>
-                  </>
-                )}
-                {solicitacao.valor_solicitado !== null && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Valor Solicitado</span>
-                      <p className="font-semibold text-gray-900">{formatarMoeda(solicitacao.valor_solicitado)}</p>
-                    </div>
-                  </>
-                )}
-                {solicitacao.valor_limite !== null && (
-                  <>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Limite</span>
-                      <p className="font-medium text-gray-900">{formatarMoeda(solicitacao.valor_limite)}</p>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Motivo */}
-              <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo || 'Motivo'}</span>
-                </div>
-                <div className="bg-gray-100 border border-gray-200 rounded-xl p-4">
-                  <p className="text-xs text-gray-500 mb-1">Comentário do vendedor:</p>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                    {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
-                  </p>
-                </div>
-              </div>
-            </>
-          )}
-
-          {/* === VENDA EXCEDE LIMITE === */}
-          {isVendaExcedeLimite && (
-            <>
-              {loadingVenda ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-                </div>
-              ) : vendaPendente && editVenda ? (
-                <>
-                  {/* Cabeçalho: vendedor / rota / limite */}
-                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Vendedor</span>
-                      <div className="text-right">
-                        <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
-                        <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-                      </div>
-                    </div>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Empresa</span>
-                      <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                    </div>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Rota</span>
-                      <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
-                    </div>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Limite do vendedor</span>
-                      <p className="font-medium text-gray-900">{formatarMoeda(vendaPendente.valor_limite)}</p>
-                    </div>
-                    <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-500">Valor solicitado</span>
-                      <p className="font-semibold text-blue-700 text-lg">{formatarMoeda(vendaPendente.valor_principal)}</p>
-                    </div>
-                  </div>
-
-                  {/* Bloco CLIENTE */}
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="bg-blue-50 px-4 py-2 border-b border-gray-200">
-                      <h3 className="text-sm font-semibold text-blue-900">Dados do Cliente</h3>
-                    </div>
-                    <div className="p-4 grid grid-cols-2 gap-3">
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Nome</label>
-                        <input
-                          type="text"
-                          value={editVenda.cliente_nome}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_nome: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">
-                          Documento <span className="text-gray-400">(não editável)</span>
-                        </label>
-                        <input
-                          type="text"
-                          value={vendaPendente.cliente_documento || ''}
-                          disabled
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-gray-100 text-gray-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Segmento</label>
-                        <input
-                          type="text"
-                          value={vendaPendente.cliente_segmento_nome || '-'}
-                          disabled
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-gray-100 text-gray-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Telefone</label>
-                        <input
-                          type="text"
-                          value={editVenda.cliente_telefone}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_telefone: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Telefone fixo</label>
-                        <input
-                          type="text"
-                          value={editVenda.cliente_telefone_fixo}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_telefone_fixo: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Email</label>
-                        <input
-                          type="text"
-                          value={editVenda.cliente_email}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_email: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Endereço residencial</label>
-                        <input
-                          type="text"
-                          value={editVenda.cliente_endereco}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_endereco: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Endereço comercial</label>
-                        <input
-                          type="text"
-                          value={editVenda.cliente_endereco_comercial}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_endereco_comercial: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Observações do cliente</label>
-                        <textarea
-                          value={editVenda.cliente_observacoes}
-                          onChange={(e) => setEditVenda({ ...editVenda, cliente_observacoes: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          rows={2}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Bloco EMPRÉSTIMO */}
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
-                    <div className="bg-emerald-50 px-4 py-2 border-b border-gray-200">
-                      <h3 className="text-sm font-semibold text-emerald-900">Dados do Empréstimo</h3>
-                    </div>
-                    <div className="p-4 grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editVenda.valor_principal}
-                          onChange={(e) => setEditVenda({ ...editVenda, valor_principal: parseFloat(e.target.value) || 0 })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Nº de parcelas</label>
-                        <input
-                          type="number"
-                          value={editVenda.numero_parcelas}
-                          onChange={(e) => setEditVenda({ ...editVenda, numero_parcelas: parseInt(e.target.value) || 1 })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Taxa de juros (%)</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editVenda.taxa_juros}
-                          onChange={(e) => setEditVenda({ ...editVenda, taxa_juros: parseFloat(e.target.value) || 0 })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Frequência</label>
-                        <select
-                          value={editVenda.frequencia}
-                          onChange={(e) => setEditVenda({ ...editVenda, frequencia: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
-                        >
-                          <option value="DIARIO">Diário</option>
-                          <option value="SEMANAL">Semanal</option>
-                          <option value="QUINZENAL">Quinzenal</option>
-                          <option value="MENSAL">Mensal</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">1º vencimento</label>
-                        <input
-                          type="date"
-                          value={editVenda.data_primeiro_vencimento}
-                          onChange={(e) => setEditVenda({ ...editVenda, data_primeiro_vencimento: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-500 mb-1">Microseguro</label>
-                        <input
-                          type="number"
-                          step="0.01"
-                          value={editVenda.microseguro_valor ?? ''}
-                          onChange={(e) => setEditVenda({ ...editVenda, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                      {editVenda.frequencia === 'SEMANAL' && (
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Dia da semana</label>
-                          <select
-                            value={editVenda.dia_semana_cobranca ?? ''}
-                            onChange={(e) => setEditVenda({ ...editVenda, dia_semana_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
-                            disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
-                          >
-                            <option value="">Selecione...</option>
-                            <option value="0">Domingo</option>
-                            <option value="1">Segunda-feira</option>
-                            <option value="2">Terça-feira</option>
-                            <option value="3">Quarta-feira</option>
-                            <option value="4">Quinta-feira</option>
-                            <option value="5">Sexta-feira</option>
-                            <option value="6">Sábado</option>
-                          </select>
-                        </div>
-                      )}
-                      {(editVenda.frequencia === 'MENSAL' || editVenda.frequencia === 'QUINZENAL') && (
-                        <div>
-                          <label className="block text-xs text-gray-500 mb-1">Dia do mês (1 a 31)</label>
-                          <input
-                            type="number" min="1" max="31"
-                            value={editVenda.dia_mes_cobranca ?? ''}
-                            onChange={(e) => {
-                              if (e.target.value === '') {
-                                setEditVenda({ ...editVenda, dia_mes_cobranca: null });
-                                return;
-                              }
-                              let v = parseInt(e.target.value);
-                              if (isNaN(v)) return;
-                              if (v < 1) v = 1;
-                              if (v > 31) v = 31;
-                              setEditVenda({ ...editVenda, dia_mes_cobranca: v });
-                            }}
-                            disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                          />
-                        </div>
-                      )}
-                      <div className="col-span-2">
-                        <label className="block text-xs text-gray-500 mb-1">Observações do empréstimo</label>
-                        <textarea
-                          value={editVenda.observacoes_emprestimo}
-                          onChange={(e) => setEditVenda({ ...editVenda, observacoes_emprestimo: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          rows={2}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Motivo do vendedor */}
-                  {solicitacao.motivo_solicitacao && (
-                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                      <p className="text-xs text-amber-600 mb-1">Comentário do vendedor:</p>
-                      <p className="text-sm text-amber-900 whitespace-pre-wrap">{solicitacao.motivo_solicitacao}</p>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-8 text-sm text-gray-400">
-                  Não foi possível carregar os dados da venda.
-                </div>
-              )}
-            </>
-          )}
-
-          {/* Solicitado em */}
-          <p className="text-xs text-gray-400 text-center">
-            Solicitado em: {formatarDataHora(solicitacao.created_at)}
-          </p>
-
-          {/* Resolução (se já foi resolvida) */}
-          {solicitacao.status !== 'PENDENTE' && solicitacao.resolvido_por_nome && (
-            <div className="bg-gray-50 rounded-xl p-4 mt-2">
-              <h3 className="text-sm font-medium text-gray-700 mb-2">Resolução</h3>
-              <div className="space-y-1 text-sm">
-                <p><span className="text-gray-500">Por:</span> {solicitacao.resolvido_por_nome}</p>
-                <p><span className="text-gray-500">Em:</span> {formatarDataHora(solicitacao.data_resolucao)}</p>
-                {solicitacao.motivo_resolucao && (
-                  <p><span className="text-gray-500">Obs:</span> {solicitacao.motivo_resolucao}</p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Ações (se pendente) */}
-          {solicitacao.status === 'PENDENTE' && (
-            <div className="space-y-3 pt-2">
-              {/* Campo de observação para aprovação */}
-              <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1">
-                  Observação (opcional)
-                </label>
-                <textarea
-                  value={motivoAprovacao}
-                  onChange={(e) => setMotivoAprovacao(e.target.value)}
-                  placeholder="Adicione uma observação..."
-                  className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm resize-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={2}
-                />
-              </div>
-
-              {/* Campo de motivo para rejeição */}
-              {mostrarMotivoRejeicao && (
-                <div>
-                  <label className="block text-xs font-medium text-red-600 mb-1">
-                    Motivo da Rejeição *
-                  </label>
-                  <textarea
-                    value={motivoRejeicao}
-                    onChange={(e) => setMotivoRejeicao(e.target.value)}
-                    placeholder="Informe o motivo..."
-                    className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm resize-none focus:ring-2 focus:ring-red-500 focus:border-transparent"
-                    rows={2}
-                    autoFocus
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Footer */}
-        {solicitacao.status === 'PENDENTE' && !mostrarConfirmacao && (
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
-            <button
-              onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
-            >
-              Cancelar
-            </button>
-            
-            {!mostrarMotivoRejeicao ? (
-              <>
-                <button
-                  onClick={() => setMostrarMotivoRejeicao(true)}
-                  disabled={loading}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50 text-sm font-medium"
-                >
-                  <XCircle className="w-4 h-4" />
-                  Rejeitar
-                </button>
-                <button
-                  onClick={isVendaExcedeLimite ? handleAprovarVenda : isMovimentacaoExcedeLimite ? handleAprovarMovimentacao : handleConfirmarAprovacao}
-                  disabled={loading || salvandoVenda}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
-                >
-                  {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : isMovimentacaoExcedeLimite ? 'Aprovar' : 'Aprovar'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => setMostrarMotivoRejeicao(false)}
-                  className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
-                >
-                  Voltar
-                </button>
-                <button
-                  onClick={isVendaExcedeLimite ? handleRejeitarVenda : isMovimentacaoExcedeLimite ? handleRejeitarMovimentacao : () => onRejeitar(motivoRejeicao)}
-                  disabled={loading || salvandoVenda || !motivoRejeicao.trim()}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
-                >
-                  {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
-                  Confirmar Rejeição
-                </button>
-              </>
-            )}
-          </div>
-        )}
-
-        {/* Modal de Confirmação para Autorização de Cliente */}
-        {mostrarConfirmacao && (
-          <div className="px-6 py-4 border-t border-gray-200 bg-amber-50">
-            <div className="mb-4">
-              <div className="flex items-center gap-2 text-amber-800 mb-2">
-                <AlertTriangle className="w-5 h-5" />
-                <span className="font-medium">Confirmar Autorização</span>
-              </div>
-              <p className="text-sm text-amber-700">
-                Tem certeza que deseja autorizar o cliente <strong>{solicitacao.cliente_nome}</strong> a {' '}
-                {isRenegociacao ? 'renegociar seu empréstimo' : 'obter um empréstimo adicional'}?
-              </p>
-              <p className="text-xs text-amber-600 mt-2">
-                Esta autorização será válida até que o vendedor a utilize.
-              </p>
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <button
-                onClick={() => setMostrarConfirmacao(false)}
-                className="px-4 py-2 text-gray-600 hover:bg-amber-100 rounded-lg transition-colors text-sm"
-              >
-                Voltar
-              </button>
-              <button
-                onClick={handleAprovacaoConfirmada}
-                disabled={loading}
-                className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                Sim, Autorizar
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Modal de Detalhes do Cliente */}
-      {mostrarDetalhesCliente && clienteParaModal && (
-        <ModalDetalhesCliente
-          isOpen={true}
-          cliente={clienteParaModal}
-          onClose={() => {
-            setMostrarDetalhesCliente(false);
-            setClienteParaModal(null);
-          }}
-        />
-      )}
-    </div>
-  );
+function formatarMoeda(valor: number | null | undefined): string {
+  return new Intl.NumberFormat('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+  }).format(valor || 0);
 }
 
-// Badge de Status
+function formatarDataHora(data: string | null | undefined): string {
+  if (!data) return '-';
+  return new Date(data).toLocaleString('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+}
+
+function calcularPercentual(atual: number, meta: number): number {
+  if (meta === 0) return 0;
+  return Math.round((atual / meta) * 100);
+}
+
+function validarPermissaoRota(
+  tipoUsuario: string | undefined,
+  rotaId: string,
+  userProfile: any
+): boolean {
+  if (!tipoUsuario || !rotaId) return false;
+  if (tipoUsuario === 'SUPER_ADMIN') return true;
+  if (tipoUsuario === 'ADMIN') {
+    const empresasPermitidas = userProfile?.empresas_ids || [];
+    return empresasPermitidas.length > 0;
+  }
+  if (tipoUsuario === 'MONITOR' || tipoUsuario === 'USUARIO_PADRAO') {
+    const rotasPermitidas = userProfile?.rotas_ids || [];
+    return rotasPermitidas.includes(rotaId);
+  }
+  if (tipoUsuario === 'VENDEDOR') return true;
+  return false;
+}
+
+// =====================================================
+// COMPONENTES AUXILIARES
+// =====================================================
+
 function BadgeStatus({ status }: { status: string }) {
-  const colors = STATUS_SOLICITACAO_COLORS[status] || STATUS_SOLICITACAO_COLORS['PENDENTE'];
+  const config: Record<string, { bg: string; text: string; label: string }> = {
+    ABERTO: { bg: 'bg-green-100', text: 'text-green-700', label: 'Aberto' },
+    FECHADO: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Fechado' },
+    APROVADO: { bg: 'bg-purple-100', text: 'text-purple-700', label: 'Aprovado' },
+    REABERTO: { bg: 'bg-amber-100', text: 'text-amber-700', label: 'Reaberto' },
+  };
+  const cfg = config[status] || config.ABERTO;
+
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${colors.bg} ${colors.text}`}>
-      {colors.label}
+    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${cfg.bg} ${cfg.text}`}>
+      {cfg.label}
     </span>
   );
 }
 
-// Página Principal
-export default function LiberacoesPage() {
-  const { user, isSuperAdmin } = useUser();
-  const [loading, setLoading] = useState(true);
-  const [todasSolicitacoes, setTodasSolicitacoes] = useState<Solicitacao[]>([]);
-  const [solicitacaoSelecionada, setSolicitacaoSelecionada] = useState<Solicitacao | null>(null);
-  const [loadingAcao, setLoadingAcao] = useState(false);
+// Card compacto Caixa ou Carteira
+function CardSaldo({
+  titulo,
+  inicial,
+  final,
+  icone: Icone,
+  corBase,
+  rodape,
+}: {
+  titulo: string;
+  inicial: number;
+  final: number;
+  icone: React.ElementType;
+  corBase: 'blue' | 'purple';
+  rodape?: React.ReactNode;
+}) {
+  const delta = final - inicial;
+  const percent = inicial !== 0 ? (delta / inicial) * 100 : 0;
+  const subiu = delta > 0;
+  const desceu = delta < 0;
+  const corDelta = subiu ? 'text-green-600' : desceu ? 'text-red-600' : 'text-gray-500';
+  const IconDelta = subiu ? ArrowUpRight : desceu ? ArrowDownRight : Minus;
 
-  // Filtros
-  const [filtroStatus, setFiltroStatus] = useState<string>('PENDENTE');
-  const [filtroTipo, setFiltroTipo] = useState<string>('');
-  const [filtroCategoria, setFiltroCategoria] = useState<string>(''); // '', 'ENTRADAS', 'SAIDAS', 'LIQUIDACAO'
-  const [filtroCliente, setFiltroCliente] = useState<string>('');
-  const [filtroData, setFiltroData] = useState<string>(''); // YYYY-MM-DD
-  const [filtroEmpresa, setFiltroEmpresa] = useState<string>(''); // empresa_id (só SUPER_ADMIN)
-  const [busca, setBusca] = useState('');
+  const corBgIcone = corBase === 'blue' ? 'bg-blue-50' : 'bg-purple-50';
+  const corIcone = corBase === 'blue' ? 'text-blue-600' : 'text-purple-600';
 
-  // Categorias de tipos
-  const CATEGORIAS: Record<string, string[]> = {
-    'LIQUIDACAO': ['ABERTURA_RETROATIVA', 'ABERTURA_DIAS_FALTANTES', 'REABRIR_LIQUIDACAO'],
-    'ENTRADAS': ['VENDA_EXCEDE_LIMITE', 'RENOVACAO_EXCEDE_LIMITE', 'RECEITA_EXCEDE_LIMITE'],
-    'SAIDAS': ['DESPESA_EXCEDE_LIMITE', 'ESTORNO_PAGAMENTO', 'CANCELAR_EMPRESTIMO', 'QUITAR_COM_DESCONTO'],
-    'CLIENTES': ['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL', 'CLIENTE_OUTRA_ROTA'],
+  return (
+    <div className="bg-white rounded-lg border border-gray-200">
+      <div className="px-3 py-2.5 flex items-center gap-3">
+        <div className={`w-9 h-9 ${corBgIcone} rounded-md flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`w-4 h-4 ${corIcone}`} />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-0.5">{titulo}</p>
+          <div className="flex items-baseline gap-2">
+            <span className="text-[10px] text-gray-400">Inicial</span>
+            <span className="text-xs font-medium text-gray-700 tabular-nums">{formatarMoeda(inicial)}</span>
+            <span className="text-gray-300">·</span>
+            <span className="text-[10px] text-gray-400">Final</span>
+            <span className="text-sm font-bold text-gray-900 tabular-nums">{formatarMoeda(final)}</span>
+          </div>
+        </div>
+        <div className={`flex flex-col items-end text-[11px] font-medium ${corDelta} flex-shrink-0`}>
+          <div className="flex items-center gap-0.5">
+            <IconDelta className="w-3 h-3" />
+            <span className="tabular-nums">{subiu && '+'}{formatarMoeda(delta)}</span>
+          </div>
+          <span className="tabular-nums text-[10px]">{subiu && '+'}{percent.toFixed(2)}%</span>
+        </div>
+      </div>
+      {rodape}
+    </div>
+  );
+}
+
+function ProgressBar({ percentual, cor }: { percentual: number; cor?: string }) {
+  const corBarra = cor || (percentual >= 100 ? 'bg-green-500' : percentual >= 70 ? 'bg-blue-500' : percentual >= 50 ? 'bg-amber-500' : 'bg-red-500');
+  return (
+    <div className="w-full h-1.5 bg-gray-200 rounded-full overflow-hidden">
+      <div className={`h-full ${corBarra} transition-all duration-500`} style={{ width: `${Math.min(100, percentual)}%` }} />
+    </div>
+  );
+}
+
+// =====================================================
+// SKELETONS
+// =====================================================
+
+function SkeletonBlock({ className = '' }: { className?: string }) {
+  return <div className={`bg-gray-200 rounded animate-pulse ${className}`} />;
+}
+
+function TelaSkeleton() {
+  return (
+    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 p-1">
+      <SkeletonBlock className="h-12 w-full" />
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[35%_65%] gap-4">
+        <div className="space-y-3">
+          <SkeletonBlock className="h-24 rounded-lg" />
+          <SkeletonBlock className="h-24 rounded-lg" />
+          <SkeletonBlock className="h-32 rounded-lg" />
+          <SkeletonBlock className="h-32 rounded-lg" />
+        </div>
+        <SkeletonBlock className="rounded-lg" />
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// MODAL DE ABERTURA
+// =====================================================
+
+function ModalAbrirLiquidacao({
+  isOpen, onClose, onConfirmar, loading, saldoSugerido,
+}: {
+  isOpen: boolean; onClose: () => void; onConfirmar: (caixaInicial: number) => void; loading: boolean; saldoSugerido: number;
+}) {
+  const [caixaInicial, setCaixaInicial] = useState(saldoSugerido.toString());
+  useEffect(() => { setCaixaInicial(saldoSugerido.toString()); }, [saldoSugerido]);
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center"><Play className="w-5 h-5 text-green-600" /></div>
+          <div><h2 className="text-lg font-bold text-gray-900">Abrir Liquidação</h2><p className="text-sm text-gray-500">Iniciar sessão de trabalho</p></div>
+        </div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Caixa Inicial</label>
+          <input type="number" value={caixaInicial} onChange={(e) => setCaixaInicial(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-semibold" placeholder="0,00" />
+          <p className="mt-2 text-xs text-gray-500">Saldo sugerido: {formatarMoeda(saldoSugerido)}</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
+          <button onClick={() => onConfirmar(parseFloat(caixaInicial) || 0)} disabled={loading} className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}Abrir
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// MODAL DE FECHAMENTO
+// =====================================================
+
+function ModalFecharLiquidacao({
+  isOpen, onClose, onConfirmar, loading, liquidacao,
+}: {
+  isOpen: boolean; onClose: () => void; onConfirmar: (observacoes: string) => void; loading: boolean; liquidacao: LiquidacaoDiaria | null;
+}) {
+  const [observacoes, setObservacoes] = useState('');
+  if (!isOpen || !liquidacao) return null;
+  const isReaberta = liquidacao.status === 'REABERTO';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className={`w-10 h-10 ${isReaberta ? 'bg-amber-100' : 'bg-blue-100'} rounded-lg flex items-center justify-center`}>
+            <Square className={`w-5 h-5 ${isReaberta ? 'text-amber-600' : 'text-blue-600'}`} />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">{isReaberta ? 'Fechar Liquidação Reaberta' : 'Fechar Liquidação'}</h2>
+            <p className="text-sm text-gray-500">{isReaberta ? 'Finalizar correções e fechar' : 'Encerrar sessão de trabalho'}</p>
+          </div>
+        </div>
+        <div className="space-y-2 mb-6 text-sm bg-gray-50 rounded-lg p-4">
+          <div className="flex justify-between"><span className="text-gray-600">Caixa Inicial</span><span className="font-medium">{formatarMoeda(liquidacao.caixa_inicial)}</span></div>
+          <div className="flex justify-between"><span className="text-gray-600">Caixa Final</span><span className="font-medium">{formatarMoeda(liquidacao.caixa_final)}</span></div>
+          <div className="flex justify-between pt-2 border-t"><span className="text-gray-600">Recebido</span><span className="font-medium text-green-600">{formatarMoeda(liquidacao.valor_recebido_dia)}</span></div>
+        </div>
+        <div className="mb-6">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Observações (opcional)</label>
+          <textarea value={observacoes} onChange={(e) => setObservacoes(e.target.value)} className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none text-sm" rows={3} placeholder={isReaberta ? "Descreva as correções realizadas..." : "Alguma observação sobre o dia..."} />
+        </div>
+        <div className="flex gap-3">
+          <button onClick={onClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
+          <button onClick={() => onConfirmar(observacoes)} disabled={loading} className={`flex-1 px-4 py-2.5 ${isReaberta ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2`}>
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Square className="w-4 h-4" />}Fechar
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// MODAL DE REABERTURA
+// =====================================================
+
+function ModalReabrirLiquidacao({
+  isOpen, onClose, onConfirmar, loading, dataLiquidacao,
+}: {
+  isOpen: boolean; onClose: () => void; onConfirmar: (motivo: string) => Promise<void>; loading: boolean; dataLiquidacao: string;
+}) {
+  const [motivo, setMotivo] = useState('');
+  const [erro, setErro] = useState('');
+
+  const handleConfirmar = async () => {
+    if (!motivo.trim()) { setErro('O motivo da reabertura é obrigatório'); return; }
+    if (motivo.trim().length < 10) { setErro('O motivo deve ter pelo menos 10 caracteres'); return; }
+    setErro('');
+    await onConfirmar(motivo);
+    setMotivo('');
   };
 
-  // Carregar TODAS as solicitações (sem filtro de status)
-  const carregarSolicitacoes = async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const data = await solicitacoesService.listarTodas(user.id, {
-        status: null, // Busca todas
-        tipo: filtroTipo || null,
+  const handleClose = () => { setMotivo(''); setErro(''); onClose(); };
+  if (!isOpen) return null;
+
+  const dataFormatada = dataLiquidacao
+    ? new Date(dataLiquidacao + 'T12:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    : '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={handleClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center"><RotateCcw className="w-6 h-6 text-amber-600" /></div>
+          <div><h2 className="text-lg font-bold text-gray-900">Reabrir Liquidação</h2><p className="text-sm text-gray-500">Permitir edições nesta liquidação</p></div>
+        </div>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-800 mb-1">Atenção!</p>
+              <p className="text-amber-700">Você está prestes a reabrir a liquidação do dia:</p>
+              <p className="font-semibold text-amber-900 mt-1 flex items-center gap-2"><Calendar className="w-4 h-4" />{dataFormatada}</p>
+            </div>
+          </div>
+        </div>
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">Motivo da Reabertura <span className="text-red-500">*</span></label>
+          <textarea value={motivo} onChange={(e) => { setMotivo(e.target.value); if (erro) setErro(''); }} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm ${erro ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} rows={3} placeholder="Descreva o motivo (mínimo 10 caracteres)..." disabled={loading} />
+          {erro && <p className="mt-1 text-sm text-red-600">{erro}</p>}
+          <p className="mt-1 text-xs text-gray-400">{motivo.length}/10 caracteres mínimos</p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={handleClose} disabled={loading} className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50">Cancelar</button>
+          <button onClick={handleConfirmar} disabled={loading || !motivo.trim()} className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <><Loader2 className="w-4 h-4 animate-spin" />Reabrindo...</> : <><RotateCcw className="w-4 h-4" />Reabrir</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// TELA SEM LIQUIDAÇÃO ABERTA
+// =====================================================
+
+function TelaIniciarDia({
+  vendedor, rota, saldoConta, onAbrir, loading, onAbrirCalendario, dataProxima,
+}: {
+  vendedor: VendedorLiquidacao | null;
+  rota: RotaLiquidacao;
+  saldoConta: number;
+  onAbrir: () => void;
+  loading: boolean;
+  onAbrirCalendario: () => void;
+  dataProxima?: Date | null;
+}) {
+  const dataFormatada = dataProxima
+    ? dataProxima.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })
+    : null;
+  const dataCurta = dataProxima
+    ? dataProxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Liquidação Diária</h1>
+          <p className="text-gray-500 text-sm flex items-center gap-2 mt-1">
+            <MapPin className="w-4 h-4" />{rota.nome}
+            {vendedor && <><span className="text-gray-300">•</span>{vendedor.nome}</>}
+          </p>
+        </div>
+        <button onClick={onAbrirCalendario} className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+          <CalendarDays className="w-4 h-4" />Calendário
+        </button>
+      </div>
+      <div className="flex items-center justify-center min-h-[50vh]">
+        <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><Play className="w-8 h-8 text-white" /></div>
+          <h2 className="text-xl font-bold text-gray-900 mb-1">Iniciar o Dia</h2>
+          {dataFormatada && (
+            <p className="text-base font-semibold text-green-700 capitalize mb-2">{dataFormatada}</p>
+          )}
+          <p className="text-gray-500 text-sm mb-6">Nenhuma liquidação aberta. Inicie sua sessão de trabalho.</p>
+          <div className="bg-gray-50 rounded-lg p-4 mb-6 text-left">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center"><span className="text-sm font-bold text-blue-600">{vendedor?.nome?.charAt(0) || rota.nome.charAt(0)}</span></div>
+              <div>
+                <p className="font-medium text-gray-900 text-sm">{vendedor?.nome || 'Vendedor não vinculado'}</p>
+                <p className="text-xs text-gray-500">{rota.nome}</p>
+              </div>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-gray-500">Saldo disponível:</span>
+              <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
+            </div>
+          </div>
+          <button onClick={onAbrir} disabled={loading} className="w-full px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg font-semibold hover:from-green-600 hover:to-green-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2">
+            {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5" />Abrir Liquidação{dataCurta && ` (${dataCurta})`}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// MODAL DE CONFIRMAÇÃO DE DIAS PULADOS
+// =====================================================
+
+function ModalDiasPulados({
+  isOpen, onClose, onConfirmar, diasPulados, dataProxima,
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirmar: () => void;
+  diasPulados: string[];
+  dataProxima: Date | null;
+}) {
+  if (!isOpen) return null;
+
+  const formatarData = (iso: string) => {
+    return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+    });
+  };
+  const dataProximaFmt = dataProxima
+    ? dataProxima.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+    : '';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={onClose} />
+      <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-12 h-12 bg-amber-100 rounded-xl flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-amber-600" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-gray-900">Dias pulados detectados</h2>
+            <p className="text-sm text-gray-500">Confirme antes de abrir o dia</p>
+          </div>
+        </div>
+
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+          <p className="text-sm text-amber-900 mb-2">
+            Você está prestes a abrir a liquidação do dia <strong>{dataProximaFmt}</strong>,
+            mas {diasPulados.length === 1 ? 'há 1 dia trabalhável que não foi fechado' : `há ${diasPulados.length} dias trabalháveis que não foram fechados`}:
+          </p>
+          <ul className="text-sm text-amber-900 mt-2 space-y-0.5">
+            {diasPulados.map((d) => (
+              <li key={d} className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-amber-600 rounded-full" />
+                {formatarData(d)}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="text-xs text-gray-500 mb-4">
+          Caso prossiga, esses dias permanecerão sem registro. Você pode abri-los depois pelo calendário.
+        </p>
+
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirmar}
+            className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-colors"
+          >
+            OK, abrir mesmo assim
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// CARD DE ABRIR LIQUIDAÇÃO RETROATIVA (dia passado)
+// =====================================================
+
+function CardAbrirRetroativo({
+  data, saldoConta, onAbrir, loading,
+}: {
+  data: Date;
+  saldoConta: number;
+  onAbrir: () => void;
+  loading: boolean;
+}) {
+  const dataFormatada = data.toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  });
+  const dataCurta = data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="bg-white rounded-xl border border-amber-200 p-8 max-w-md w-full text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-amber-500 to-amber-600 rounded-full flex items-center justify-center mx-auto mb-6">
+          <Play className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-xl font-bold text-gray-900 mb-1">Abrir Liquidação Retroativa</h2>
+        <p className="text-base font-semibold text-amber-700 capitalize mb-2">{dataFormatada}</p>
+        <p className="text-gray-500 text-sm mb-4">
+          Este dia ainda não foi trabalhado e é um dia útil. Você pode abri-lo agora.
+        </p>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-6 text-xs text-amber-800">
+          <AlertTriangle className="w-4 h-4 inline mr-1" />
+          Abertura retroativa. Use com cuidado.
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4 mb-6">
+          <div className="flex justify-between items-center text-sm">
+            <span className="text-gray-500">Saldo disponível:</span>
+            <span className="font-semibold text-green-600">{formatarMoeda(saldoConta)}</span>
+          </div>
+        </div>
+        <button
+          onClick={onAbrir}
+          disabled={loading}
+          className="w-full px-6 py-3 bg-gradient-to-r from-amber-500 to-amber-600 text-white rounded-lg font-semibold hover:from-amber-600 hover:to-amber-700 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Play className="w-5 h-5" />Abrir Liquidação ({dataCurta})</>}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// CARD DE DIA NÃO TRABALHÁVEL
+// =====================================================
+
+type MotivoBloqueio =
+  | { tipo: 'DOMINGO' }
+  | { tipo: 'FERIADO'; descricao: string }
+  | { tipo: 'FUTURO' }
+  | { tipo: 'MUITO_ANTIGO' }
+  | { tipo: 'OUTRA_ABERTA'; dataLiquidacaoAtiva: string };
+
+function CardDiaNaoTrabalhavel({ data, motivo }: { data: Date; motivo: MotivoBloqueio }) {
+  const dataFormatada = data.toLocaleDateString('pt-BR', {
+    weekday: 'long', day: '2-digit', month: 'long', year: 'numeric',
+  });
+
+  let titulo = 'Dia não trabalhável';
+  let mensagem = '';
+  let icone = <CalendarDays className="w-8 h-8 text-gray-400" />;
+  let corFundo = 'bg-gray-100';
+
+  switch (motivo.tipo) {
+    case 'DOMINGO':
+      titulo = 'Domingo';
+      mensagem = 'Esta rota não trabalha aos domingos. Não é possível abrir liquidação neste dia.';
+      break;
+    case 'FERIADO':
+      titulo = 'Feriado';
+      mensagem = `Este dia está marcado como feriado: "${motivo.descricao}". Não é possível abrir liquidação.`;
+      break;
+    case 'FUTURO':
+      titulo = 'Data futura';
+      mensagem = 'Não é possível abrir liquidação para uma data no futuro. Aguarde até o dia chegar.';
+      corFundo = 'bg-blue-100';
+      icone = <CalendarDays className="w-8 h-8 text-blue-400" />;
+      break;
+    case 'MUITO_ANTIGO':
+      titulo = 'Data muito antiga';
+      mensagem = 'Não é possível abrir liquidação para mais de 30 dias atrás.';
+      break;
+    case 'OUTRA_ABERTA': {
+      const dataAtivaFmt = new Date(motivo.dataLiquidacaoAtiva + 'T12:00:00').toLocaleDateString('pt-BR', {
+        day: '2-digit', month: '2-digit', year: 'numeric',
       });
-      setTodasSolicitacoes(data);
-    } catch (err) {
-      console.error('Erro ao carregar solicitações:', err);
+      titulo = 'Liquidação já aberta';
+      mensagem = `Existe uma liquidação aberta para o dia ${dataAtivaFmt}. Para abrir um novo dia, é necessário fechar a liquidação atual primeiro.`;
+      corFundo = 'bg-amber-100';
+      icone = <AlertTriangle className="w-8 h-8 text-amber-500" />;
+      break;
+    }
+  }
+
+  return (
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <div className="bg-white rounded-xl border border-gray-200 p-8 max-w-md w-full text-center">
+        <div className={`w-16 h-16 ${corFundo} rounded-full flex items-center justify-center mx-auto mb-6`}>
+          {icone}
+        </div>
+        <h2 className="text-lg font-bold text-gray-900 mb-1">{titulo}</h2>
+        <p className="text-base font-medium text-gray-600 capitalize mb-3">{dataFormatada}</p>
+        <p className="text-sm text-gray-500">{mensagem}</p>
+      </div>
+    </div>
+  );
+}
+
+// =====================================================
+// PÁGINA PRINCIPAL
+// =====================================================
+
+type FiltroLista = 'TODOS' | 'PAGOS' | 'NAO_PAGOS' | 'NOVOS' | 'RENOVADOS' | 'RENEGOCIADOS' | 'QUITADOS';
+
+interface EventoCliente {
+  tipo: 'PAGOU' | 'NAO_PAGOU' | 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO' | 'QUITADO' | 'CANCELADO';
+  parcelasPagas?: number;
+  totalParcelas?: number;
+  numeroParcelaPaga?: number;
+  valorPago?: number;
+  valorEmprestimo?: number;
+  numeroParcelasEmprestimo?: number;
+  isParcial?: boolean; // ⭐ indica se foi pagamento parcial (não quitou a parcela)
+}
+
+export default function LiquidacaoDiariaPage() {
+  const { profile, localizacao } = useUser();
+  const userId = profile?.user_id;
+  const rotaIdContexto = localizacao?.rota_id;
+  const empresaId = localizacao?.empresa_id;
+
+  const [vendedor, setVendedor] = useState<VendedorLiquidacao | null>(null);
+  const [rota, setRota] = useState<RotaLiquidacao | null>(null);
+  const [empresaNome, setEmpresaNome] = useState<string>('');
+  const [liquidacao, setLiquidacao] = useState<LiquidacaoDiaria | null>(null);
+  const [liquidacaoAtiva, setLiquidacaoAtiva] = useState<LiquidacaoDiaria | null>(null);
+  const [saldoConta, setSaldoConta] = useState(0);
+  const [clientesDia, setClientesDia] = useState<ClienteDoDia[]>([]);
+  const [estatisticas, setEstatisticas] = useState<EstatisticasClientesDia | null>(null);
+  const [semRotaSelecionada, setSemRotaSelecionada] = useState(false);
+
+  const [emprestimos, setEmprestimos] = useState({ total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 });
+  const [metaDia, setMetaDia] = useState(0);
+
+  const [emprestimosDoDia, setEmprestimosDoDia] = useState<Array<{
+    id: string; cliente_id: string; valor_principal: number; numero_parcelas: number; tipo_emprestimo: string; status: string; clientes?: { nome: string };
+  }>>([]);
+
+  const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
+  const [liquidacoesMes, setLiquidacoesMes] = useState<LiquidacaoDiaria[]>([]);
+  const [mostrarCalendario, setMostrarCalendario] = useState(false);
+  const [visualizandoOutroDia, setVisualizandoOutroDia] = useState(false);
+  const [previsaoDia, setPrevisaoDia] = useState<any>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [loadingCalendario, setLoadingCalendario] = useState(false);
+  const [loadingAcao, setLoadingAcao] = useState(false);
+  const [modalAbrir, setModalAbrir] = useState(false);
+  const [modalFechar, setModalFechar] = useState(false);
+  const [modalPendencias, setModalPendencias] = useState(false);
+  const [pendenciasEncerramento, setPendenciasEncerramento] = useState<any[]>([]);
+  const [observacoesFechamento, setObservacoesFechamento] = useState<string>('');
+  const [modalExtrato, setModalExtrato] = useState(false);
+  const [modalReabrir, setModalReabrir] = useState(false);
+
+  const [clienteSelecionado, setClienteSelecionado] = useState<ClienteComTotais | null>(null);
+  const [modalClienteAberto, setModalClienteAberto] = useState(false);
+
+  const [filtroLista, setFiltroLista] = useState<FiltroLista>('TODOS');
+  const [buscaCliente, setBuscaCliente] = useState('');
+  // Ordenação da lista: 'ROTA' (ordem_rota_cliente) ou 'ALFABETICA'
+  const [ordenacao, setOrdenacao] = useState<'ROTA' | 'ALFABETICA'>('ROTA');
+  const [ordemRotaMap, setOrdemRotaMap] = useState<Map<string, number>>(new Map());
+
+  // Contagem de notas
+  const [qtdNotasLiquidacao, setQtdNotasLiquidacao] = useState(0);
+  const [notasClientes, setNotasClientes] = useState<Map<string, { liquidacao: number; outras: boolean }>>(new Map());
+  const [fotosClientes, setFotosClientes] = useState<Map<string, string>>(new Map());
+  const [modalNotasCliente, setModalNotasCliente] = useState<{ aberto: boolean; clienteId: string; clienteNome: string }>({
+    aberto: false, clienteId: '', clienteNome: '',
+  });
+  const [modalNotasLiquidacao, setModalNotasLiquidacao] = useState(false);
+
+  const [modalEmprestimos, setModalEmprestimos] = useState(false);
+  const [modalDespesas, setModalDespesas] = useState(false);
+  const [modalMicroseguros, setModalMicroseguros] = useState(false);
+  const [modalReceitas, setModalReceitas] = useState(false);
+  const [receitasDia, setReceitasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
+  const [modalAjustes, setModalAjustes] = useState(false);
+  const [ajustesDia, setAjustesDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
+  const [modalCobrancas, setModalCobrancas] = useState(false);
+  const [estornandoId, setEstornandoId] = useState<string | null>(null);
+  const [cobrancasDia, setCobrancasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
+
+  // Info pra abertura de nova liquidação (data prevista + dias pulados)
+  const [proximaInfo, setProximaInfo] = useState<{
+    dataProxima: Date | null;
+    diasPulados: string[];
+  }>({ dataProxima: null, diasPulados: [] });
+  const [modalDiasPulados, setModalDiasPulados] = useState(false);
+  const [caixaInicialPendente, setCaixaInicialPendente] = useState<number | null>(null);
+  // Data alvo p/ abrir (pode ser hoje ou retroativo)
+  const [dataAlvoAbertura, setDataAlvoAbertura] = useState<Date | null>(null);
+  // Estado de "dia trabalhável" pro card retroativo
+  // null = ainda checando ou trabalhável; objeto = motivo de bloqueio
+  const [motivoBloqueio, setMotivoBloqueio] = useState<MotivoBloqueio | null>(null);
+  const [diaTrabalhavel, setDiaTrabalhavel] = useState<boolean | null>(null);
+
+  // Última data fechada da rota (pra validar se pode reabrir)
+  const [ultimaDataFechada, setUltimaDataFechada] = useState<string | null>(null);
+
+  const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
+  const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
+
+  const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+
+      // ── ONDA 1: tudo que NÃO depende de outra query roda em paralelo ──
+      const [
+        clientes,
+        emps,
+        empsNovosRes,
+        statusClientesRes,
+        receitasRes,
+        ajustesRes,
+        cobrancasRes,
+        ordemRes,
+        countNotasRes,
+      ] = await Promise.all([
+        liq.id
+          ? liquidacaoService.buscarClientesDaLiquidacao(liq.id)
+          : liquidacaoService.buscarClientesDoDia(rotaId, liq.data_abertura.split('T')[0]),
+        liquidacaoService.buscarEmprestimosDoDia(liq.id),
+        supabase
+          .from('emprestimos')
+          .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status, clientes!inner(nome)')
+          .eq('liquidacao_id', liq.id),
+        supabase.rpc('fn_clientes_parcela_status_liquidacao', { p_liquidacao_id: liq.id }),
+        supabase
+          .from('financeiro')
+          .select('id, categoria, descricao, valor, forma_pagamento, data_lancamento, created_at')
+          .eq('liquidacao_id', liq.id).eq('tipo', 'RECEBER').eq('status', 'PAGO')
+          .neq('categoria', 'COBRANCA_PARCELAS').order('created_at', { ascending: false }),
+        supabase
+          .from('financeiro')
+          .select('id, categoria, descricao, valor, forma_pagamento, observacoes, created_at')
+          .eq('liquidacao_id', liq.id).eq('tipo', 'AJUSTE').eq('status', 'PAGO')
+          .neq('categoria', 'AJUSTE_ABERTURA').order('created_at', { ascending: false }),
+        supabase
+          .from('financeiro')
+          .select('id, categoria, descricao, valor, forma_pagamento, cliente_nome, data_lancamento, created_at, ref_parcela_id, ref_emprestimo_id')
+          .eq('liquidacao_id', liq.id).eq('tipo', 'RECEBER').eq('status', 'PAGO')
+          .eq('categoria', 'COBRANCA_PARCELAS').order('created_at', { ascending: false }),
+        supabase.from('ordem_rota_cliente').select('cliente_id, ordem').eq('rota_id', rotaId),
+        supabase.from('notas').select('id', { count: 'exact', head: true })
+          .eq('liquidacao_id', liq.id).eq('status', 'ATIVA'),
+      ]);
+
+      setClientesDia(clientes);
+      setEstatisticas(liquidacaoService.calcularEstatisticasClientesDia(clientes));
+      setEmprestimos(emps);
+
+      const empsNovos = empsNovosRes.data;
+      const statusClientes = statusClientesRes.data;
+
+      // Receitas
+      const receitasItens = receitasRes.data || [];
+      setReceitasDia({
+        total: receitasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: receitasItens.length, itens: receitasItens,
+      });
+
+      // Ajustes
+      const ajustesItens = ajustesRes.data || [];
+      setAjustesDia({
+        total: ajustesItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: ajustesItens.length, itens: ajustesItens,
+      });
+
+      // Cobranças — enriquecer com número da parcela e total de parcelas do empréstimo
+      const cobrancasItens = cobrancasRes.data || [];
+      const parcelaIdsCob = Array.from(new Set(cobrancasItens.map((c: any) => c.ref_parcela_id).filter(Boolean)));
+      const empIdsCob = Array.from(new Set(cobrancasItens.map((c: any) => c.ref_emprestimo_id).filter(Boolean)));
+      let mapaParcela: Record<string, number> = {};
+      let mapaTotalParc: Record<string, number> = {};
+      if (parcelaIdsCob.length > 0) {
+        const { data: parcRows } = await supabase
+          .from('emprestimo_parcelas')
+          .select('id, numero_parcela, emprestimo_id')
+          .in('id', parcelaIdsCob);
+        (parcRows || []).forEach((p: any) => { mapaParcela[p.id] = p.numero_parcela; });
+      }
+      if (empIdsCob.length > 0) {
+        const { data: empRows } = await supabase
+          .from('emprestimos')
+          .select('id, numero_parcelas')
+          .in('id', empIdsCob);
+        (empRows || []).forEach((e: any) => { mapaTotalParc[e.id] = e.numero_parcelas; });
+      }
+      const cobrancasEnriquecidas = cobrancasItens.map((c: any) => ({
+        ...c,
+        numero_parcela: c.ref_parcela_id ? (mapaParcela[c.ref_parcela_id] ?? null) : null,
+        total_parcelas: c.ref_emprestimo_id ? (mapaTotalParc[c.ref_emprestimo_id] ?? null) : null,
+      }));
+      setCobrancasDia({
+        total: cobrancasEnriquecidas.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
+        qtd: cobrancasEnriquecidas.length, itens: cobrancasEnriquecidas,
+      });
+
+      // Ordem dos clientes na rota
+      const novoOrdemMap = new Map<string, number>();
+      (ordemRes.data || []).forEach((o: any) => {
+        if (o.cliente_id != null) novoOrdemMap.set(o.cliente_id, Number(o.ordem ?? 0));
+      });
+      setOrdemRotaMap(novoOrdemMap);
+
+      // Contagem de notas
+      setQtdNotasLiquidacao(countNotasRes.count || 0);
+
+      // ── ONDA 2: queries que dependem dos resultados da onda 1 ──
+      const clientesQuitados = new Set(
+        (statusClientes || [])
+          .filter((s: any) => s.parcela_status === 'QUITADO')
+          .map((s: any) => s.cliente_id)
+      );
+      const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
+
+      const [quitadosRes, fotosRes, notasLiqRes, notasOutrasRes] = await Promise.all([
+        clientesQuitados.size > 0
+          ? supabase.from('emprestimos')
+              .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
+              .in('cliente_id', Array.from(clientesQuitados)).eq('status', 'QUITADO')
+          : Promise.resolve({ data: [] as any[] }),
+        clienteIds.length > 0
+          ? supabase.from('clientes').select('id, foto_url').in('id', clienteIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clienteIds.length > 0
+          ? supabase.from('notas').select('cliente_id').eq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds)
+          : Promise.resolve({ data: [] as any[] }),
+        clienteIds.length > 0
+          ? supabase.from('notas').select('cliente_id').neq('liquidacao_id', liq.id).eq('status', 'ATIVA').in('cliente_id', clienteIds)
+          : Promise.resolve({ data: [] as any[] }),
+      ]);
+
+      // Combinar empréstimos (novos + quitados, sem duplicatas)
+      const empsTodos = [...(empsNovos || [])];
+      for (const eq of (quitadosRes.data || [])) {
+        if (!empsTodos.find(e => e.id === eq.id)) empsTodos.push(eq);
+      }
+      setEmprestimosDoDia(empsTodos as any);
+
+      // Fotos
+      const mapaFotos = new Map<string, string>();
+      (fotosRes.data || []).forEach((f: any) => { if (f.foto_url) mapaFotos.set(f.id, f.foto_url); });
+      setFotosClientes(mapaFotos);
+
+      // Notas por cliente
+      const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
+      (notasLiqRes.data || []).forEach((n: any) => {
+        const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
+        mapaNotas.set(n.cliente_id, { ...atual, liquidacao: atual.liquidacao + 1 });
+      });
+      (notasOutrasRes.data || []).forEach((n: any) => {
+        const atual = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false };
+        mapaNotas.set(n.cliente_id, { ...atual, outras: true });
+      });
+      setNotasClientes(mapaNotas);
+
+      setBuscaCliente('');
+      setFiltroLista('TODOS');
+    } catch (error) {
+      console.error('Erro ao carregar dados da liquidação:', error);
+    }
+  }, []);
+
+  // Estornar uma cobrança (parcela paga) — versão WEB (permite liquidação fechada)
+  const handleEstornarCobranca = useCallback(async (c: any) => {
+    if (!c?.ref_parcela_id) {
+      alert('Esta cobrança não está vinculada a uma parcela e não pode ser estornada por aqui.');
+      return;
+    }
+    const nome = c.cliente_nome || c.descricao || 'esta cobrança';
+    const desc = c.numero_parcela
+      ? `${nome} — parcela ${c.numero_parcela}${c.total_parcelas ? `/${c.total_parcelas}` : ''}`
+      : nome;
+    if (!confirm(`Estornar o pagamento de ${desc} (${formatarMoeda(Number(c.valor || 0))})?\n\nIsto reverterá o valor da conta e os indicadores da liquidação.`)) {
+      return;
+    }
+    const motivo = prompt('Motivo do estorno (obrigatório):');
+    if (motivo === null) return; // cancelou
+    if (!motivo.trim()) { alert('O motivo é obrigatório para estornar.'); return; }
+
+    setEstornandoId(c.id);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data, error } = await supabase.rpc('fn_estornar_pagamento_web', {
+        p_parcela_id: c.ref_parcela_id,
+        p_motivo: motivo.trim(),
+        p_vendedor_id: vendedor?.id || null,
+        p_user_id: userId || null,
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Não foi possível estornar o pagamento.');
+        return;
+      }
+      // Recarrega os dados da liquidação para refletir o estorno
+      if (liquidacao && rota) {
+        await carregarDadosLiquidacao(liquidacao, rota.id);
+      }
+    } catch (e: any) {
+      console.error('Erro ao estornar cobrança:', e);
+      alert(e?.message || 'Erro ao estornar o pagamento. Tente novamente.');
+    } finally {
+      setEstornandoId(null);
+    }
+  }, [vendedor, userId, liquidacao, rota, carregarDadosLiquidacao]);
+
+  const carregarDados = useCallback(async () => {
+    if (!userId) return;
+    setLoading(true);
+    setSemRotaSelecionada(false);
+    const tipoUsuario = profile?.tipo_usuario;
+    try {
+      let rotaId: string | null = null;
+      let vendedorData: VendedorLiquidacao | null = null;
+      let rotaData: RotaLiquidacao | null = null;
+
+      if (tipoUsuario === 'VENDEDOR') {
+        vendedorData = await liquidacaoService.buscarVendedorPorUserId(userId);
+        if (vendedorData) {
+          rotaData = await liquidacaoService.buscarRotaVendedor(vendedorData.id);
+          rotaId = rotaData?.id || null;
+        }
+      }
+
+      if (!rotaId && rotaIdContexto) {
+        const temPermissao = validarPermissaoRota(tipoUsuario, rotaIdContexto, profile);
+        if (!temPermissao) { setSemRotaSelecionada(true); setLoading(false); return; }
+        rotaId = rotaIdContexto;
+        rotaData = await liquidacaoService.buscarRotaPorId(rotaIdContexto, empresaId || undefined);
+        if (rotaData) vendedorData = await liquidacaoService.buscarVendedorDaRota(rotaIdContexto);
+      }
+
+      if (!rotaId && profile?.ultima_rota_id) {
+        const ultimaRotaId = profile.ultima_rota_id;
+        const temPermissao = validarPermissaoRota(tipoUsuario, ultimaRotaId, profile);
+        if (temPermissao) {
+          rotaId = ultimaRotaId;
+          rotaData = await liquidacaoService.buscarRotaPorId(ultimaRotaId, empresaId || undefined);
+          if (rotaData) vendedorData = await liquidacaoService.buscarVendedorDaRota(ultimaRotaId);
+        }
+      }
+
+      if (!rotaId || !rotaData) { setSemRotaSelecionada(true); setLoading(false); return; }
+
+      setVendedor(vendedorData);
+      setRota(rotaData);
+
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+
+      // Independentes entre si → paralelo (empresa, saldo, liquidação aberta, meta)
+      const [empresaRes, contaData, liquidacaoData, meta] = await Promise.all([
+        rotaData?.empresa_id
+          ? supabase.from('empresas').select('nome').eq('id', rotaData.empresa_id).single()
+          : Promise.resolve({ data: null } as any),
+        liquidacaoService.buscarSaldoContaRota(rotaId),
+        liquidacaoService.buscarLiquidacaoAberta(rotaId),
+        liquidacaoService.buscarMetaRota(rotaId),
+      ]);
+
+      setEmpresaNome(empresaRes?.data?.nome || '');
+      setSaldoConta(contaData?.saldo_atual || 0);
+      setMetaDia(meta);
+
+      // ⭐ CORREÇÃO: Se não há liquidação aberta, verificar se há fechada HOJE (no timezone da empresa)
+      if (!liquidacaoData) {
+        const { data: statusHoje, error: errStatus } = await supabase.rpc('fn_status_liquidacao_hoje', {
+          p_rota_id: rotaId
+        });
+        
+        if (!errStatus && statusHoje?.status === 'FECHADA_HOJE' && statusHoje?.liquidacao_id) {
+          // Carregar a liquidação fechada de hoje para mostrar com botão "Reabrir"
+          const liqFechadaHoje = await liquidacaoService.buscarLiquidacaoPorId(statusHoje.liquidacao_id);
+          if (liqFechadaHoje) {
+            setLiquidacao(liqFechadaHoje);
+            setLiquidacaoAtiva(null); // Não há liquidação ativa (aberta)
+            setVisualizandoOutroDia(false); // É hoje, não outro dia
+            await carregarDadosLiquidacao(liqFechadaHoje, rotaId);
+            setDataSelecionada(new Date(liqFechadaHoje.data_abertura));
+            setLoading(false);
+            return; // Importante: sair aqui
+          }
+        }
+      }
+      
+      setLiquidacao(liquidacaoData);
+      setLiquidacaoAtiva(liquidacaoData);
+
+      if (liquidacaoData) {
+        await carregarDadosLiquidacao(liquidacaoData, rotaId);
+        setDataSelecionada(new Date(liquidacaoData.data_abertura));
+      } else {
+        // Sem liquidação aberta: se houver um dia salvo (por rota) nesta sessão,
+        // reabrir automaticamente o último dia que estava sendo visualizado.
+        let dataSalva: string | null = null;
+        try { dataSalva = sessionStorage.getItem(`liq_ultima_data_${rotaId}`); } catch {}
+        if (dataSalva) {
+          const liqSalva = await liquidacaoService.buscarLiquidacaoPorData(rotaId, dataSalva);
+          if (liqSalva) {
+            setLiquidacao(liqSalva);
+            setVisualizandoOutroDia(true);
+            await carregarDadosLiquidacao(liqSalva, rotaId);
+            const [a, m, d] = dataSalva.split('-').map(Number);
+            setDataSelecionada(new Date(a, m - 1, d));
+          } else {
+            // data salva não corresponde mais a uma liquidação → descartar
+            try { sessionStorage.removeItem(`liq_ultima_data_${rotaId}`); } catch {}
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao carregar dados:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [userId, rotaIdContexto, empresaId, profile, carregarDadosLiquidacao]);
 
-  useEffect(() => {
-    carregarSolicitacoes();
-  }, [user, filtroTipo]);
-
-  // Aprovar solicitação
-  const handleAprovar = async (motivo?: string) => {
-    if (!solicitacaoSelecionada || !user) return;
-    setLoadingAcao(true);
+  const carregarDadosCalendario = useCallback(async (rotaId: string, ano: number, mes: number) => {
+    setLoadingCalendario(true);
     try {
-      let resultado;
-      
-      // Para RENEGOCIACAO e EMPRESTIMO_ADICIONAL, usar função especial
-      if (['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL'].includes(solicitacaoSelecionada.tipo_solicitacao)) {
-        resultado = await solicitacoesService.aprovarAutorizacaoCliente(solicitacaoSelecionada, user.id);
-      } else {
-        resultado = await solicitacoesService.aprovar(solicitacaoSelecionada.id, user.id, motivo);
-      }
-      
-      if (resultado.success) {
-        setSolicitacaoSelecionada(null);
-        carregarSolicitacoes();
-      } else {
-        alert(resultado.message);
-      }
-    } catch (err) {
-      console.error('Erro ao aprovar:', err);
-      alert('Erro ao aprovar solicitação');
+      const liquidacoes = await liquidacaoService.buscarLiquidacoesMes(rotaId, ano, mes);
+      setLiquidacoesMes(liquidacoes);
+    } catch (error) {
+      console.error('Erro ao carregar dados do calendário:', error);
     } finally {
-      setLoadingAcao(false);
+      setLoadingCalendario(false);
     }
-  };
+  }, []);
 
-  // Rejeitar solicitação
-  const handleRejeitar = async (motivo: string) => {
-    if (!solicitacaoSelecionada || !user) return;
-    if (!motivo.trim()) {
-      alert('Informe o motivo da rejeição');
+  const handleMesChange = useCallback((ano: number, mes: number) => {
+    if (rota) carregarDadosCalendario(rota.id, ano, mes);
+  }, [rota, carregarDadosCalendario]);
+
+  const handleSelecionarData = useCallback(async (data: Date) => {
+    if (!rota) return;
+    setDataSelecionada(data);
+    setLoadingCalendario(true);
+    const dataStr = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+    // Usar data_liquidacao (dia operacional), não data_abertura (timestamp de criação).
+    // Importante pra liquidações retroativas: data_abertura pode ser hoje, mas
+    // data_liquidacao é o dia ao qual a liquidação se refere.
+    const dataLiquidacaoAtiva = (liquidacaoAtiva as any)?.data_liquidacao
+      || liquidacaoAtiva?.data_abertura?.split('T')[0];
+
+    try {
+      if (dataLiquidacaoAtiva && dataStr === dataLiquidacaoAtiva) {
+        setLiquidacao(liquidacaoAtiva);
+        setVisualizandoOutroDia(false);
+        setPrevisaoDia(null);
+        try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {}
+        if (liquidacaoAtiva) await carregarDadosLiquidacao(liquidacaoAtiva, rota.id);
+        setLoadingCalendario(false);
+        return;
+      }
+
+      const liqData = await liquidacaoService.buscarLiquidacaoPorData(rota.id, dataStr);
+      if (liqData) {
+        setLiquidacao(liqData);
+        setVisualizandoOutroDia(true);
+        // Lembrar o dia visualizado (por rota) para reabrir ao voltar à tela
+        try { sessionStorage.setItem(`liq_ultima_data_${rota.id}`, dataStr); } catch {}
+        await carregarDadosLiquidacao(liqData, rota.id);
+        setPrevisaoDia(null);
+      } else {
+        setLiquidacao(null);
+        setVisualizandoOutroDia(true);
+        try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {}
+        const previsao = await liquidacaoService.buscarPrevisaoDia(rota.id, dataStr);
+        setPrevisaoDia(previsao);
+        const clientes = await liquidacaoService.buscarClientesDoDia(rota.id, dataStr);
+        setClientesDia(clientes);
+      }
+    } catch (error) {
+      console.error('Erro ao selecionar data:', error);
+    } finally {
+      setLoadingCalendario(false);
+    }
+  }, [rota, liquidacaoAtiva, carregarDadosLiquidacao]);
+
+  const handleConfirmarDataCalendario = useCallback(async (data: Date) => {
+    if (!rota) return;
+    await handleSelecionarData(data);
+  }, [rota, handleSelecionarData]);
+
+  const voltarParaLiquidacaoAtiva = useCallback(async () => {
+    if (rota) { try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {} }
+    if (liquidacaoAtiva && rota) {
+      setDataSelecionada(new Date(liquidacaoAtiva.data_abertura));
+      setLiquidacao(liquidacaoAtiva);
+      setVisualizandoOutroDia(false);
+      setPrevisaoDia(null);
+      await carregarDadosLiquidacao(liquidacaoAtiva, rota.id);
+    } else {
+      setDataSelecionada(new Date());
+      setVisualizandoOutroDia(false);
+      setPrevisaoDia(null);
+      await carregarDados();
+    }
+  }, [liquidacaoAtiva, rota, carregarDadosLiquidacao, carregarDados]);
+
+  useEffect(() => { carregarDados(); }, [carregarDados]);
+  useEffect(() => {
+    if (rota) {
+      const agora = new Date();
+      carregarDadosCalendario(rota.id, agora.getFullYear(), agora.getMonth() + 1);
+    }
+  }, [rota, carregarDadosCalendario]);
+
+  // Busca a data da última liquidação FECHADA/APROVADA da rota
+  // (usada pra validar se a liquidação atual pode ser reaberta)
+  useEffect(() => {
+    if (!rota) {
+      setUltimaDataFechada(null);
       return;
     }
+    (async () => {
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data, error } = await supabase
+          .from('liquidacoes_diarias')
+          .select('data_liquidacao')
+          .eq('rota_id', rota.id)
+          .in('status', ['FECHADO', 'APROVADO'])
+          .order('data_liquidacao', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (error) {
+          console.error('Erro ao buscar última data fechada:', error);
+          setUltimaDataFechada(null);
+          return;
+        }
+        setUltimaDataFechada((data as any)?.data_liquidacao || null);
+      } catch (err) {
+        console.error('Erro inesperado ao buscar última data fechada:', err);
+        setUltimaDataFechada(null);
+      }
+    })();
+  }, [rota, liquidacao]);  // Recarrega quando a liquidação muda (após fechar uma, atualiza)
+
+  // Busca info de próxima liquidação a abrir (quando não há liquidação ativa)
+  useEffect(() => {
+    if (!rota || liquidacao || visualizandoOutroDia) {
+      setProximaInfo({ dataProxima: null, diasPulados: [] });
+      return;
+    }
+    (async () => {
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        
+        // ⭐ CORREÇÃO: Usar data "hoje" do servidor no timezone da empresa
+        const { data: dataHojeResp } = await supabase.rpc('fn_data_hoje_rota', {
+          p_rota_id: rota.id
+        });
+        const hojeStr = dataHojeResp || new Date().toISOString().split('T')[0];
+        
+        const { data, error } = await supabase.rpc('fn_proxima_liquidacao_info', {
+          p_rota_id: rota.id,
+          p_data_atual: hojeStr,
+        });
+        if (error) {
+          console.error('Erro ao buscar info próxima liquidação:', error);
+          const hoje = new Date(hojeStr + 'T12:00:00');
+          setProximaInfo({ dataProxima: hoje, diasPulados: [] });
+          return;
+        }
+        const dataProxStr = (data as any)?.data_proxima as string | null;
+        const dias = ((data as any)?.dias_pulados as string[] | null) || [];
+        const hojeDate = new Date(hojeStr + 'T12:00:00');
+        const dataProx = dataProxStr ? new Date(dataProxStr + 'T12:00:00') : hojeDate;
+        setProximaInfo({ dataProxima: dataProx, diasPulados: dias });
+      } catch (err) {
+        console.error('Erro inesperado em fn_proxima_liquidacao_info:', err);
+        setProximaInfo({ dataProxima: new Date(), diasPulados: [] });
+      }
+    })();
+  }, [rota, liquidacao, visualizandoOutroDia]);
+
+  // Quando seleciona um dia sem liquidação, verifica se é trabalhável e identifica motivo
+  useEffect(() => {
+    if (!rota || liquidacao || !visualizandoOutroDia) {
+      setDiaTrabalhavel(null);
+      setMotivoBloqueio(null);
+      return;
+    }
+
+    // Se já existe uma liquidação ATIVA em outro dia, não permite abrir outra
+    if (liquidacaoAtiva) {
+      const dataLiqAtivaStr = (liquidacaoAtiva as any).data_liquidacao
+        || liquidacaoAtiva.data_abertura?.split('T')[0];
+      setDiaTrabalhavel(false);
+      setMotivoBloqueio({ tipo: 'OUTRA_ABERTA', dataLiquidacaoAtiva: dataLiqAtivaStr });
+      return;
+    }
+
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    const sel = new Date(dataSelecionada);
+    sel.setHours(0, 0, 0, 0);
+    const diffDays = Math.round((hoje.getTime() - sel.getTime()) / (1000 * 60 * 60 * 24));
+
+    // Data futura
+    if (diffDays < 0) {
+      setDiaTrabalhavel(false);
+      setMotivoBloqueio({ tipo: 'FUTURO' });
+      return;
+    }
+
+    // Data muito antiga (>30 dias atrás)
+    if (diffDays > 30) {
+      setDiaTrabalhavel(false);
+      setMotivoBloqueio({ tipo: 'MUITO_ANTIGO' });
+      return;
+    }
+
+    // Verifica domingo + feriado via banco
+    (async () => {
+      try {
+        const dataStr = `${sel.getFullYear()}-${String(sel.getMonth() + 1).padStart(2, '0')}-${String(sel.getDate()).padStart(2, '0')}`;
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+
+        // Check 1: domingo (DOW = 0) e rota não trabalha aos domingos
+        const ehDomingo = sel.getDay() === 0;
+        if (ehDomingo && !(rota as any).trabalha_domingo) {
+          setDiaTrabalhavel(false);
+          setMotivoBloqueio({ tipo: 'DOMINGO' });
+          return;
+        }
+
+        // Check 2: feriado da rota
+        const { data: feriadoData } = await supabase
+          .from('feriados_rota')
+          .select('descricao')
+          .eq('rota_id', rota.id)
+          .eq('data', dataStr)
+          .maybeSingle();
+
+        if (feriadoData) {
+          setDiaTrabalhavel(false);
+          setMotivoBloqueio({ tipo: 'FERIADO', descricao: feriadoData.descricao || 'Feriado' });
+          return;
+        }
+
+        // Trabalhável
+        setDiaTrabalhavel(true);
+        setMotivoBloqueio(null);
+      } catch (err) {
+        console.error('Erro ao verificar dia trabalhável:', err);
+        setDiaTrabalhavel(false);
+        setMotivoBloqueio({ tipo: 'MUITO_ANTIGO' });
+      }
+    })();
+  }, [rota, liquidacao, liquidacaoAtiva, visualizandoOutroDia, dataSelecionada]);
+
+  const handleAbrirLiquidacao = async (caixaInicial: number) => {
+    if (!rota || !userId) return;
+    // Se for abertura HOJE e tem dias pulados, pede confirmação antes
+    const ehHoje = !dataAlvoAbertura || (() => {
+      const hoje = new Date();
+      return dataAlvoAbertura.toDateString() === hoje.toDateString();
+    })();
+    if (ehHoje && proximaInfo.diasPulados.length > 0) {
+      setCaixaInicialPendente(caixaInicial);
+      setModalAbrir(false);
+      setModalDiasPulados(true);
+      return;
+    }
+    await abrirLiquidacaoEfetivamente(caixaInicial);
+  };
+
+  const abrirLiquidacaoEfetivamente = async (caixaInicial: number) => {
+    if (!rota || !userId) return;
+
+    // Captura referências locais antes de qualquer mudança de state
+    const dataAlvo = dataAlvoAbertura;
+    const ehRetroativa = !!dataAlvo;
+
+    // Fecha os modais IMEDIATAMENTE — antes do await — pra UI responder
+    setModalAbrir(false);
+    setModalDiasPulados(false);
+    setCaixaInicialPendente(null);
+    setDataAlvoAbertura(null);
+
     setLoadingAcao(true);
     try {
-      const resultado = await solicitacoesService.rejeitar(solicitacaoSelecionada.id, user.id, motivo);
-      if (resultado.success) {
-        setSolicitacaoSelecionada(null);
-        carregarSolicitacoes();
-      } else {
-        alert(resultado.message);
+      // Define data_liquidacao se for retroativo
+      let dataLiqStr: string | undefined;
+      if (dataAlvo) {
+        dataLiqStr = `${dataAlvo.getFullYear()}-${String(dataAlvo.getMonth() + 1).padStart(2, '0')}-${String(dataAlvo.getDate()).padStart(2, '0')}`;
       }
-    } catch (err) {
-      console.error('Erro ao rejeitar:', err);
-      alert('Erro ao rejeitar solicitação');
+
+      const resultado = await liquidacaoService.abrirLiquidacao({
+        vendedor_id: vendedor?.id || '',
+        rota_id: rota.id,
+        caixa_inicial: caixaInicial,
+        user_id: userId,
+        ...(dataLiqStr ? { data_liquidacao: dataLiqStr } : {}),
+      } as any);
+
+      if (!resultado.sucesso || !resultado.liquidacao_id) {
+        alert(resultado.mensagem || 'Erro ao abrir liquidação');
+        return;
+      }
+
+      // Carrega a liquidação recém-criada DIRETAMENTE pelo ID
+      const novaLiquidacao = await liquidacaoService.buscarLiquidacaoPorId(resultado.liquidacao_id);
+      if (!novaLiquidacao) {
+        // Fallback: usa carregarDados normal
+        await carregarDados();
+        return;
+      }
+
+      // Atualiza states de modo coordenado
+      const dataAberturaLiq = new Date(novaLiquidacao.data_abertura);
+      setLiquidacao(novaLiquidacao);
+
+      if (ehRetroativa && dataAlvo) {
+        // Retroativa: NÃO marca como liquidação ativa, mantém visualização do dia escolhido
+        setVisualizandoOutroDia(true);
+        setDataSelecionada(dataAlvo);
+      } else {
+        // Hoje: torna a nova liquidação a "ativa"
+        setLiquidacaoAtiva(novaLiquidacao);
+        setVisualizandoOutroDia(false);
+        setDataSelecionada(dataAberturaLiq);
+      }
+
+      // Carregar dados da liquidação (clientes, empréstimos, etc)
+      await carregarDadosLiquidacao(novaLiquidacao, rota.id);
+
+      // Atualizar saldo de conta da rota (caixa pode ter mudado)
+      try {
+        const contaData = await liquidacaoService.buscarSaldoContaRota(rota.id);
+        setSaldoConta(contaData?.saldo_atual || 0);
+      } catch (e) { /* silencioso */ }
+
+      // Recarregar liquidações do mês pro calendário refletir
+      try {
+        const ano = (dataAlvo || dataAberturaLiq).getFullYear();
+        const mes = (dataAlvo || dataAberturaLiq).getMonth() + 1;
+        await carregarDadosCalendario(rota.id, ano, mes);
+      } catch (e) { /* silencioso */ }
+
+    } catch (error) {
+      console.error('Erro ao abrir liquidação:', error);
+      alert('Erro ao abrir liquidação');
     } finally {
       setLoadingAcao(false);
     }
   };
 
-  // Contadores (baseados em TODAS as solicitações)
-  const contadores = {
-    pendentes: todasSolicitacoes.filter((s) => s.status === 'PENDENTE').length,
-    aprovadas: todasSolicitacoes.filter((s) => s.status === 'APROVADO').length,
-    rejeitadas: todasSolicitacoes.filter((s) => s.status === 'REJEITADO').length,
+  // Inicia fluxo de abertura retroativa (de um dia passado selecionado no calendário)
+  const handleAbrirRetroativo = () => {
+    setDataAlvoAbertura(new Date(dataSelecionada));
+    setModalAbrir(true);
   };
 
-  // Filtrar por status e busca (para a tabela)
-  const solicitacoesFiltradas = todasSolicitacoes.filter((s) => {
-    // Filtro de status
-    if (filtroStatus && s.status !== filtroStatus) return false;
-    
-    // Filtro de tipo específico
-    if (filtroTipo && s.tipo_solicitacao !== filtroTipo) return false;
-
-    // Filtro de categoria
-    if (filtroCategoria && CATEGORIAS[filtroCategoria]) {
-      if (!CATEGORIAS[filtroCategoria].includes(s.tipo_solicitacao)) return false;
-    }
-
-    // Filtro de cliente
-    if (filtroCliente) {
-      const termoCliente = filtroCliente.toLowerCase();
-      if (!s.cliente_nome?.toLowerCase().includes(termoCliente)) return false;
-    }
-
-    // Filtro de data (data_solicitada)
-    if (filtroData && s.data_solicitada !== filtroData) return false;
-
-    // Filtro de empresa (apenas SUPER_ADMIN usa; para os demais fica sempre vazio)
-    if (filtroEmpresa && s.empresa_id !== filtroEmpresa) return false;
-    
-    // Filtro de busca geral
-    if (busca) {
-      const termo = busca.toLowerCase();
-      const encontrou = (
-        s.vendedor_nome?.toLowerCase().includes(termo) ||
-        s.rota_nome?.toLowerCase().includes(termo) ||
-        s.cliente_nome?.toLowerCase().includes(termo) ||
-        TIPO_SOLICITACAO_LABELS[s.tipo_solicitacao]?.toLowerCase().includes(termo)
-      );
-      if (!encontrou) return false;
-    }
-
-    return true;
-  });
-
-  // Limpar todos os filtros
-  const limparFiltros = () => {
-    setFiltroStatus('');
-    setFiltroTipo('');
-    setFiltroCategoria('');
-    setFiltroCliente('');
-    setFiltroData('');
-    setFiltroEmpresa('');
-    setBusca('');
+  // Executa o fechamento de fato (RPC de fechar)
+  const executarFechamento = async (observacoes: string) => {
+    if (!liquidacao || !userId) return;
+    setLoadingAcao(true);
+    try {
+      const resultado = liquidacao.status === 'REABERTO'
+        ? await liquidacaoService.fecharLiquidacaoReaberta({ liquidacao_id: liquidacao.id, user_id: userId, observacoes })
+        : await liquidacaoService.fecharLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, observacoes });
+      if (resultado.sucesso) { await carregarDados(); setModalFechar(false); setModalPendencias(false); }
+      else alert(resultado.mensagem);
+    } catch (error) { console.error('Erro ao fechar liquidação:', error); alert('Erro ao fechar liquidação'); }
+    finally { setLoadingAcao(false); }
   };
 
-  // Verificar se há filtros ativos
-  const temFiltrosAtivos = filtroStatus || filtroTipo || filtroCategoria || filtroCliente || filtroData || filtroEmpresa || busca;
-
-  // Filtro de empresa é exclusivo do SUPER_ADMIN (só ele vê várias empresas)
-  const ehSuperAdmin = isSuperAdmin;
-
-  // Empresas presentes nas solicitações carregadas (para o dropdown)
-  const empresasDisponiveis = (() => {
-    const map = new Map<string, string>();
-    for (const s of todasSolicitacoes) {
-      if (s.empresa_id) map.set(s.empresa_id, s.empresa_nome || '—');
+  const handleFecharLiquidacao = async (observacoes: string) => {
+    if (!liquidacao || !userId) return;
+    const rotaId = (liquidacao as any).rota_id || rotaIdContexto;
+    // Antes de fechar: verificar solicitações pendentes da rota
+    if (rotaId) {
+      try {
+        const supabase = (await import('@/lib/supabase/client')).createClient();
+        const { data, error } = await supabase.rpc('fn_listar_solicitacoes_pendentes_rota', { p_rota_id: rotaId });
+        if (!error && Array.isArray(data) && data.length > 0) {
+          // Há pendências: guarda observações e abre modal informativo
+          setObservacoesFechamento(observacoes);
+          setPendenciasEncerramento(data);
+          setModalFechar(false);
+          setModalPendencias(true);
+          return;
+        }
+      } catch (err) {
+        console.error('Erro ao verificar pendências:', err);
+        // Em caso de erro na verificação, segue o fechamento normal
+      }
     }
-    return Array.from(map, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome));
-  })();
+    // Sem pendências: fecha direto
+    await executarFechamento(observacoes);
+  };
 
-  const formatarData = (data: string) => {
-    return new Date(data).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
+  // "Continuar" no modal de pendências: rejeita em massa e fecha
+  const handleContinuarEncerramento = async () => {
+    if (!liquidacao || !userId) return;
+    const rotaId = (liquidacao as any).rota_id || rotaIdContexto;
+    setLoadingAcao(true);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data, error } = await supabase.rpc('fn_rejeitar_solicitacoes_encerramento', {
+        p_rota_id: rotaId,
+        p_admin_user_id: userId,
+      });
+      const row = Array.isArray(data) ? data[0] : data;
+      if (error || !row?.sucesso) {
+        alert(row?.mensagem || error?.message || 'Erro ao rejeitar solicitações pendentes');
+        setLoadingAcao(false);
+        return;
+      }
+    } catch (err: any) {
+      console.error('Erro ao rejeitar solicitações:', err);
+      alert('Erro ao rejeitar solicitações pendentes');
+      setLoadingAcao(false);
+      return;
+    }
+    // Rejeitadas: agora fecha de fato
+    await executarFechamento(observacoesFechamento);
+  };
+
+  const handleReabrirLiquidacao = async (motivo: string) => {
+    if (!liquidacao || !userId) return;
+    setLoadingAcao(true);
+    try {
+      const resultado = await liquidacaoService.reabrirLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, motivo });
+      if (resultado.sucesso) { await carregarDados(); setModalReabrir(false); }
+      else alert(resultado.mensagem);
+    } catch (error) { console.error('Erro ao reabrir liquidação:', error); alert('Erro ao reabrir liquidação'); }
+    finally { setLoadingAcao(false); }
+  };
+
+  const handleAbrirModalCliente = (cliente: ClienteDoDia) => {
+    const clienteParaModal: ClienteComTotais = {
+      id: cliente.cliente_id,
+      codigo_cliente: parseInt(cliente.consecutivo) || 0,
+      nome: cliente.nome,
+      documento: '', telefone_celular: cliente.telefone_celular || '', telefone_fixo: '',
+      email: '', endereco: cliente.endereco || '', endereco_comercial: '', foto_url: '',
+      empresa_id: '', status: 'ATIVO', created_at: '', updated_at: '',
+      qtd_emprestimos_ativos: 1, qtd_emprestimos_total: 0,
+      valor_total_emprestimos: cliente.valor_principal || 0, valor_total_pago: 0,
+      valor_saldo_devedor: cliente.saldo_emprestimo || 0,
+      parcelas_atrasadas: cliente.total_parcelas_vencidas || 0, parcelas_pendentes: 0,
+      data_cadastro: '', rotas_ids: [cliente.rota_id],
+      permite_emprestimo_adicional: cliente.permite_emprestimo_adicional ?? false,
+    };
+    setClienteSelecionado(clienteParaModal);
+    setModalClienteAberto(true);
+  };
+
+  const recarregarContagemNotas = useCallback(async () => {
+    if (!liquidacao?.id) return;
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const { count } = await supabase
+      .from('notas').select('id', { count: 'exact', head: true })
+      .eq('liquidacao_id', liquidacao.id).eq('status', 'ATIVA');
+    setQtdNotasLiquidacao(count || 0);
+
+    const clienteIds = [...new Set(clientesDia.map(c => c.cliente_id))];
+    if (clienteIds.length > 0) {
+      const { data: notasLiq } = await supabase
+        .from('notas').select('cliente_id').eq('liquidacao_id', liquidacao.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
+      const { data: notasOutras } = await supabase
+        .from('notas').select('cliente_id').neq('liquidacao_id', liquidacao.id).eq('status', 'ATIVA').in('cliente_id', clienteIds);
+      const mapaNotas = new Map<string, { liquidacao: number; outras: boolean }>();
+      (notasLiq || []).forEach((n: any) => { const a = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false }; mapaNotas.set(n.cliente_id, { ...a, liquidacao: a.liquidacao + 1 }); });
+      (notasOutras || []).forEach((n: any) => { const a = mapaNotas.get(n.cliente_id) || { liquidacao: 0, outras: false }; mapaNotas.set(n.cliente_id, { ...a, outras: true }); });
+      setNotasClientes(mapaNotas);
+    }
+  }, [liquidacao?.id, clientesDia]);
+
+  const handleAbrirNotas = () => {
+    setModalNotasLiquidacao(true);
+  };
+
+  // Máscara de evento por cliente
+  const eventosPorCliente = useMemo(() => {
+    const mapa = new Map<string, EventoCliente>();
+    if (!clientesDia.length && !emprestimosDoDia.length) return mapa;
+
+    const empPorCliente = new Map<string, typeof emprestimosDoDia[number]>();
+    // Score de desempate quando o cliente tem +1 empréstimo no dia.
+    // CANCELADO fica abaixo de QUALQUER empréstimo ativo: assim, quando há
+    // renovação no mesmo dia, mostra a renovação (ativa) e não o cancelado.
+    // Se o único empréstimo do cliente for cancelado, ele continua aparecendo como CANCELADO.
+    const scoreEmp = (e: typeof emprestimosDoDia[number]) => {
+      if (e.status === 'CANCELADO') return -1;
+      if (e.status === 'QUITADO') return 4;
+      const prioridade: Record<string, number> = { NOVO: 3, RENOVACAO: 2, RENEGOCIACAO: 1 };
+      return prioridade[e.tipo_emprestimo] || 0;
+    };
+    for (const emp of emprestimosDoDia) {
+      const existente = empPorCliente.get(emp.cliente_id);
+      if (!existente || scoreEmp(emp) > scoreEmp(existente)) empPorCliente.set(emp.cliente_id, emp);
+    }
+
+    const pagosPorCliente = new Map<string, { somaValor: number; parcelas: number[]; totalParcelas: number; temParcial: boolean }>();
+    const naoPagosPorCliente = new Map<string, { numero: number; total: number }>();
+
+    for (const c of clientesDia) {
+      if (c.status_dia === 'PAGO' || c.status_dia === 'PARCIAL') {
+        const atual = pagosPorCliente.get(c.cliente_id) || { somaValor: 0, parcelas: [], totalParcelas: c.numero_parcelas ?? 0, temParcial: false };
+        atual.somaValor += Number(c.valor_pago_parcela || 0);
+        if (c.numero_parcela != null) atual.parcelas.push(c.numero_parcela);
+        atual.totalParcelas = c.numero_parcelas ?? atual.totalParcelas;
+        // ⭐ Marca se alguma parcela é PARCIAL (não totalmente paga)
+        if (c.status_dia === 'PARCIAL') atual.temParcial = true;
+        pagosPorCliente.set(c.cliente_id, atual);
+      } else {
+        if (!naoPagosPorCliente.has(c.cliente_id)) {
+          naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela ?? 0, total: c.numero_parcelas });
+        }
+      }
+    }
+
+    const todosClienteIds = new Set([
+      ...clientesDia.map(c => c.cliente_id),
+      ...emprestimosDoDia.map(e => e.cliente_id),
+    ]);
+
+    for (const cid of todosClienteIds) {
+      const emp = empPorCliente.get(cid);
+      // ⭐ Empréstimo cancelado: mostrar como cancelado
+      if (emp?.status === 'CANCELADO') { mapa.set(cid, { tipo: 'CANCELADO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
+      if (emp?.status === 'QUITADO') { mapa.set(cid, { tipo: 'QUITADO', valorEmprestimo: Number(emp.valor_principal || 0) }); continue; }
+      if (emp?.tipo_emprestimo === 'NOVO') { mapa.set(cid, { tipo: 'NOVO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
+      if (emp?.tipo_emprestimo === 'RENOVACAO') { mapa.set(cid, { tipo: 'RENOVACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
+      if (emp?.tipo_emprestimo === 'RENEGOCIACAO') { mapa.set(cid, { tipo: 'RENEGOCIACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
+      const pag = pagosPorCliente.get(cid);
+      if (pag && pag.somaValor > 0) { mapa.set(cid, { tipo: 'PAGOU', parcelasPagas: pag.parcelas.length, totalParcelas: pag.totalParcelas, numeroParcelaPaga: pag.parcelas[0], valorPago: pag.somaValor, isParcial: pag.temParcial }); continue; }
+      const np = naoPagosPorCliente.get(cid);
+      if (np) mapa.set(cid, { tipo: 'NAO_PAGOU', numeroParcelaPaga: np.numero, totalParcelas: np.total });
+    }
+
+    return mapa;
+  }, [clientesDia, emprestimosDoDia]);
+
+  const contagens = useMemo(() => {
+    let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0, cancelados = 0;
+    for (const ev of eventosPorCliente.values()) {
+      if (ev.tipo === 'PAGOU') pagos++;
+      else if (ev.tipo === 'NAO_PAGOU') naoPagos++;
+      else if (ev.tipo === 'NOVO') novos++;
+      else if (ev.tipo === 'RENOVACAO') renovados++;
+      else if (ev.tipo === 'RENEGOCIACAO') renegociados++;
+      else if (ev.tipo === 'QUITADO') quitados++;
+      else if (ev.tipo === 'CANCELADO') cancelados++;
+    }
+    return { todos: eventosPorCliente.size, pagos, naoPagos, novos, renovados, renegociados, quitados, cancelados };
+  }, [eventosPorCliente]);
+
+  const clientesComEvento = useMemo(() => {
+    const seen = new Set<string>();
+    const items: Array<{ cliente: ClienteDoDia; evento?: EventoCliente }> = [];
+    for (const c of clientesDia) {
+      if (seen.has(c.cliente_id)) continue;
+      seen.add(c.cliente_id);
+      items.push({ cliente: c, evento: eventosPorCliente.get(c.cliente_id) });
+    }
+    for (const emp of emprestimosDoDia) {
+      if (seen.has(emp.cliente_id)) continue;
+      const ev = eventosPorCliente.get(emp.cliente_id);
+      if (!ev) continue;
+      // ⭐ Usar nome real do cliente (vem do join com clientes)
+      const nomeCliente = emp.clientes?.nome || '(cliente do empréstimo)';
+      const fake = {
+        cliente_id: emp.cliente_id, nome: nomeCliente, consecutivo: '',
+        telefone_celular: '', endereco: '', rota_id: rota?.id || '', parcela_id: emp.id,
+        numero_parcela: 0, numero_parcelas: emp.numero_parcelas, valor_parcela: 0,
+        valor_pago_parcela: 0, valor_principal: emp.valor_principal, saldo_emprestimo: 0,
+        status_dia: 'PENDENTE', tem_parcelas_vencidas: false, total_parcelas_vencidas: 0,
+        permite_emprestimo_adicional: false,
+      } as any;
+      seen.add(emp.cliente_id);
+      items.push({ cliente: fake, evento: ev });
+    }
+    return items;
+  }, [clientesDia, emprestimosDoDia, eventosPorCliente, rota]);
+
+  const clientesFiltrados = useMemo(() => {
+    return clientesComEvento.filter(({ cliente, evento }) => {
+      if (filtroLista !== 'TODOS') {
+        if (!evento) return false;
+        if (filtroLista === 'PAGOS' && evento.tipo !== 'PAGOU') return false;
+        if (filtroLista === 'NAO_PAGOS' && evento.tipo !== 'NAO_PAGOU') return false;
+        if (filtroLista === 'NOVOS' && evento.tipo !== 'NOVO') return false;
+        if (filtroLista === 'RENOVADOS' && evento.tipo !== 'RENOVACAO') return false;
+        if (filtroLista === 'RENEGOCIADOS' && evento.tipo !== 'RENEGOCIACAO') return false;
+        if (filtroLista === 'QUITADOS' && evento.tipo !== 'QUITADO') return false;
+      }
+      if (buscaCliente) {
+        const busca = buscaCliente.toLowerCase();
+        const bateNome = cliente.nome?.toLowerCase().includes(busca);
+        const bateCod = cliente.consecutivo?.includes(buscaCliente);
+        if (!bateNome && !bateCod) return false;
+      }
+      return true;
     });
-  };
+  }, [clientesComEvento, filtroLista, buscaCliente]);
+
+  // Aplicar ordenação (ordem da rota ou alfabética)
+  const clientesOrdenados = useMemo(() => {
+    const arr = [...clientesFiltrados];
+    if (ordenacao === 'ALFABETICA') {
+      arr.sort((a, b) => (a.cliente.nome || '').localeCompare(b.cliente.nome || '', 'pt-BR'));
+    } else {
+      // ROTA: usa ordem_rota_cliente; clientes sem ordem vão pro fim (ordenados por nome)
+      arr.sort((a, b) => {
+        const oa = ordemRotaMap.get(a.cliente.cliente_id);
+        const ob = ordemRotaMap.get(b.cliente.cliente_id);
+        if (oa != null && ob != null) return oa - ob;
+        if (oa != null) return -1;
+        if (ob != null) return 1;
+        return (a.cliente.nome || '').localeCompare(b.cliente.nome || '', 'pt-BR');
+      });
+    }
+    return arr;
+  }, [clientesFiltrados, ordenacao, ordemRotaMap]);
+
+  const percentualMeta = liquidacao ? calcularPercentual(liquidacao.valor_recebido_dia || 0, liquidacao.valor_esperado_dia || metaDia) : 0;
+
+  if (loading) return <TelaSkeleton />;
+
+  if (semRotaSelecionada || !rota) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8">
+        <div className="bg-white rounded-xl border border-amber-200 p-8 max-w-md w-full text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-8 h-8 text-amber-500" />
+          </div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-2">Selecione uma Rota Específica</h2>
+          <p className="text-gray-500 text-sm mb-4">O módulo de Liquidação Diária requer uma rota específica selecionada.</p>
+          <p className="text-gray-400 text-xs">Use o seletor no topo da página para escolher uma rota.<br />A opção "Todas as rotas" não é permitida neste módulo.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!liquidacao && !visualizandoOutroDia) {
+    return (
+      <>
+        <TelaIniciarDia
+          vendedor={vendedor}
+          rota={rota}
+          saldoConta={saldoConta}
+          onAbrir={() => { setDataAlvoAbertura(null); setModalAbrir(true); }}
+          loading={loadingAcao}
+          onAbrirCalendario={() => setMostrarCalendario(true)}
+          dataProxima={proximaInfo.dataProxima}
+        />
+        <ModalAbrirLiquidacao isOpen={modalAbrir} onClose={() => setModalAbrir(false)} onConfirmar={handleAbrirLiquidacao} loading={loadingAcao} saldoSugerido={saldoConta} />
+        <ModalDiasPulados
+          isOpen={modalDiasPulados}
+          onClose={() => { setModalDiasPulados(false); setCaixaInicialPendente(null); }}
+          onConfirmar={() => { if (caixaInicialPendente !== null) abrirLiquidacaoEfetivamente(caixaInicialPendente); }}
+          diasPulados={proximaInfo.diasPulados}
+          dataProxima={proximaInfo.dataProxima}
+        />
+        <ModalCalendarioLiquidacao isOpen={mostrarCalendario} onClose={() => setMostrarCalendario(false)} rotaId={rota.id} liquidacoesMes={liquidacoesMes} dataSelecionada={dataSelecionada} onSelecionarData={(d) => setDataSelecionada(d)} onMesChange={handleMesChange} onConfirmar={handleConfirmarDataCalendario} loading={loadingCalendario} />
+      </>
+    );
+  }
+
+  // =====================================================
+  // RENDER PRINCIPAL — Layout 2 colunas
+  // =====================================================
+  // Container principal: ocupa toda a viewport menos espaço do shell/header global (estimado ~7rem)
+  // page-content já tem padding do layout pai. Aqui criamos altura calculada e overflow-hidden.
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex-shrink-0 space-y-4 pb-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Central de Solicitações</h1>
-            <p className="text-gray-500 mt-1">Gerencie as solicitações de autorização dos vendedores</p>
-          </div>
-          <button
-            onClick={carregarSolicitacoes}
-            disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </button>
-        </div>
+    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 overflow-hidden">
 
-        {/* Estatísticas */}
-        <div className="grid grid-cols-3 gap-4">
-          <button
-            onClick={() => setFiltroStatus('PENDENTE')}
-            className={`p-4 rounded-xl border-2 transition-colors ${
-              filtroStatus === 'PENDENTE' 
-                ? 'border-amber-500 bg-amber-50' 
-                : 'border-gray-200 bg-white hover:border-amber-300'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-amber-100 flex items-center justify-center">
-                <Clock className="w-5 h-5 text-amber-600" />
-              </div>
-              <div className="text-left">
-                <p className="text-2xl font-bold text-amber-600">{contadores.pendentes}</p>
-                <p className="text-sm text-gray-600">Pendentes</p>
-              </div>
-            </div>
-          </button>
+      {/* Faixa de reabertura */}
+      {isLiquidacaoReaberta && liquidacao && (
+        <FaixaLiquidacaoReaberta
+          dataLiquidacao={liquidacao.data_abertura.split('T')[0]}
+          dataReabertura={liquidacao.data_reabertura}
+          reabertoPor={liquidacao.reaberto_por_nome}
+        />
+      )}
 
-          <button
-            onClick={() => setFiltroStatus('APROVADO')}
-            className={`p-4 rounded-xl border-2 transition-colors ${
-              filtroStatus === 'APROVADO' 
-                ? 'border-green-500 bg-green-50' 
-                : 'border-gray-200 bg-white hover:border-green-300'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-green-100 flex items-center justify-center">
-                <CheckCircle2 className="w-5 h-5 text-green-600" />
-              </div>
-              <div className="text-left">
-                <p className="text-2xl font-bold text-green-600">{contadores.aprovadas}</p>
-                <p className="text-sm text-gray-600">Aprovadas</p>
-              </div>
-            </div>
-          </button>
-
-          <button
-            onClick={() => setFiltroStatus('REJEITADO')}
-            className={`p-4 rounded-xl border-2 transition-colors ${
-              filtroStatus === 'REJEITADO' 
-                ? 'border-red-500 bg-red-50' 
-                : 'border-gray-200 bg-white hover:border-red-300'
-            }`}
-          >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-red-100 flex items-center justify-center">
-                <XCircle className="w-5 h-5 text-red-600" />
-              </div>
-              <div className="text-left">
-                <p className="text-2xl font-bold text-red-600">{contadores.rejeitadas}</p>
-                <p className="text-sm text-gray-600">Rejeitadas</p>
-              </div>
-            </div>
-          </button>
-        </div>
-
-        {/* Filtros */}
-        <div className="space-y-3">
-          {/* Linha 1: Busca geral + Cliente + Data */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar por vendedor, rota..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            <div className="relative flex-1">
-              <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={filtroCliente}
-                onChange={(e) => setFiltroCliente(e.target.value)}
-                placeholder="Filtrar por cliente..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
-              />
-            </div>
-
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="date"
-                value={filtroData}
-                onChange={(e) => setFiltroData(e.target.value)}
-                className="pl-10 pr-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm bg-white min-w-[160px]"
-              />
+      {/* Banner visualizando outro dia — só quando dia já foi fechado ou não tem liquidação */}
+      {visualizandoOutroDia && (!liquidacao || liquidacao.status === 'FECHADO' || liquidacao.status === 'APROVADO') && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <CalendarDays className="w-4 h-4 text-amber-600" />
+            <div className="text-xs">
+              <span className="font-medium text-amber-800">
+                Visualizando {dataSelecionada.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </span>
+              <span className="text-amber-600 ml-2">· {liquidacao ? `Liquidação ${liquidacao.status}` : 'Sem liquidação'}</span>
             </div>
           </div>
+          {liquidacaoAtiva && (
+            <button onClick={voltarParaLiquidacaoAtiva} className="flex items-center gap-1 px-2 py-1 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded text-xs font-medium">
+              <ChevronLeft className="w-3 h-3" />Voltar
+            </button>
+          )}
+        </div>
+      )}
 
-          {/* Linha 2: Categoria + Tipo + Limpar */}
-          <div className="flex items-center gap-3">
-            <select
-              value={filtroCategoria}
-              onChange={(e) => { setFiltroCategoria(e.target.value); setFiltroTipo(''); }}
-              className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[160px]"
-            >
-              <option value="">Todas categorias</option>
-              <option value="LIQUIDACAO">📅 Liquidação</option>
-              <option value="ENTRADAS">📥 Entradas</option>
-              <option value="SAIDAS">📤 Saídas</option>
-              <option value="CLIENTES">👤 Clientes</option>
-            </select>
-
-            <select
-              value={filtroTipo}
-              onChange={(e) => setFiltroTipo(e.target.value)}
-              className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[200px]"
-            >
-              <option value="">Todos os tipos</option>
-              {filtroCategoria && CATEGORIAS[filtroCategoria] ? (
-                // Mostrar apenas tipos da categoria selecionada
-                CATEGORIAS[filtroCategoria].map((tipo) => (
-                  <option key={tipo} value={tipo}>{TIPO_SOLICITACAO_LABELS[tipo]}</option>
-                ))
-              ) : (
-                // Mostrar todos os tipos
-                Object.entries(TIPO_SOLICITACAO_LABELS).map(([tipo, label]) => (
-                  <option key={tipo} value={tipo}>{label}</option>
-                ))
-              )}
-            </select>
-
-            {ehSuperAdmin && empresasDisponiveis.length > 0 && (
-              <select
-                value={filtroEmpresa}
-                onChange={(e) => setFiltroEmpresa(e.target.value)}
-                className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[180px]"
-              >
-                <option value="">Todas as empresas</option>
-                {empresasDisponiveis.map((emp) => (
-                  <option key={emp.id} value={emp.id}>{emp.nome}</option>
-                ))}
-              </select>
+      {/* HEADER COMPACTO */}
+      <div className="flex items-center justify-between gap-3 flex-shrink-0">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-lg font-bold text-gray-900">Liquidação Diária</h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-gray-500 mt-0.5">
+            <span className="flex items-center gap-1"><MapPin className="w-3 h-3" />{rota.nome}</span>
+            {vendedor && <span className="flex items-center gap-1"><Users className="w-3 h-3" />{vendedor.nome}{vendedor.codigo_vendedor && ` (${vendedor.codigo_vendedor})`}</span>}
+            {liquidacao && (
+              <>
+                <span className="flex items-center gap-1"><Calendar className="w-3 h-3 text-green-600" />Abertura: {formatarDataHora(liquidacao.data_abertura)}</span>
+                {liquidacao.data_fechamento && <span className="flex items-center gap-1"><Clock className="w-3 h-3 text-blue-600" />Fechamento: {formatarDataHora(liquidacao.data_fechamento)}</span>}
+              </>
             )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {liquidacao && (
+            <button onClick={() => setModalExtrato(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors">
+              <FileText className="w-3.5 h-3.5" />Extrato
+            </button>
+          )}
+          {(() => {
+            // Botão calendário com data da liquidação + cor por status
+            const status = liquidacao?.status;
+            const isAberto = status === 'ABERTO' || status === 'REABERTO';
+            const isFechado = status === 'FECHADO' || status === 'APROVADO';
+            const dataLiq = (liquidacao as any)?.data_liquidacao || liquidacao?.data_abertura?.split('T')[0];
+            const dataFormatada = dataLiq
+              ? new Date(dataLiq + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+              : 'Calendário';
 
-            {temFiltrosAtivos && (
+            let classes = 'bg-gray-100 text-gray-700 hover:bg-gray-200';
+            if (isAberto) classes = 'bg-green-100 text-green-700 hover:bg-green-200';
+            else if (isFechado) classes = 'bg-blue-100 text-blue-700 hover:bg-blue-200';
+
+            return (
               <button
-                onClick={limparFiltros}
-                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm flex items-center gap-1"
+                onClick={() => setMostrarCalendario(true)}
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors ${classes}`}
               >
-                <XCircle className="w-4 h-4" />
-                Limpar filtros
+                <CalendarDays className="w-3.5 h-3.5" />
+                {dataFormatada}
               </button>
+            );
+          })()}
+          <button onClick={handleAbrirNotas} className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-yellow-100 text-yellow-700 hover:bg-yellow-200 transition-colors">
+            <MessageSquare className="w-3.5 h-3.5" />Notas
+            {qtdNotasLiquidacao > 0 && (
+              <span className="bg-yellow-600 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5 min-w-[18px] text-center">
+                {qtdNotasLiquidacao > 99 ? '99+' : qtdNotasLiquidacao}
+              </span>
             )}
-
-            <div className="flex-1" />
-
-            <span className="text-sm text-gray-500">
-              {solicitacoesFiltradas.length} resultado{solicitacoesFiltradas.length !== 1 ? 's' : ''}
-            </span>
-          </div>
+          </button>
+          {liquidacao?.status === 'FECHADO' && podeReabrir && (() => {
+            // Só pode reabrir se for a última liquidação fechada da rota
+            const dataLiqAtual = (liquidacao as any)?.data_liquidacao
+              || liquidacao?.data_abertura?.split('T')[0];
+            const ehUltimaFechada = !!ultimaDataFechada && dataLiqAtual === ultimaDataFechada;
+            const ultimaFmt = ultimaDataFechada
+              ? new Date(ultimaDataFechada + 'T12:00:00').toLocaleDateString('pt-BR')
+              : '';
+            return (
+              <button
+                onClick={() => ehUltimaFechada && setModalReabrir(true)}
+                disabled={!ehUltimaFechada}
+                title={ehUltimaFechada
+                  ? 'Reabrir esta liquidação'
+                  : `Só é permitido reabrir a última liquidação fechada (${ultimaFmt}).`}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-100"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />Reabrir
+              </button>
+            );
+          })()}
+          {(liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO') && !visualizandoOutroDia && (
+            <button onClick={() => setModalFechar(true)} className={`flex items-center gap-1.5 px-3 py-1.5 ${liquidacao?.status === 'REABERTO' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg text-xs font-medium transition-colors`}>
+              <Square className="w-3.5 h-3.5" />Fechar Dia
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Lista */}
-      <div className="flex-1 overflow-auto pt-4">
-        {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 text-blue-600 animate-spin" />
-          </div>
-        ) : solicitacoesFiltradas.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
-            <FileText className="w-12 h-12 mb-3 opacity-50" />
-            <p className="text-lg font-medium">Nenhuma solicitação encontrada</p>
-            <p className="text-sm">Ajuste os filtros ou aguarde novas solicitações</p>
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 z-10">
-                <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Tipo</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Vendedor</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Empresa</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Data</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {solicitacoesFiltradas.map((solicitacao) => (
-                  <tr 
-                    key={solicitacao.id} 
-                    className={`hover:bg-gray-50 transition-colors cursor-pointer ${
-                      !solicitacao.ja_visualizada && solicitacao.status === 'PENDENTE' ? 'bg-amber-50/50' : ''
-                    }`}
-                    onClick={() => setSolicitacaoSelecionada(solicitacao)}
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {!solicitacao.ja_visualizada && solicitacao.status === 'PENDENTE' && (
-                          <span className="w-2 h-2 rounded-full bg-amber-500 flex-shrink-0" />
-                        )}
-                        <span className="font-medium text-gray-900">
-                          {TIPO_SOLICITACAO_LABELS[solicitacao.tipo_solicitacao] || solicitacao.tipo_solicitacao}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-gray-900">{solicitacao.vendedor_nome}</p>
-                      <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600">{solicitacao.empresa_nome || '-'}</td>
-                    <td className="px-4 py-3 text-gray-600">{solicitacao.rota_nome}</td>
-                    <td className="px-4 py-3 text-gray-600">{formatarData(solicitacao.created_at)}</td>
-                    <td className="px-4 py-3 text-center">
-                      <BadgeStatus status={solicitacao.status} />
-                    </td>
-                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setSolicitacaoSelecionada(solicitacao)}
-                        className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      >
-                        {solicitacao.status === 'PENDENTE' ? 'Resolver' : 'Detalhes'}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Quando visualizando um dia sem liquidação: card central */}
+      {visualizandoOutroDia && !liquidacao && (
+        <>
+          {diaTrabalhavel === true && (
+            <CardAbrirRetroativo
+              data={dataSelecionada}
+              saldoConta={saldoConta}
+              onAbrir={handleAbrirRetroativo}
+              loading={loadingAcao}
+            />
+          )}
+          {diaTrabalhavel === false && motivoBloqueio && (
+            <CardDiaNaoTrabalhavel data={dataSelecionada} motivo={motivoBloqueio} />
+          )}
+        </>
+      )}
 
-      {/* Modal de Detalhes */}
-      {solicitacaoSelecionada && (
-        <ModalDetalhesSolicitacao
-          solicitacao={solicitacaoSelecionada}
-          onClose={() => setSolicitacaoSelecionada(null)}
-          onAprovar={handleAprovar}
-          onRejeitar={handleRejeitar}
-          onVendaResolvida={() => {
-            setSolicitacaoSelecionada(null);
-            carregarSolicitacoes();
-          }}
-          loading={loadingAcao}
+      {/* LAYOUT 2 COLUNAS: Clientes à esquerda (65%) / Cards à direita (35%) */}
+      {liquidacao && (
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_35%] gap-3 min-h-0">
+
+          {/* COLUNA ESQUERDA (visualmente) — 4 cards, mas movida pra direita via 'order' */}
+          <div className="flex flex-col gap-3 min-h-0 lg:order-2">
+
+            {/* Caixa */}
+            <CardSaldo titulo="Caixa" inicial={liquidacao.caixa_inicial} final={liquidacao.caixa_final} icone={Wallet} corBase="blue"
+              rodape={ajustesDia.qtd > 0 ? (
+                <button
+                  onClick={() => setModalAjustes(true)}
+                  className="w-full flex items-center gap-2 px-3 py-2 border-t border-amber-100 bg-amber-50/60 hover:bg-amber-50 transition-colors text-left rounded-b-lg"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0" />
+                  <span className="text-[11px] font-semibold text-amber-700 uppercase tracking-wide">Caixa ajustado</span>
+                  <span className="text-[10px] text-amber-600">· {ajustesDia.qtd} ajuste(s)</span>
+                  <span className="ml-auto text-xs font-bold text-amber-700 tabular-nums">{formatarMoeda(ajustesDia.total)}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-amber-400" />
+                </button>
+              ) : undefined}
+            />
+
+            {/* Carteira */}
+            <CardSaldo titulo="Carteira (A Receber)" inicial={liquidacao.carteira_inicial} final={liquidacao.carteira_final} icone={TrendingUp} corBase="purple" />
+
+            {/* Meta do dia */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
+                  <Target className="w-3.5 h-3.5 text-blue-600" />
+                </div>
+                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Meta do Dia</h3>
+                <span className="ml-auto text-lg font-bold text-gray-900 tabular-nums">{percentualMeta}%</span>
+              </div>
+              <ProgressBar percentual={percentualMeta} />
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 pt-2 border-t border-gray-100 text-xs">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Esperado</span>
+                  <span className="font-semibold tabular-nums">{formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Recebido</span>
+                  <span className="font-semibold text-green-600 tabular-nums">{formatarMoeda(liquidacao.valor_recebido_dia)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Parcelas</span>
+                  <span className="font-semibold">
+                    <span className="text-green-600">{liquidacao.pagamentos_pagos}</span>
+                    <span className="text-gray-400">/</span>
+                    <span className="text-red-600">{liquidacao.pagamentos_nao_pagos}</span>
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500 flex items-center gap-1"><Banknote className="w-3 h-3" />Dinheiro</span>
+                  <span className="font-semibold text-emerald-600 tabular-nums">{formatarMoeda(liquidacao.valor_dinheiro)}</span>
+                </div>
+                <div className="flex justify-between col-span-2">
+                  <span className="text-gray-500 flex items-center gap-1"><CreditCard className="w-3 h-3" />Transferência</span>
+                  <span className="font-semibold text-sky-600 tabular-nums">{formatarMoeda(liquidacao.valor_transferencia)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Card Movimentos (Empréstimos + Despesas + Microseguro) */}
+            <div className="bg-white rounded-lg border border-gray-200">
+              <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+                <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Movimentos do Dia</h3>
+              </div>
+              <div className="divide-y divide-gray-100">
+                <button onClick={() => setModalCobrancas(true)} className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <Banknote className="w-3.5 h-3.5 text-emerald-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Cobranças</p>
+                    <p className="text-[10px] text-gray-400">{cobrancasDia.qtd} parcela(s)</p>
+                  </div>
+                  <span className="text-sm font-bold text-emerald-700 tabular-nums">{formatarMoeda(cobrancasDia.total)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+                <button onClick={() => setModalEmprestimos(true)} className="w-full px-3 py-2.5 hover:bg-green-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-green-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <DollarSign className="w-3.5 h-3.5 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Empréstimos</p>
+                    <p className="text-[10px] text-gray-400">{liquidacao.qtd_emprestimos_dia} emp.{(liquidacao.total_juros_dia ?? 0) > 0 && ` · juros ${formatarMoeda(liquidacao.total_juros_dia)}`}</p>
+                  </div>
+                  <span className="text-sm font-bold text-green-700 tabular-nums">{formatarMoeda(liquidacao.total_emprestado_dia)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+                <button onClick={() => setModalDespesas(true)} className="w-full px-3 py-2.5 hover:bg-red-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-red-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <Receipt className="w-3.5 h-3.5 text-red-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Despesas</p>
+                    <p className="text-[10px] text-gray-400">{liquidacao.qtd_despesas_dia} lanç.</p>
+                  </div>
+                  <span className="text-sm font-bold text-red-700 tabular-nums">{formatarMoeda(liquidacao.total_despesas_dia)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+                <button onClick={() => setModalReceitas(true)} className="w-full px-3 py-2.5 hover:bg-green-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-green-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <TrendingUp className="w-3.5 h-3.5 text-green-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Receitas</p>
+                    <p className="text-[10px] text-gray-400">{receitasDia.qtd} lanç.</p>
+                  </div>
+                  <span className="text-sm font-bold text-green-700 tabular-nums">{formatarMoeda(receitasDia.total)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+                <button onClick={() => setModalMicroseguros(true)} className="w-full px-3 py-2.5 hover:bg-teal-50/50 transition-colors flex items-center gap-2 text-left">
+                  <div className="w-7 h-7 bg-teal-50 rounded-md flex items-center justify-center flex-shrink-0">
+                    <Shield className="w-3.5 h-3.5 text-teal-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">Microseguro</p>
+                    <p className="text-[10px] text-gray-400">{liquidacao.qtd_microseguros_dia} cont.</p>
+                  </div>
+                  <span className="text-sm font-bold text-teal-700 tabular-nums">{formatarMoeda(liquidacao.total_microseguro_dia)}</span>
+                  <ChevronRight className="w-4 h-4 text-gray-300" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* COLUNA DIREITA (visualmente esquerda agora) — CLIENTES */}
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden lg:order-1">
+            {/* Cabeçalho com filtros + busca */}
+            <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-gray-900">Clientes do Dia</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setOrdenacao(o => o === 'ROTA' ? 'ALFABETICA' : 'ROTA')}
+                    title={ordenacao === 'ROTA' ? 'Ordenado pela rota — clique para alfabética' : 'Ordenado por nome — clique para ordem da rota'}
+                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    {ordenacao === 'ROTA'
+                      ? <><ListOrdered className="w-3.5 h-3.5" />Rota</>
+                      : <><ArrowDownAZ className="w-3.5 h-3.5" />A-Z</>}
+                  </button>
+                  <span className="text-xs text-gray-500">{clientesOrdenados.length} de {contagens.todos}</span>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1 mb-2">
+                <ChipFiltro label="Todos" qtd={contagens.todos} ativo={filtroLista === 'TODOS'} onClick={() => setFiltroLista('TODOS')} cor="blue" />
+                <ChipFiltro label="Pagos" qtd={contagens.pagos} ativo={filtroLista === 'PAGOS'} onClick={() => setFiltroLista('PAGOS')} cor="green" />
+                <ChipFiltro label="Não Pagos" qtd={contagens.naoPagos} ativo={filtroLista === 'NAO_PAGOS'} onClick={() => setFiltroLista('NAO_PAGOS')} cor="red" />
+                <ChipFiltro label="Novos" qtd={contagens.novos} ativo={filtroLista === 'NOVOS'} onClick={() => setFiltroLista('NOVOS')} cor="emerald" />
+                <ChipFiltro label="Renov." qtd={contagens.renovados} ativo={filtroLista === 'RENOVADOS'} onClick={() => setFiltroLista('RENOVADOS')} cor="blue2" />
+                <ChipFiltro label="Reneg." qtd={contagens.renegociados} ativo={filtroLista === 'RENEGOCIADOS'} onClick={() => setFiltroLista('RENEGOCIADOS')} cor="purple" />
+                <ChipFiltro label="Quitados" qtd={contagens.quitados} ativo={filtroLista === 'QUITADOS'} onClick={() => setFiltroLista('QUITADOS')} cor="teal" />
+              </div>
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar cliente..."
+                  value={buscaCliente}
+                  onChange={(e) => setBuscaCliente(e.target.value)}
+                  className="w-full pl-8 pr-8 py-1.5 text-xs border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+                {buscaCliente && (
+                  <button onClick={() => setBuscaCliente('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Lista scrollável */}
+            <div className="flex-1 overflow-y-auto">
+              {clientesOrdenados.length > 0 ? (
+                <div className="divide-y divide-gray-100">
+                  {clientesOrdenados.map(({ cliente, evento }) => {
+                    const notasInfo = notasClientes.get(cliente.cliente_id);
+                    const temNotasLiquidacao = (notasInfo?.liquidacao || 0) > 0;
+                    const isCancelado = evento?.tipo === 'CANCELADO';
+                    return (
+                      <div
+                        key={cliente.cliente_id}
+                        className={`px-3 py-2 hover:bg-blue-50/50 transition-colors cursor-pointer ${isCancelado ? 'bg-gray-50' : ''}`}
+                        onClick={() => handleAbrirModalCliente(cliente)}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <div className={`relative w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium flex-shrink-0 overflow-hidden ${getCorAvatar(evento)}`}>
+                            <span>{cliente.nome?.charAt(0) || '?'}</span>
+                            {fotosClientes.get(cliente.cliente_id) && (
+                              <img
+                                src={fotosClientes.get(cliente.cliente_id)!}
+                                alt={cliente.nome}
+                                className="absolute inset-0 w-full h-full object-cover"
+                                onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                              />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-baseline justify-between gap-2">
+                              <span className={`text-sm font-medium truncate ${isCancelado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{cliente.nome}</span>
+                              {temNotasLiquidacao && (
+                                <button onClick={(e) => { e.stopPropagation(); setModalNotasCliente({ aberto: true, clienteId: cliente.cliente_id, clienteNome: cliente.nome }); }} className="text-[10px] flex items-center gap-0.5 text-amber-600 hover:text-amber-700 flex-shrink-0">
+                                  <MessageSquare className="w-3 h-3" />
+                                  {notasInfo?.liquidacao}
+                                </button>
+                              )}
+                            </div>
+                            <div className="text-[11px] mt-0.5">
+                              <MascaraEvento evento={evento} cliente={cliente} />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-8 text-center text-gray-500 text-sm">
+                  {buscaCliente ? `Nenhum cliente encontrado para "${buscaCliente}"` : 'Nenhum cliente nesta categoria'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAIS */}
+      <ModalAbrirLiquidacao isOpen={modalAbrir} onClose={() => setModalAbrir(false)} onConfirmar={handleAbrirLiquidacao} loading={loadingAcao} saldoSugerido={saldoConta} />
+      <ModalDiasPulados
+        isOpen={modalDiasPulados}
+        onClose={() => { setModalDiasPulados(false); setCaixaInicialPendente(null); }}
+        onConfirmar={() => { if (caixaInicialPendente !== null) abrirLiquidacaoEfetivamente(caixaInicialPendente); }}
+        diasPulados={proximaInfo.diasPulados}
+        dataProxima={proximaInfo.dataProxima}
+      />
+      <ModalFecharLiquidacao isOpen={modalFechar} onClose={() => setModalFechar(false)} onConfirmar={handleFecharLiquidacao} loading={loadingAcao} liquidacao={liquidacao} />
+
+      {modalPendencias && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !loadingAcao && setModalPendencias(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+            <div className="flex items-center gap-3 px-6 py-4 border-b">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-gray-900">Solicitações pendentes</h2>
+                <p className="text-sm text-gray-500">Existem solicitações não resolvidas nesta rota</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 overflow-y-auto">
+              <p className="text-sm text-gray-600 mb-3">
+                Ao encerrar o dia, as solicitações abaixo serão <strong>rejeitadas automaticamente</strong> pelo sistema.
+                Esta ação não pode ser desfeita.
+              </p>
+              <div className="space-y-2">
+                {pendenciasEncerramento.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div>
+                      <p className="text-sm font-medium text-gray-800">
+                        {TIPO_SOLICITACAO_LABELS?.[p.tipo_solicitacao] || p.tipo_solicitacao}
+                      </p>
+                      {p.motivo_solicitacao && (
+                        <p className="text-xs text-gray-500 mt-0.5">{p.motivo_solicitacao}</p>
+                      )}
+                    </div>
+                    <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Pendente</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex gap-2 px-6 py-4 border-t">
+              <button
+                onClick={() => setModalPendencias(false)}
+                disabled={loadingAcao}
+                className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleContinuarEncerramento}
+                disabled={loadingAcao}
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {loadingAcao ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Continuar e encerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={liquidacao?.data_abertura?.split('T')[0] || ''} />
+      <ModalExtratoLiquidacao isOpen={modalExtrato} onClose={() => setModalExtrato(false)} liquidacao={liquidacao} rotaNome={rota?.nome || ''} vendedorNome={vendedor?.nome} empresaNome={empresaNome} />
+      <ModalDetalhesCliente isOpen={modalClienteAberto} onClose={() => { setModalClienteAberto(false); setClienteSelecionado(null); }} cliente={clienteSelecionado} />
+
+      {liquidacao && rota && vendedor && (
+        <ModalNotasCliente
+          isOpen={modalNotasCliente.aberto}
+          onClose={() => setModalNotasCliente({ aberto: false, clienteId: '', clienteNome: '' })}
+          clienteId={modalNotasCliente.clienteId}
+          clienteNome={modalNotasCliente.clienteNome}
+          rotaId={rota.id}
+          empresaId={rota.empresa_id}
+          vendedorId={vendedor.id}
+          liquidacaoId={liquidacao.id}
+          autorId={userId || ''}
+          autorNome={profile?.nome || 'Administrador'}
+          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+        />
+      )}
+
+      {liquidacao && rota && vendedor && (
+        <ModalNotasLiquidacao
+          isOpen={modalNotasLiquidacao}
+          onClose={() => setModalNotasLiquidacao(false)}
+          liquidacaoId={liquidacao.id}
+          rotaId={rota.id}
+          empresaId={rota.empresa_id}
+          vendedorId={vendedor.id}
+          autorId={userId || ''}
+          autorNome={profile?.nome || 'Administrador'}
+          autorTipo={profile?.tipo_usuario || 'ADMIN'}
+          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+          clientes={clientesDia}
+          onChanged={recarregarContagemNotas}
+        />
+      )}
+
+      {liquidacao && (
+        <>
+          <ModalEmprestimos isOpen={modalEmprestimos} onClose={() => setModalEmprestimos(false)} liquidacaoId={liquidacao.id} totalFallback={liquidacao.total_emprestado_dia} qtdFallback={liquidacao.qtd_emprestimos_dia} />
+          <ModalDespesas isOpen={modalDespesas} onClose={() => setModalDespesas(false)} liquidacaoId={liquidacao.id} totalFallback={liquidacao.total_despesas_dia} qtdFallback={liquidacao.qtd_despesas_dia} />
+          <ModalMicroseguros isOpen={modalMicroseguros} onClose={() => setModalMicroseguros(false)} liquidacaoId={liquidacao.id} totalFallback={liquidacao.total_microseguro_dia} qtdFallback={liquidacao.qtd_microseguros_dia} />
+
+          {/* Modal Receitas (autocontido) */}
+          {modalReceitas && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setModalReceitas(false)} />
+              <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <TrendingUp className="w-5 h-5 text-green-600" />
+                      Receitas do Dia
+                    </h2>
+                    <p className="text-sm text-gray-500">{receitasDia.qtd} lançamento(s) · {formatarMoeda(receitasDia.total)}</p>
+                  </div>
+                  <button onClick={() => setModalReceitas(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {receitasDia.itens.length > 0 ? (
+                    <div className="space-y-2">
+                      {receitasDia.itens.map((r: any) => (
+                        <div key={r.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">{r.descricao || r.categoria}</p>
+                            <p className="text-[11px] text-gray-400">
+                              {r.categoria}{r.forma_pagamento ? ` · ${r.forma_pagamento}` : ''}
+                            </p>
+                          </div>
+                          <span className="text-sm font-bold text-green-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(r.valor || 0))}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      <TrendingUp className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      Nenhuma receita lançada nesta liquidação
+                    </div>
+                  )}
+                </div>
+                {receitasDia.itens.length > 0 && (
+                  <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Total</span>
+                    <span className="text-base font-bold text-green-700 tabular-nums">{formatarMoeda(receitasDia.total)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Modal Ajustes de Saldo (autocontido) */}
+          {modalAjustes && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setModalAjustes(false)} />
+              <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <AlertTriangle className="w-5 h-5 text-amber-600" />
+                      Ajustes de Saldo
+                    </h2>
+                    <p className="text-sm text-gray-500">{ajustesDia.qtd} ajuste(s) · líquido {formatarMoeda(ajustesDia.total)}</p>
+                  </div>
+                  <button onClick={() => setModalAjustes(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {ajustesDia.itens.length > 0 ? (
+                    <div className="space-y-2">
+                      {ajustesDia.itens.map((a: any) => {
+                        const v = Number(a.valor || 0);
+                        const negativo = v < 0;
+                        return (
+                          <div key={a.id} className="flex items-start justify-between gap-3 p-2.5 rounded-lg border border-gray-100 hover:bg-gray-50">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 truncate">{a.descricao || a.categoria}</p>
+                              {a.observacoes && <p className="text-[11px] text-gray-400 truncate">{a.observacoes}</p>}
+                            </div>
+                            <span className={`text-sm font-bold tabular-nums whitespace-nowrap ${negativo ? 'text-red-700' : 'text-green-700'}`}>
+                              {!negativo && '+'}{formatarMoeda(v)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      <AlertTriangle className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      Nenhum ajuste nesta liquidação
+                    </div>
+                  )}
+                </div>
+                {ajustesDia.itens.length > 0 && (
+                  <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Impacto líquido no caixa</span>
+                    <span className={`text-base font-bold tabular-nums ${ajustesDia.total < 0 ? 'text-red-700' : 'text-green-700'}`}>
+                      {ajustesDia.total > 0 && '+'}{formatarMoeda(ajustesDia.total)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Modal Cobranças (autocontido) */}
+          {modalCobrancas && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setModalCobrancas(false)} />
+              <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                  <div>
+                    <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                      <Banknote className="w-5 h-5 text-emerald-600" />
+                      Cobranças do Dia
+                    </h2>
+                    <p className="text-sm text-gray-500">{cobrancasDia.qtd} parcela(s) · {formatarMoeda(cobrancasDia.total)}</p>
+                  </div>
+                  <button onClick={() => setModalCobrancas(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4">
+                  {cobrancasDia.itens.length > 0 ? (
+                    <div className="space-y-3">
+                      {(() => {
+                        // Agrupar por cliente (chave: emprestimo_id, senão cliente_nome)
+                        const grupos: { chave: string; nome: string; itens: any[] }[] = [];
+                        const idx: Record<string, number> = {};
+                        cobrancasDia.itens.forEach((c: any) => {
+                          const chave = c.ref_emprestimo_id || c.cliente_nome || c.id;
+                          if (idx[chave] === undefined) {
+                            idx[chave] = grupos.length;
+                            grupos.push({ chave, nome: c.cliente_nome || c.descricao || 'Cobrança', itens: [] });
+                          }
+                          grupos[idx[chave]].itens.push(c);
+                        });
+                        // Ordena parcelas dentro do grupo por número
+                        grupos.forEach(g => g.itens.sort((a, b) => (a.numero_parcela || 0) - (b.numero_parcela || 0)));
+
+                        return grupos.map((g) => {
+                          const totalGrupo = g.itens.reduce((s, c) => s + Number(c.valor || 0), 0);
+                          const varias = g.itens.length > 1;
+                          return (
+                            <div key={g.chave} className="rounded-lg border border-gray-200 overflow-hidden">
+                              {/* Cabeçalho do cliente */}
+                              <div className="flex items-center justify-between gap-2 px-3 py-2 bg-gray-50">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{g.nome}</p>
+                                {varias && (
+                                  <span className="text-xs text-gray-500 flex-shrink-0">
+                                    {g.itens.length} parcelas · {formatarMoeda(totalGrupo)}
+                                  </span>
+                                )}
+                              </div>
+                              {/* Parcelas do cliente */}
+                              <div className="divide-y divide-gray-100">
+                                {g.itens.map((c: any) => (
+                                  <div key={c.id} className="flex items-center justify-between gap-3 px-3 py-2 hover:bg-gray-50">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm text-gray-800">
+                                        {c.numero_parcela
+                                          ? <>Parcela {c.numero_parcela}{c.total_parcelas ? `/${c.total_parcelas}` : ''}</>
+                                          : (c.descricao || 'Cobrança')}
+                                      </p>
+                                      <p className="text-[11px] text-gray-400">{c.forma_pagamento || 'Dinheiro'}</p>
+                                    </div>
+                                    <div className="flex items-center gap-2 flex-shrink-0">
+                                      <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
+                                      {c.ref_parcela_id && (
+                                        <button
+                                          onClick={() => handleEstornarCobranca(c)}
+                                          disabled={estornandoId === c.id}
+                                          className="p-1.5 rounded-lg text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                          title="Estornar pagamento"
+                                        >
+                                          {estornandoId === c.id
+                                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : <RotateCcw className="w-4 h-4" />}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  ) : (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      <Banknote className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                      Nenhuma cobrança registrada nesta liquidação
+                    </div>
+                  )}
+                </div>
+                {cobrancasDia.itens.length > 0 && (
+                  <div className="px-4 py-3 border-t border-gray-200 flex items-center justify-between">
+                    <span className="text-sm text-gray-500">Total recebido</span>
+                    <span className="text-base font-bold text-emerald-700 tabular-nums">{formatarMoeda(cobrancasDia.total)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {rota && (
+        <ModalCalendarioLiquidacao
+          isOpen={mostrarCalendario}
+          onClose={() => setMostrarCalendario(false)}
+          rotaId={rota.id}
+          liquidacoesMes={liquidacoesMes}
+          dataSelecionada={dataSelecionada}
+          onSelecionarData={(data) => setDataSelecionada(data)}
+          onMesChange={handleMesChange}
+          onConfirmar={handleConfirmarDataCalendario}
+          loading={loadingCalendario}
         />
       )}
     </div>
   );
+}
+
+// =====================================================
+// COMPONENTES AUXILIARES DE RENDER
+// =====================================================
+
+function ChipFiltro({
+  label, qtd, ativo, onClick, cor,
+}: {
+  label: string;
+  qtd: number;
+  ativo: boolean;
+  onClick: () => void;
+  cor: 'blue' | 'green' | 'red' | 'emerald' | 'blue2' | 'purple' | 'teal';
+}) {
+  const desabilitado = qtd === 0;
+  const coresAtivas: Record<string, string> = {
+    blue: 'bg-blue-600 text-white border-blue-600',
+    green: 'bg-green-600 text-white border-green-600',
+    red: 'bg-red-600 text-white border-red-600',
+    emerald: 'bg-emerald-600 text-white border-emerald-600',
+    blue2: 'bg-blue-500 text-white border-blue-500',
+    purple: 'bg-purple-600 text-white border-purple-600',
+    teal: 'bg-teal-600 text-white border-teal-600',
+  };
+  const coresInativas: Record<string, string> = {
+    blue: 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50',
+    green: 'bg-white text-green-700 border-green-200 hover:bg-green-50',
+    red: 'bg-white text-red-700 border-red-200 hover:bg-red-50',
+    emerald: 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50',
+    blue2: 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50',
+    purple: 'bg-white text-purple-700 border-purple-200 hover:bg-purple-50',
+    teal: 'bg-white text-teal-700 border-teal-200 hover:bg-teal-50',
+  };
+  return (
+    <button
+      onClick={onClick}
+      disabled={desabilitado}
+      className={`px-2 py-0.5 rounded-md border text-[10px] font-medium transition-colors flex items-center gap-1 ${
+        desabilitado
+          ? 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed'
+          : ativo
+            ? coresAtivas[cor]
+            : coresInativas[cor]
+      }`}
+    >
+      <span>{label}</span>
+      <span className={`px-1 rounded-full text-[9px] font-bold ${
+        desabilitado ? 'bg-gray-100' : ativo ? 'bg-white/20' : 'bg-gray-100'
+      }`}>
+        {qtd}
+      </span>
+    </button>
+  );
+}
+
+function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: ClienteDoDia }) {
+  if (!evento) {
+    return (
+      <span className="text-gray-400">
+        Parcela {cliente.numero_parcela}/{cliente.numero_parcelas} · {formatarMoeda(cliente.valor_parcela)}
+      </span>
+    );
+  }
+  if (evento.tipo === 'QUITADO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
+  if (evento.tipo === 'CANCELADO') return <span className="text-gray-500 font-medium inline-flex items-center gap-1"><Ban className="w-3.5 h-3.5" />Empréstimo cancelado · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
+  if (evento.tipo === 'NOVO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'RENOVACAO') return <span className="text-blue-700 font-medium inline-flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium inline-flex items-center gap-1"><Undo2 className="w-3.5 h-3.5" />Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  if (evento.tipo === 'PAGOU') {
+    const qtdParc = evento.parcelasPagas || 1;
+    let txt: string;
+    if (qtdParc > 1) {
+      txt = `${qtdParc} parcelas pagas · ${formatarMoeda(evento.valorPago || 0)}`;
+    } else if (evento.isParcial) {
+      // ⭐ Pagamento parcial - não quitou a parcela
+      txt = `Pagou parcial ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
+    } else {
+      txt = `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
+    }
+    return <span className="text-green-700 font-medium inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" />{txt}</span>;
+  }
+  if (evento.tipo === 'NAO_PAGOU') return <span className="text-red-600 font-medium inline-flex items-center gap-1"><X className="w-3.5 h-3.5" />Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}</span>;
+  return null;
+}
+
+function getCorAvatar(evento?: EventoCliente): string {
+  if (!evento) return 'bg-gray-100 text-gray-600';
+  switch (evento.tipo) {
+    case 'PAGOU': return 'bg-green-100 text-green-700';
+    case 'NAO_PAGOU': return 'bg-red-100 text-red-700';
+    case 'NOVO': return 'bg-emerald-100 text-emerald-700';
+    case 'RENOVACAO': return 'bg-blue-100 text-blue-700';
+    case 'RENEGOCIACAO': return 'bg-purple-100 text-purple-700';
+    case 'QUITADO': return 'bg-teal-100 text-teal-700';
+    case 'CANCELADO': return 'bg-gray-200 text-gray-500';
+    default: return 'bg-gray-100 text-gray-600';
+  }
 }
