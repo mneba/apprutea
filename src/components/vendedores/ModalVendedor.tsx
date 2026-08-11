@@ -932,27 +932,12 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         />
                       </div>
 
-                      {/* Valor Máximo Renovações */}
-                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                        <label className="flex items-center gap-2 mb-3 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={restricoes.validar_valor_max_renovacoes}
-                            onChange={() => updateRestricao('validar_valor_max_renovacoes', !restricoes.validar_valor_max_renovacoes)}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <span className="text-sm font-medium text-gray-700">Valor Máximo Renovações</span>
-                        </label>
-                        <input
-                          type="number"
-                          value={restricoes.valor_max_renovacoes}
-                          onChange={(e) => updateRestricao('valor_max_renovacoes', parseFloat(e.target.value) || 0)}
-                          disabled={!restricoes.validar_valor_max_renovacoes}
-                          className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
-                          placeholder="0.00"
-                          step="0.01"
-                        />
-                      </div>
+                      {/* Renovação NÃO entra aqui: o teto de uma renovação é o
+                          valor do último empréstimo do cliente, então não há
+                          valor a configurar. O único parâmetro é exigir ou não
+                          autorização — fica em "Outras Configurações".
+                          A coluna valor_max_renovacoes segue no banco e é
+                          regravada intacta ao salvar. */}
                     </div>
                   </div>
 
@@ -1048,6 +1033,23 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           <Calendar className="w-4 h-4 text-gray-500" />
                           <span className="text-sm font-medium text-gray-700">Renovação no Dia Seguinte se Exceder</span>
                         </label>
+                      </div>
+
+                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white col-span-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={restricoes.validar_valor_max_renovacoes}
+                            onChange={() => updateRestricao('validar_valor_max_renovacoes', !restricoes.validar_valor_max_renovacoes)}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <RefreshCw className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-700">Exigir Autorização para Renovação</span>
+                        </label>
+                        <p className="text-xs text-gray-500 mt-2 ml-6">
+                          O limite de uma renovação é sempre o valor do último empréstimo do cliente.
+                          Marque para que renovações acima desse valor precisem de autorização.
+                        </p>
                       </div>
 
                       <div className="p-4 rounded-xl border-2 border-gray-200 bg-white col-span-2">
