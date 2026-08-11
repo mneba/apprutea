@@ -1698,9 +1698,12 @@ export default function LiquidacaoDiariaPage() {
       {/* Faixa de reabertura */}
       {isLiquidacaoReaberta && liquidacao && (
         <FaixaLiquidacaoReaberta
-          dataLiquidacao={liquidacao.data_abertura.split('T')[0]}
+          // data_liquidacao é DATE puro; data_abertura é timestamp UTC e
+          // fatiar o 'T' pode cair no dia seguinte perto da meia-noite.
+          dataLiquidacao={(liquidacao as any).data_liquidacao || liquidacao.data_abertura.split('T')[0]}
           dataReabertura={liquidacao.data_reabertura}
           reabertoPor={liquidacao.reaberto_por_nome}
+          rotaNome={rota?.nome}
         />
       )}
 
