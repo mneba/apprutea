@@ -21,6 +21,7 @@ import {
   GripVertical,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
 import { categoriasFinanceirasService } from '@/services/categoriasFinanceiras';
 import type { CategoriaFinanceira, CategoriaFinanceiraInput, TipoMovimento } from '@/types/categoriasFinanceiras';
 
@@ -63,14 +64,20 @@ export default function CategoriasFinanceirasPage() {
   // CARREGAR DADOS
   // ============================================
 
-  const carregarCategorias = async () => {
-    setLoading(true);
+  const carregarCategorias = async (opts?: { forcar?: boolean }) => {
+    // Busca digitada fora do cache: uma chave por tecla não compensa.
+    const cacheavel = !busca;
+    const k = chave('categorias:lista', filtroTipo, String(filtroAtivo));
+    if (!cacheavel || !temCache(k)) setLoading(true);
     try {
-      const data = await categoriasFinanceirasService.listar({
+      const buscar = () => categoriasFinanceirasService.listar({
         tipo_movimento: filtroTipo || undefined,
         ativo: filtroAtivo === '' ? undefined : filtroAtivo,
         busca: busca || undefined,
       });
+      const data = cacheavel
+        ? await comCache(k, buscar, { ttlMs: TTL_LONGO, forcar: opts?.forcar })
+        : await buscar();
       setCategorias(data);
     } catch (err) {
       console.error('Erro ao carregar categorias:', err);
@@ -164,7 +171,10 @@ export default function CategoriasFinanceirasPage() {
       }
 
       fecharModal();
-      carregarCategorias();
+      // Também derruba a cópia usada pelo módulo Financeiro
+      invalidarCache('categorias:');
+      invalidarCache('financeiro:categorias');
+      carregarCategorias({ forcar: true });
     } catch (err: any) {
       alert(err.message || 'Erro ao salvar categoria');
     } finally {
@@ -175,7 +185,9 @@ export default function CategoriasFinanceirasPage() {
   const handleAlternarAtivo = async (categoria: CategoriaFinanceira) => {
     try {
       await categoriasFinanceirasService.alternarAtivo(categoria.id, !categoria.ativo);
-      carregarCategorias();
+      invalidarCache('categorias:');
+      invalidarCache('financeiro:categorias');
+      carregarCategorias({ forcar: true });
     } catch (err: any) {
       alert(err.message || 'Erro ao alterar status');
     }
@@ -186,7 +198,9 @@ export default function CategoriasFinanceirasPage() {
 
     try {
       await categoriasFinanceirasService.excluir(categoria.id);
-      carregarCategorias();
+      invalidarCache('categorias:');
+      invalidarCache('financeiro:categorias');
+      carregarCategorias({ forcar: true });
     } catch (err: any) {
       alert(err.message || 'Erro ao excluir categoria');
     }

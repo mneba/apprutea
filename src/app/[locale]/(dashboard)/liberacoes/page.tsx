@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
+import { comCache, chave, temCache, invalidarCache, TTL_CURTO } from '@/lib/cacheDados';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
 import { ModalDetalhesCliente } from '@/components/clientes';
 
@@ -1245,14 +1246,18 @@ export default function LiberacoesPage() {
   };
 
   // Carregar TODAS as solicitações (sem filtro de status)
-  const carregarSolicitacoes = async () => {
+  const carregarSolicitacoes = async (opts?: { forcar?: boolean }) => {
     if (!user) return;
-    setLoading(true);
+    // TTL curto de propósito: esta é uma fila de trabalho e ver uma
+    // solicitação já resolvida (ou não ver uma nova) é pior do que esperar.
+    // Toda aprovação/rejeição invalida a chave logo abaixo.
+    const k = chave('liberacoes:lista', user.id, filtroTipo);
+    if (!temCache(k)) setLoading(true);
     try {
-      const data = await solicitacoesService.listarTodas(user.id, {
+      const data = await comCache(k, () => solicitacoesService.listarTodas(user.id, {
         status: null, // Busca todas
         tipo: filtroTipo || null,
-      });
+      }), { ttlMs: TTL_CURTO, forcar: opts?.forcar });
       setTodasSolicitacoes(data);
     } catch (err) {
       console.error('Erro ao carregar solicitações:', err);
@@ -1287,7 +1292,8 @@ export default function LiberacoesPage() {
       
       if (resultado.success) {
         setSolicitacaoSelecionada(null);
-        carregarSolicitacoes();
+        invalidarCache('liberacoes:');
+        carregarSolicitacoes({ forcar: true });
       } else {
         alert(resultado.message);
       }
@@ -1311,7 +1317,8 @@ export default function LiberacoesPage() {
       const resultado = await solicitacoesService.rejeitar(solicitacaoSelecionada.id, user.id, motivo);
       if (resultado.success) {
         setSolicitacaoSelecionada(null);
-        carregarSolicitacoes();
+        invalidarCache('liberacoes:');
+        carregarSolicitacoes({ forcar: true });
       } else {
         alert(resultado.message);
       }
@@ -1416,7 +1423,7 @@ export default function LiberacoesPage() {
             <p className="text-gray-500 mt-1">Gerencie as solicitações de autorização dos vendedores</p>
           </div>
           <button
-            onClick={carregarSolicitacoes}
+            onClick={() => { invalidarCache('liberacoes:'); carregarSolicitacoes({ forcar: true }); }}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -1667,7 +1674,8 @@ export default function LiberacoesPage() {
           onRejeitar={handleRejeitar}
           onVendaResolvida={() => {
             setSolicitacaoSelecionada(null);
-            carregarSolicitacoes();
+            invalidarCache('liberacoes:');
+            carregarSolicitacoes({ forcar: true });
           }}
           loading={loadingAcao}
         />

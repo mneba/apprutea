@@ -535,8 +535,19 @@ export default function FinanceiroPage() {
       
       setLoadingUltimaLiquidacao(true);
       try {
+        // ⭐ Dia escolhido no módulo de Liquidação tem precedência.
+        // A tela de Liquidação grava a chave ao visualizar outro dia e a
+        // remove ao voltar para a liquidação ativa, então os dois módulos
+        // seguem a mesma seleção sem precisar de estado compartilhado.
+        let diaDaLiquidacao: string | null = null;
+        try { diaDaLiquidacao = sessionStorage.getItem(`liq_ultima_data_${rotaId}`); } catch {}
+        if (diaDaLiquidacao) {
+          setDataLiquidacao(diaDaLiquidacao);
+          return;
+        }
+
         const supabase = (await import('@/lib/supabase/client')).createClient();
-        
+
         // Buscar última liquidação (ABERTO primeiro, depois FECHADO)
         // Usar data_liquidacao, não data_abertura
         const { data, error } = await supabase

@@ -19,6 +19,7 @@ import {
   ChevronDown,
   AlertCircle,
 } from 'lucide-react';
+import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
 import { usuariosService } from '@/services/usuarios';
 import { useUser } from '@/contexts/UserContext';
 import { ModalGerenciarUsuario } from '@/components/usuarios';
@@ -109,17 +110,20 @@ export default function UsuariosPage() {
     if (!loadingUser && profile) carregarDados();
   }, [loadingUser, profile]);
 
-  const carregarDados = async () => {
-    setLoading(true);
+  const carregarDados = async (opts?: { forcar?: boolean }) => {
+    const empresaAlvo = ehSuperAdmin
+      ? undefined
+      : (localizacao.empresa_id || profile?.empresas_ids?.[0] || undefined);
+
+    const kUsuarios = chave('usuarios:lista', empresaAlvo, ehSuperAdmin);
+    if (!temCache(kUsuarios)) setLoading(true);
     try {
       const [usuariosData, empresasData] = await Promise.all([
-        usuariosService.listarUsuarios({
+        comCache(kUsuarios, () => usuariosService.listarUsuarios({
           isSuperAdmin: ehSuperAdmin,
-          empresaId: ehSuperAdmin
-            ? undefined
-            : (localizacao.empresa_id || profile?.empresas_ids?.[0] || undefined),
-        }),
-        usuariosService.listarEmpresas(),
+          empresaId: empresaAlvo,
+        }), { forcar: opts?.forcar }),
+        comCache(chave('usuarios:empresas'), () => usuariosService.listarEmpresas(), { ttlMs: TTL_LONGO, forcar: opts?.forcar }),
       ]);
       setUsuarios(usuariosData);
       setEmpresas(empresasData);
@@ -420,8 +424,8 @@ export default function UsuariosPage() {
         <ModalGerenciarUsuario
           usuario={usuarioSelecionado}
           onClose={() => { setModalAberto(false); setUsuarioSelecionado(null); }}
-          onStatusChange={() => carregarDados()}
-          onSave={() => { carregarDados(); setModalAberto(false); setUsuarioSelecionado(null); }}
+          onStatusChange={() => { invalidarCache('usuarios:'); carregarDados({ forcar: true }); }}
+          onSave={() => { invalidarCache('usuarios:'); carregarDados({ forcar: true }); setModalAberto(false); setUsuarioSelecionado(null); }}
         />
       )}
 

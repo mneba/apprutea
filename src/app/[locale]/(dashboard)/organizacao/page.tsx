@@ -26,6 +26,7 @@ import {
   Shield,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { comCache, chave, temCache, invalidarCache } from '@/lib/cacheDados';
 import { organizacaoService } from '@/services/organizacao';
 import { usuariosService } from '@/services/usuarios';
 import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio, Cidade } from '@/types/organizacao';
@@ -220,29 +221,45 @@ export default function OrganizacaoPage() {
     carregarCidadesDaHierarquia();
   }, [hierarquiaIdEmpresa]);
 
-  const carregarDados = async () => {
-    setLoading(true);
+  const carregarDados = async (opts?: { forcar?: boolean }) => {
+    const forcar = opts?.forcar;
+    // SUPER_ADMIN: resumo geral | Outros: resumo da própria empresa
+    const empresaIdParaResumo = isSuperAdmin ? undefined : (empresaIdSelecionada || empresaIdDoUsuario);
+    const kResumo = chave('organizacao:resumo', hierarquiaId, empresaIdParaResumo);
+
+    if (!temCache(kResumo)) setLoading(true);
     try {
-      // SUPER_ADMIN: resumo geral | Outros: resumo da própria empresa
-      const empresaIdParaResumo = isSuperAdmin ? undefined : (empresaIdSelecionada || empresaIdDoUsuario);
-      const resumo = await organizacaoService.buscarResumoGeral(
-        hierarquiaId || undefined, 
-        empresaIdParaResumo || undefined
+      const resumo = await comCache(
+        kResumo,
+        () => organizacaoService.buscarResumoGeral(hierarquiaId || undefined, empresaIdParaResumo || undefined),
+        { forcar }
       );
       setResumoGeral(resumo);
 
       // Se tem empresa selecionada no seletor master → ir para rotas
       if (empresaIdSelecionada) {
-        const empresa = await organizacaoService.buscarEmpresa(empresaIdSelecionada);
+        const empresa = await comCache(
+          chave('organizacao:empresa', empresaIdSelecionada),
+          () => organizacaoService.buscarEmpresa(empresaIdSelecionada),
+          { forcar }
+        );
         if (empresa) {
           setEmpresaSelecionada(empresa);
-          const rotasData = await organizacaoService.listarRotasPorEmpresa(empresaIdSelecionada);
+          const rotasData = await comCache(
+            chave('organizacao:rotas', empresaIdSelecionada),
+            () => organizacaoService.listarRotasPorEmpresa(empresaIdSelecionada),
+            { forcar }
+          );
           setRotas(rotasData);
           setViewMode('rotas');
         }
       } else if (hierarquiaId) {
         // Sem empresa selecionada → mostrar lista de empresas
-        const empresasData = await organizacaoService.listarEmpresasPorHierarquia(hierarquiaId);
+        const empresasData = await comCache(
+          chave('organizacao:empresas', hierarquiaId),
+          () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId),
+          { forcar }
+        );
         setEmpresas(empresasData);
         setViewMode('empresas');
       }
@@ -381,13 +398,14 @@ export default function OrganizacaoPage() {
       }
       
       setModalRota(false);
-      
-      // Recarregar dados
+
+      // Recarregar dados — a rota mudou, então o cache do módulo não vale
+      invalidarCache('organizacao:');
       if (viewMode === 'rotas' && empresaSelecionada) {
         const rotasData = await organizacaoService.listarRotasPorEmpresa(empresaSelecionada.id);
         setRotas(rotasData);
       } else {
-        carregarDados();
+        carregarDados({ forcar: true });
       }
     } catch (err: any) {
       console.error('Erro ao salvar rota:', err);
@@ -1025,7 +1043,8 @@ export default function OrganizacaoPage() {
       }
 
       setModalEmpresa(false);
-      carregarDados();
+      invalidarCache('organizacao:');
+      carregarDados({ forcar: true });
     } catch (err: any) {
       console.error('Erro ao salvar empresa:', err);
       alert(`Erro ao salvar empresa: ${err.message}`);

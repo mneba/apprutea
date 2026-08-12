@@ -17,6 +17,7 @@ import {
   MapPin,
 } from 'lucide-react';
 import { Input } from '@/components/ui';
+import { comCache, chave, temCache, invalidarCache } from '@/lib/cacheDados';
 import { vendedoresService } from '@/services/vendedores';
 import { useUser } from '@/contexts/UserContext';
 import { ModalVendedor } from '@/components/vendedores';
@@ -52,12 +53,15 @@ export default function VendedoresPage() {
     }
   }, [loadingUser, profile, empresaSelecionada]);
 
-  const carregarDados = async () => {
+  const carregarDados = async (opts?: { forcar?: boolean }) => {
     if (!empresaSelecionada) return;
-    
-    setLoading(true);
+
+    const k = chave('vendedores:lista', empresaSelecionada);
+    // Sem cache quente ainda: mostra o "carregando". Com cache, a troca é
+    // instantânea e a revalidação acontece sem spinner.
+    if (!temCache(k)) setLoading(true);
     try {
-      const data = await vendedoresService.listarVendedoresComRota(empresaSelecionada);
+      const data = await comCache(k, () => vendedoresService.listarVendedoresComRota(empresaSelecionada), { forcar: opts?.forcar });
       setVendedores(data);
     } catch (err) {
       console.error('Erro ao carregar vendedores:', err);
@@ -99,7 +103,8 @@ export default function VendedoresPage() {
 
   // Após salvar
   const handleSalvar = () => {
-    carregarDados();
+    invalidarCache('vendedores:');
+    carregarDados({ forcar: true });
     handleFecharModal();
   };
 
