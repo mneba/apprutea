@@ -16,6 +16,7 @@ import {
   FileSpreadsheet
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
 import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
@@ -399,35 +400,50 @@ export default function ClientesPage() {
   const temRotas = rotas.length > 0;
 
   // Carregar dados
-  const carregarDados = useCallback(async () => {
+  const carregarDados = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!empresaId) return;
 
-    setLoading(true);
-    try {
-      // Carregar rotas
-      const rotasData = await clientesService.buscarRotasEmpresa(empresaId);
-      setRotas(rotasData);
+    const forcar = opts?.forcar;
+    const rotaParam = rotaIdContexto || rotaFiltro || undefined;
+    const freqParam = frequenciasFiltro;
 
-      // Carregar segmentos
-      const segmentosData = await clientesService.buscarSegmentos();
+    // Busca digitada não entra no cache: encheria o Map com uma chave por
+    // tecla e o resultado é efêmero de qualquer forma.
+    const cacheavel = !busca;
+    const chaveLista = chave('clientes:lista', empresaId, rotaParam, statusFiltro, freqParam);
+    const chaveBase = chave('clientes:base', empresaId, rotaParam, freqParam);
+
+    // Só mostra o "carregando" de tela cheia quando não há nada para exibir.
+    // Com cache quente a troca é instantânea e a revalidação é silenciosa.
+    const temTudoEmCache = cacheavel && temCache(chaveLista) && temCache(chaveBase);
+    if (!temTudoEmCache) setLoading(true);
+
+    try {
+      const [rotasData, segmentosData] = await Promise.all([
+        comCache(chave('clientes:rotas', empresaId), () => clientesService.buscarRotasEmpresa(empresaId), { ttlMs: TTL_LONGO, forcar }),
+        comCache(chave('clientes:segmentos'), () => clientesService.buscarSegmentos(), { ttlMs: TTL_LONGO, forcar }),
+      ]);
+      setRotas(rotasData);
       setSegmentos(segmentosData);
 
       // Carregar clientes: lista filtrada (tabela) + base sem filtro de status (contagens)
-      const freqParam = frequenciasFiltro;
+      const buscarLista = () => clientesService.buscarClientes({
+        empresa_id: empresaId,
+        rota_id: rotaParam,
+        status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
+        busca: busca || undefined,
+        frequencias: freqParam,
+      } as any);
+      const buscarBase = () => clientesService.buscarClientes({
+        empresa_id: empresaId,
+        rota_id: rotaParam,
+        busca: busca || undefined,
+        frequencias: freqParam,
+      } as any);
+
       const [clientesData, baseParaContagem] = await Promise.all([
-        clientesService.buscarClientes({
-          empresa_id: empresaId,
-          rota_id: rotaIdContexto || rotaFiltro || undefined,
-          status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
-          busca: busca || undefined,
-          frequencias: freqParam,
-        } as any),
-        clientesService.buscarClientes({
-          empresa_id: empresaId,
-          rota_id: rotaIdContexto || rotaFiltro || undefined,
-          busca: busca || undefined,
-          frequencias: freqParam,
-        } as any),
+        cacheavel ? comCache(chaveLista, buscarLista, { forcar }) : buscarLista(),
+        cacheavel ? comCache(chaveBase, buscarBase, { forcar }) : buscarBase(),
       ]);
       setClientes(clientesData);
       setContagens({
@@ -455,7 +471,11 @@ export default function ClientesPage() {
   const handleSucessoVenda = () => {
     setModalNovaVenda(false);
     setClienteSelecionado(null);
-    carregarDados();
+    // A venda muda saldos e status do cliente: derruba o cache do módulo
+    // (e o do financeiro, que soma os mesmos lançamentos).
+    invalidarCache('clientes:');
+    invalidarCache('financeiro:');
+    carregarDados({ forcar: true });
   };
 
   const handleFiltroStatus = (status: string) => {

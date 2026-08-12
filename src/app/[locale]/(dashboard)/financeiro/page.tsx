@@ -28,6 +28,7 @@ import {
 import {
 } from 'recharts';
 import { useUser } from '@/contexts/UserContext';
+import { comCache, chave, temCache, invalidarCache, TTL_CURTO, TTL_LONGO } from '@/lib/cacheDados';
 import { financeiroService } from '@/services/financeiro';
 import { liquidacaoService } from '@/services/liquidacao';
 import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendarioLiquidacao';
@@ -436,11 +437,14 @@ export default function FinanceiroPage() {
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
   const [comprovante, setComprovante] = useState<string | null>(null);
 
-  const carregarSaldos = useCallback(async () => {
+  // Os três abaixo usam cache de módulo: entrar e sair do Financeiro deixou
+  // de refazer as queries. `forcar` é usado pelas ações que gravam.
+  const carregarSaldos = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!empresaId) return;
-    setLoadingSaldos(true);
+    const k = chave('financeiro:saldos', empresaId, rotaId);
+    if (!temCache(k)) setLoadingSaldos(true);
     try {
-      const data = await financeiroService.buscarSaldosContas(empresaId, rotaId);
+      const data = await comCache(k, () => financeiroService.buscarSaldosContas(empresaId, rotaId), { ttlMs: TTL_CURTO, forcar: opts?.forcar });
       setSaldos(data);
     } catch (error) {
       console.error('Erro ao carregar saldos:', error);
@@ -449,11 +453,12 @@ export default function FinanceiroPage() {
     }
   }, [empresaId, rotaId]);
 
-  const carregarContas = useCallback(async () => {
+  const carregarContas = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!empresaId) return;
-    setLoadingContas(true);
+    const k = chave('financeiro:contas', empresaId);
+    if (!temCache(k)) setLoadingContas(true);
     try {
-      const data = await financeiroService.buscarContas(empresaId);
+      const data = await comCache(k, () => financeiroService.buscarContas(empresaId), { forcar: opts?.forcar });
       setContas(data);
     } catch (error) {
       console.error('Erro ao carregar contas:', error);
@@ -462,16 +467,16 @@ export default function FinanceiroPage() {
     }
   }, [empresaId]);
 
-  const carregarCategorias = useCallback(async () => {
+  const carregarCategorias = useCallback(async (opts?: { forcar?: boolean }) => {
     try {
-      const data = await financeiroService.buscarCategorias();
+      const data = await comCache(chave('financeiro:categorias'), () => financeiroService.buscarCategorias(), { ttlMs: TTL_LONGO, forcar: opts?.forcar });
       setCategorias(data);
     } catch (error) {
       console.error('Erro ao carregar categorias:', error);
     }
   }, []);
 
-  const carregarExtrato = useCallback(async () => {
+  const carregarExtrato = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!empresaId) return;
     
     // No modo liquidação, só carrega se tiver data selecionada
@@ -480,7 +485,6 @@ export default function FinanceiroPage() {
       return;
     }
 
-    setLoadingExtrato(true);
     try {
       const params: any = {
         conta_id: contaFiltro || undefined,
@@ -503,9 +507,10 @@ export default function FinanceiroPage() {
         params.data_fim = filtroExtrato.tipo === 'periodo' ? filtroExtrato.dataFim : undefined;
       }
 
-      console.log('Buscando extrato com params:', params); // Debug
+      const k = chave('financeiro:extrato', empresaId, JSON.stringify(params));
+      if (!temCache(k)) setLoadingExtrato(true);
 
-      const data = await financeiroService.buscarExtrato(empresaId, params);
+      const data = await comCache(k, () => financeiroService.buscarExtrato(empresaId, params), { ttlMs: TTL_CURTO, forcar: opts?.forcar });
       setMovimentos(data);
     } catch (error) {
       console.error('Erro ao carregar extrato:', error);
@@ -642,7 +647,9 @@ export default function FinanceiroPage() {
 
     try {
       await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
-      await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
+      // Gravou: o cache do módulo não vale mais
+    invalidarCache('financeiro:');
+    await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
     } catch (e: any) {
       console.error('Erro ao anular movimentação:', e);
       alert(e?.message || 'Erro ao anular a movimentação. Tente novamente.');
@@ -658,7 +665,9 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
+    // Gravou: o cache do módulo não vale mais
+    invalidarCache('financeiro:');
+    await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
   };
 
   const handleSalvarTransferencia = async (dados: any) => {
@@ -670,7 +679,9 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
+    // Gravou: o cache do módulo não vale mais
+    invalidarCache('financeiro:');
+    await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
   };
 
   const handleSalvarAjuste = async (dados: any) => {
@@ -682,7 +693,9 @@ export default function FinanceiroPage() {
     if (!result.success) {
       throw new Error(result.error);
     }
-    await Promise.all([carregarSaldos(), carregarContas(), carregarExtrato()]);
+    // Gravou: o cache do módulo não vale mais
+    invalidarCache('financeiro:');
+    await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
   };
 
   if (!empresaId) {
