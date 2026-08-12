@@ -1009,27 +1009,33 @@ export default function LiquidacaoDiariaPage() {
       setLiquidacao(liquidacaoData);
       setLiquidacaoAtiva(liquidacaoData);
 
+      // O dia salvo tem PRECEDÊNCIA sobre a liquidação aberta. Se o usuário
+      // estava vendo outro dia e saiu do módulo, ao voltar ele continua nesse
+      // dia. Antes isto só valia quando não havia liquidação aberta — havendo,
+      // a tela pulava de volta para a aberta e a seleção se perdia.
+      // A chave é limpa ao voltar para a liquidação ativa (voltarParaLiquidacaoAtiva)
+      // e ao selecionar o próprio dia ativo no calendário.
+      let dataSalva: string | null = null;
+      try { dataSalva = sessionStorage.getItem(`liq_ultima_data_${rotaId}`); } catch {}
+
+      if (dataSalva) {
+        const liqSalva = await liquidacaoService.buscarLiquidacaoPorData(rotaId, dataSalva);
+        if (liqSalva) {
+          setLiquidacao(liqSalva);
+          setVisualizandoOutroDia(true);
+          await carregarDadosLiquidacao(liqSalva, rotaId);
+          const [a, m, d] = dataSalva.split('-').map(Number);
+          setDataSelecionada(new Date(a, m - 1, d));
+          return;
+        }
+        // data salva não corresponde mais a uma liquidação → descartar
+        try { sessionStorage.removeItem(`liq_ultima_data_${rotaId}`); } catch {}
+      }
+
       if (liquidacaoData) {
+        setVisualizandoOutroDia(false);
         await carregarDadosLiquidacao(liquidacaoData, rotaId);
         setDataSelecionada(new Date(liquidacaoData.data_abertura));
-      } else {
-        // Sem liquidação aberta: se houver um dia salvo (por rota) nesta sessão,
-        // reabrir automaticamente o último dia que estava sendo visualizado.
-        let dataSalva: string | null = null;
-        try { dataSalva = sessionStorage.getItem(`liq_ultima_data_${rotaId}`); } catch {}
-        if (dataSalva) {
-          const liqSalva = await liquidacaoService.buscarLiquidacaoPorData(rotaId, dataSalva);
-          if (liqSalva) {
-            setLiquidacao(liqSalva);
-            setVisualizandoOutroDia(true);
-            await carregarDadosLiquidacao(liqSalva, rotaId);
-            const [a, m, d] = dataSalva.split('-').map(Number);
-            setDataSelecionada(new Date(a, m - 1, d));
-          } else {
-            // data salva não corresponde mais a uma liquidação → descartar
-            try { sessionStorage.removeItem(`liq_ultima_data_${rotaId}`); } catch {}
-          }
-        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
