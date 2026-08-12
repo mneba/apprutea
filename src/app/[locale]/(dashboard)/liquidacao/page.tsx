@@ -633,6 +633,30 @@ interface EventoCliente {
   isParcial?: boolean; // ⭐ indica se foi pagamento parcial (não quitou a parcela)
 }
 
+// ============================================================
+// CACHE DOS DADOS DA LIQUIDAÇÃO (escopo de módulo)
+// ============================================================
+// A página desmonta ao navegar para outro módulo e remonta na volta, o que
+// refazia as ~13 queries do dia toda vez. Como o módulo continua carregado
+// durante a navegação client-side, guardamos aqui o resultado por liquidação.
+// Um dia fechado praticamente não muda; para o resto existe o botão Atualizar,
+// e toda ação que altera o dia recarrega com { forcar: true }.
+interface DadosLiquidacaoCache {
+  clientesDia: ClienteDoDia[];
+  estatisticas: EstatisticasClientesDia | null;
+  emprestimos: { total: number; quantidade: number; novos: number; renovacoes: number; juros: number };
+  receitasDia: { total: number; qtd: number; itens: any[] };
+  ajustesDia: { total: number; qtd: number; itens: any[] };
+  cobrancasDia: { total: number; qtd: number; itens: any[] };
+  ordemRotaMap: Map<string, number>;
+  qtdNotasLiquidacao: number;
+  emprestimosDoDia: any[];
+  fotosClientes: Map<string, string>;
+  notasClientes: Map<string, { liquidacao: number; outras: boolean }>;
+}
+
+const cacheDadosLiquidacao = new Map<string, DadosLiquidacaoCache>();
+
 export default function LiquidacaoDiariaPage() {
   const { profile, localizacao } = useUser();
   const userId = profile?.user_id;
@@ -722,7 +746,37 @@ export default function LiquidacaoDiariaPage() {
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
 
-  const carregarDadosLiquidacao = useCallback(async (liq: LiquidacaoDiaria, rotaId: string) => {
+  // Joga um payload (recém-buscado ou vindo do cache) nos states da tela
+  const aplicarDadosLiquidacao = useCallback((d: DadosLiquidacaoCache) => {
+    setClientesDia(d.clientesDia);
+    setEstatisticas(d.estatisticas);
+    setEmprestimos(d.emprestimos);
+    setReceitasDia(d.receitasDia);
+    setAjustesDia(d.ajustesDia);
+    setCobrancasDia(d.cobrancasDia);
+    setOrdemRotaMap(d.ordemRotaMap);
+    setQtdNotasLiquidacao(d.qtdNotasLiquidacao);
+    setEmprestimosDoDia(d.emprestimosDoDia as any);
+    setFotosClientes(d.fotosClientes);
+    setNotasClientes(d.notasClientes);
+    setBuscaCliente('');
+    setFiltroLista('TODOS');
+  }, []);
+
+  const carregarDadosLiquidacao = useCallback(async (
+    liq: LiquidacaoDiaria,
+    rotaId: string,
+    opts?: { forcar?: boolean }
+  ) => {
+    // Cache hit: reaplica o que já foi carregado, sem nenhuma query
+    if (!opts?.forcar && liq.id) {
+      const emCache = cacheDadosLiquidacao.get(liq.id);
+      if (emCache) {
+        aplicarDadosLiquidacao(emCache);
+        return;
+      }
+    }
+
     try {
       const supabase = (await import('@/lib/supabase/client')).createClient();
 
@@ -767,8 +821,9 @@ export default function LiquidacaoDiariaPage() {
           .eq('liquidacao_id', liq.id).eq('status', 'ATIVA'),
       ]);
 
+      const estatisticasCalc = liquidacaoService.calcularEstatisticasClientesDia(clientes);
       setClientesDia(clientes);
-      setEstatisticas(liquidacaoService.calcularEstatisticasClientesDia(clientes));
+      setEstatisticas(estatisticasCalc);
       setEmprestimos(emps);
 
       const empsNovos = empsNovosRes.data;
@@ -776,17 +831,19 @@ export default function LiquidacaoDiariaPage() {
 
       // Receitas
       const receitasItens = receitasRes.data || [];
-      setReceitasDia({
+      const receitasDiaCalc = {
         total: receitasItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
         qtd: receitasItens.length, itens: receitasItens,
-      });
+      };
+      setReceitasDia(receitasDiaCalc);
 
       // Ajustes
       const ajustesItens = ajustesRes.data || [];
-      setAjustesDia({
+      const ajustesDiaCalc = {
         total: ajustesItens.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
         qtd: ajustesItens.length, itens: ajustesItens,
-      });
+      };
+      setAjustesDia(ajustesDiaCalc);
 
       // Cobranças — enriquecer com número da parcela e total de parcelas do empréstimo
       const cobrancasItens = cobrancasRes.data || [];
@@ -813,10 +870,11 @@ export default function LiquidacaoDiariaPage() {
         numero_parcela: c.ref_parcela_id ? (mapaParcela[c.ref_parcela_id] ?? null) : null,
         total_parcelas: c.ref_emprestimo_id ? (mapaTotalParc[c.ref_emprestimo_id] ?? null) : null,
       }));
-      setCobrancasDia({
+      const cobrancasDiaCalc = {
         total: cobrancasEnriquecidas.reduce((s: number, r: any) => s + Number(r.valor || 0), 0),
         qtd: cobrancasEnriquecidas.length, itens: cobrancasEnriquecidas,
-      });
+      };
+      setCobrancasDia(cobrancasDiaCalc);
 
       // Ordem dos clientes na rota
       const novoOrdemMap = new Map<string, number>();
@@ -879,10 +937,27 @@ export default function LiquidacaoDiariaPage() {
 
       setBuscaCliente('');
       setFiltroLista('TODOS');
+
+      // Guardar para a próxima visita à tela sem refazer as queries
+      if (liq.id) {
+        cacheDadosLiquidacao.set(liq.id, {
+          clientesDia: clientes,
+          estatisticas: estatisticasCalc,
+          emprestimos: emps,
+          receitasDia: receitasDiaCalc,
+          ajustesDia: ajustesDiaCalc,
+          cobrancasDia: cobrancasDiaCalc,
+          ordemRotaMap: novoOrdemMap,
+          qtdNotasLiquidacao: countNotasRes.count || 0,
+          emprestimosDoDia: empsTodos,
+          fotosClientes: mapaFotos,
+          notasClientes: mapaNotas,
+        });
+      }
     } catch (error) {
       console.error('Erro ao carregar dados da liquidação:', error);
     }
-  }, []);
+  }, [aplicarDadosLiquidacao]);
 
   // Estornar uma cobrança (parcela paga) — versão WEB (permite liquidação fechada)
   const handleEstornarCobranca = useCallback(async (c: any) => {
@@ -918,7 +993,7 @@ export default function LiquidacaoDiariaPage() {
       }
       // Recarrega os dados da liquidação para refletir o estorno
       if (liquidacao && rota) {
-        await carregarDadosLiquidacao(liquidacao, rota.id);
+        await carregarDadosLiquidacao(liquidacao, rota.id, { forcar: true });
       }
     } catch (e: any) {
       console.error('Erro ao estornar cobrança:', e);
@@ -928,7 +1003,9 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [vendedor, userId, liquidacao, rota, carregarDadosLiquidacao]);
 
-  const carregarDados = useCallback(async () => {
+  // `forcar` ignora o cache. Usado por toda ação que altera o dia e pelo botão
+  // Atualizar; a montagem da tela chama sem forçar, aproveitando o cache.
+  const carregarDados = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!userId) return;
     setLoading(true);
     setSemRotaSelecionada(false);
@@ -998,7 +1075,7 @@ export default function LiquidacaoDiariaPage() {
             setLiquidacao(liqFechadaHoje);
             setLiquidacaoAtiva(null); // Não há liquidação ativa (aberta)
             setVisualizandoOutroDia(false); // É hoje, não outro dia
-            await carregarDadosLiquidacao(liqFechadaHoje, rotaId);
+            await carregarDadosLiquidacao(liqFechadaHoje, rotaId, opts);
             setDataSelecionada(new Date(liqFechadaHoje.data_abertura));
             setLoading(false);
             return; // Importante: sair aqui
@@ -1023,7 +1100,7 @@ export default function LiquidacaoDiariaPage() {
         if (liqSalva) {
           setLiquidacao(liqSalva);
           setVisualizandoOutroDia(true);
-          await carregarDadosLiquidacao(liqSalva, rotaId);
+          await carregarDadosLiquidacao(liqSalva, rotaId, opts);
           const [a, m, d] = dataSalva.split('-').map(Number);
           setDataSelecionada(new Date(a, m - 1, d));
           return;
@@ -1034,7 +1111,7 @@ export default function LiquidacaoDiariaPage() {
 
       if (liquidacaoData) {
         setVisualizandoOutroDia(false);
-        await carregarDadosLiquidacao(liquidacaoData, rotaId);
+        await carregarDadosLiquidacao(liquidacaoData, rotaId, opts);
         setDataSelecionada(new Date(liquidacaoData.data_abertura));
       }
     } catch (error) {
@@ -1126,6 +1203,17 @@ export default function LiquidacaoDiariaPage() {
       await carregarDados();
     }
   }, [liquidacaoAtiva, rota, carregarDadosLiquidacao, carregarDados]);
+
+  const [atualizando, setAtualizando] = useState(false);
+
+  const handleAtualizar = useCallback(async () => {
+    setAtualizando(true);
+    try {
+      await carregarDados({ forcar: true });
+    } finally {
+      setAtualizando(false);
+    }
+  }, [carregarDados]);
 
   useEffect(() => { carregarDados(); }, [carregarDados]);
   useEffect(() => {
@@ -1354,7 +1442,7 @@ export default function LiquidacaoDiariaPage() {
       }
 
       // Carregar dados da liquidação (clientes, empréstimos, etc)
-      await carregarDadosLiquidacao(novaLiquidacao, rota.id);
+      await carregarDadosLiquidacao(novaLiquidacao, rota.id, { forcar: true });
 
       // Atualizar saldo de conta da rota (caixa pode ter mudado)
       try {
@@ -1391,7 +1479,7 @@ export default function LiquidacaoDiariaPage() {
       const resultado = liquidacao.status === 'REABERTO'
         ? await liquidacaoService.fecharLiquidacaoReaberta({ liquidacao_id: liquidacao.id, user_id: userId, observacoes })
         : await liquidacaoService.fecharLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, observacoes });
-      if (resultado.sucesso) { await carregarDados(); setModalFechar(false); setModalPendencias(false); }
+      if (resultado.sucesso) { await carregarDados({ forcar: true }); setModalFechar(false); setModalPendencias(false); }
       else alert(resultado.mensagem);
     } catch (error) { console.error('Erro ao fechar liquidação:', error); alert('Erro ao fechar liquidação'); }
     finally { setLoadingAcao(false); }
@@ -1454,7 +1542,7 @@ export default function LiquidacaoDiariaPage() {
     setLoadingAcao(true);
     try {
       const resultado = await liquidacaoService.reabrirLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, motivo });
-      if (resultado.sucesso) { await carregarDados(); setModalReabrir(false); }
+      if (resultado.sucesso) { await carregarDados({ forcar: true }); setModalReabrir(false); }
       else alert(resultado.mensagem);
     } catch (error) { console.error('Erro ao reabrir liquidação:', error); alert('Erro ao reabrir liquidação'); }
     finally { setLoadingAcao(false); }
@@ -1751,6 +1839,17 @@ export default function LiquidacaoDiariaPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
+          {/* Os dados ficam em cache entre visitas à tela; aqui o usuário força
+              a releitura quando quiser garantir que está vendo o mais recente. */}
+          <button
+            onClick={handleAtualizar}
+            disabled={atualizando}
+            title="Recarregar os dados desta liquidação"
+            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-gray-100 text-gray-700 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${atualizando ? 'animate-spin' : ''}`} />
+            {atualizando ? 'Atualizando...' : 'Atualizar'}
+          </button>
           {liquidacao && (
             <button onClick={() => setModalExtrato(true)} className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors">
               <FileText className="w-3.5 h-3.5" />Extrato
