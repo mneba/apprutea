@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import type { UserProfile, Hierarquia, Cidade, Empresa, Rota, UserPermissao } from '@/types/database';
 
@@ -94,6 +94,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
     rota: null,
   });
 
+  // Id do usuário cujo perfil/permissões já estão carregados.
+  // O Supabase emite TOKEN_REFRESHED (e às vezes SIGNED_IN) toda vez que a aba
+  // volta ao foco. Sem este controle, cada alt-tab refazia loadUser() e trocava
+  // a identidade de `profile`, o que disparava de novo os useEffect das páginas
+  // que dependem dele — era isso que "atualizava a tela inteira".
+  const usuarioCarregadoRef = useRef<string | null>(null);
+
   const supabase = createClient();
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
   const isAdmin = profile?.tipo_usuario === 'ADMIN';
@@ -113,6 +120,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
       const { data: { user } } = await supabase.auth.getUser();
       log('Auth user:', user?.id);
       setUser(user);
+      usuarioCarregadoRef.current = user?.id ?? null;
 
       if (user) {
         const { data: profileData, error } = await supabase
@@ -290,12 +298,27 @@ export function UserProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (event === 'SIGNED_OUT') {
+          usuarioCarregadoRef.current = null;
           setUser(null);
           setProfile(null);
-        } else if (session?.user) {
-          setUser(session.user);
-          loadUser();
+          setPermissoes({});
+          return;
         }
+
+        const novoUserId = session?.user?.id;
+        if (!novoUserId) return;
+
+        // Mesmo usuário (refresh de token ao voltar o foco para a aba):
+        // nada mudou, então não recarrega perfil, permissões nem localização.
+        if (usuarioCarregadoRef.current === novoUserId) {
+          log('Evento de auth ignorado (mesmo usuário):', event);
+          return;
+        }
+
+        // Usuário diferente = login de verdade ou troca de conta.
+        log('Usuário mudou, recarregando contexto:', event);
+        setUser(session.user);
+        loadUser();
       }
     );
 
