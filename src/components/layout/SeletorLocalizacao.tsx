@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { MapPin, ChevronRight, X, Building2, Navigation, Check, Loader2, Search } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { prefetchModulos } from '@/lib/prefetchModulos';
 import { usuariosService } from '@/services/usuarios';
 import { organizacaoService } from '@/services/organizacao';
 import type { Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
@@ -65,6 +66,18 @@ export function SeletorLocalizacao() {
       carregarDados();
     }
   }, [isOpen]);
+
+  // Aquecer o cache dos módulos assim que houver empresa/rota definidas.
+  // Um único efeito cobre os dois casos: o usuário acabou de escolher no
+  // seletor, ou a página abriu com a localização que já estava salva.
+  // O seletor vive no layout do dashboard, então isto roda uma vez por
+  // carregamento e a cada troca de seleção.
+  useEffect(() => {
+    prefetchModulos({
+      empresaId: localizacao.empresa_id,
+      rotaId: localizacao.rota_id,
+    });
+  }, [localizacao.empresa_id, localizacao.rota_id]);
 
   const carregarDados = async () => {
     setLoading(true);
