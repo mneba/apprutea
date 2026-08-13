@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Play,
   Square,
@@ -668,6 +668,12 @@ export default function LiquidacaoDiariaPage() {
   const [empresaNome, setEmpresaNome] = useState<string>('');
   const [liquidacao, setLiquidacao] = useState<LiquidacaoDiaria | null>(null);
   const [liquidacaoAtiva, setLiquidacaoAtiva] = useState<LiquidacaoDiaria | null>(null);
+
+  // Espelho em ref: `carregarDados` precisa saber se já há algo na tela para
+  // decidir se mostra o "carregando", mas colocar `liquidacao` nas dependências
+  // do useCallback criaria um laço (ele próprio chama setLiquidacao).
+  const liquidacaoRef = useRef<LiquidacaoDiaria | null>(null);
+  liquidacaoRef.current = liquidacao;
   const [saldoConta, setSaldoConta] = useState(0);
   const [clientesDia, setClientesDia] = useState<ClienteDoDia[]>([]);
   const [estatisticas, setEstatisticas] = useState<EstatisticasClientesDia | null>(null);
@@ -1007,7 +1013,10 @@ export default function LiquidacaoDiariaPage() {
   // Atualizar; a montagem da tela chama sem forçar, aproveitando o cache.
   const carregarDados = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!userId) return;
-    setLoading(true);
+    // Só mostra o "carregando" quando ainda não há nada na tela. Se a página
+    // já está montada com dados, uma reexecução (troca de aba, refresh de
+    // token, efeito que redisparou) acontece em silêncio.
+    if (!liquidacaoRef.current) setLoading(true);
     setSemRotaSelecionada(false);
     const tipoUsuario = profile?.tipo_usuario;
     try {
@@ -1043,8 +1052,11 @@ export default function LiquidacaoDiariaPage() {
 
       if (!rotaId || !rotaData) { setSemRotaSelecionada(true); setLoading(false); return; }
 
-      setVendedor(vendedorData);
-      setRota(rotaData);
+      // Só troca a referência se a rota/vendedor mudou de fato. Vários
+      // useEffect desta tela dependem de `rota` e `vendedor`; reatribuir um
+      // objeto novo com o mesmo conteúdo fazia todos redispararem à toa.
+      setVendedor((atual) => (atual?.id === vendedorData?.id ? atual : vendedorData));
+      setRota((atual) => (atual?.id === rotaData?.id ? atual : rotaData));
 
       const supabase = (await import('@/lib/supabase/client')).createClient();
 
