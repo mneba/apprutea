@@ -576,6 +576,18 @@ export default function FinanceiroPage() {
     buscarUltimaLiquidacao();
   }, [modoFiltroTemporal, rotaId, dataLiquidacao]);
 
+  // Trocar de rota invalida tudo que é da rota anterior.
+  // As liquidações só são buscadas quando o dropdown/calendário abre, então
+  // sem esta limpeza o seletor continuava oferecendo as datas da rota antiga
+  // — era possível ver dias que não existem na rota atual e vincular o
+  // lançamento à data errada. Sumia ao recarregar a página ou trocar de mês,
+  // justamente porque isso forçava uma nova busca.
+  useEffect(() => {
+    setHistoricoLiquidacoes([]);
+    setLiquidacoesMes([]);
+    setDataLiquidacao('');
+  }, [rotaId]);
+
   // Carregar liquidações do mês exibido no calendário
   const carregarLiquidacoesMes = useCallback(async (ano: number, mes: number) => {
     if (!rotaId) return;

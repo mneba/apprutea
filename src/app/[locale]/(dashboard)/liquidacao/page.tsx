@@ -1495,7 +1495,13 @@ export default function LiquidacaoDiariaPage() {
       const resultado = liquidacao.status === 'REABERTO'
         ? await liquidacaoService.fecharLiquidacaoReaberta({ liquidacao_id: liquidacao.id, user_id: userId, observacoes })
         : await liquidacaoService.fecharLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, observacoes });
-      if (resultado.sucesso) { await carregarDados({ forcar: true }); setModalFechar(false); setModalPendencias(false); }
+      if (resultado.sucesso) {
+        const liqFechada = liquidacao;
+        await carregarDados({ forcar: true });
+        await recarregarCalendarioDaLiquidacao(liqFechada);
+        setModalFechar(false);
+        setModalPendencias(false);
+      }
       else alert(resultado.mensagem);
     } catch (error) { console.error('Erro ao fechar liquidação:', error); alert('Erro ao fechar liquidação'); }
     finally { setLoadingAcao(false); }
@@ -1553,12 +1559,36 @@ export default function LiquidacaoDiariaPage() {
     await executarFechamento(observacoesFechamento);
   };
 
+  /**
+   * Recarrega o mês do calendário correspondente a uma liquidação.
+   *
+   * Fechar e reabrir mudam o status do dia, mas `carregarDados` não toca em
+   * `liquidacoesMes` — o calendário ficava com o retrato anterior até trocar
+   * de mês ou recarregar a página. Era por isso que um dia recém-fechado
+   * continuava aparecendo como Aberto (verde).
+   */
+  const recarregarCalendarioDaLiquidacao = useCallback(async (liq: LiquidacaoDiaria | null) => {
+    if (!rota || !liq) return;
+    const dataIso = (liq as any).data_liquidacao || liq.data_abertura?.split('T')[0];
+    if (!dataIso) return;
+    const [ano, mes] = dataIso.split('-').map(Number);
+    if (!ano || !mes) return;
+    try {
+      await carregarDadosCalendario(rota.id, ano, mes);
+    } catch (e) { /* silencioso: o calendário é secundário à ação */ }
+  }, [rota, carregarDadosCalendario]);
+
   const handleReabrirLiquidacao = async (motivo: string) => {
     if (!liquidacao || !userId) return;
     setLoadingAcao(true);
     try {
       const resultado = await liquidacaoService.reabrirLiquidacao({ liquidacao_id: liquidacao.id, user_id: userId, motivo });
-      if (resultado.sucesso) { await carregarDados({ forcar: true }); setModalReabrir(false); }
+      if (resultado.sucesso) {
+        const liqReaberta = liquidacao;
+        await carregarDados({ forcar: true });
+        await recarregarCalendarioDaLiquidacao(liqReaberta);
+        setModalReabrir(false);
+      }
       else alert(resultado.mensagem);
     } catch (error) { console.error('Erro ao reabrir liquidação:', error); alert('Erro ao reabrir liquidação'); }
     finally { setLoadingAcao(false); }
