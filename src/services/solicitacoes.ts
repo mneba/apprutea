@@ -60,6 +60,10 @@ export interface Solicitacao {
   data_resolucao: string | null;
   motivo_resolucao: string | null;
   ja_visualizada: boolean;
+  // Origem da empresa — vem pronta da RPC (JOIN com hierarquias/cidades)
+  pais: string | null;
+  estado: string | null;
+  cidade_nome: string | null;
 }
 
 export interface MovimentacaoPendente {
@@ -95,6 +99,13 @@ export interface FiltrosSolicitacoes {
   tipo?: string | null;
   limite?: number;
   offset?: number;
+  // Filtros que antes rodavam no cliente e agora vão ao banco
+  empresa_id?: string | null;
+  cliente?: string | null;
+  data_solicitada?: string | null;
+  busca?: string | null;
+  /** Conjunto de tipos aceitos (filtro por categoria e busca por rótulo) */
+  tipos?: string[] | null;
 }
 
 export const solicitacoesService = {
@@ -151,6 +162,11 @@ export const solicitacoesService = {
       p_tipo: filtros.tipo || null,
       p_limite: filtros.limite || 50,
       p_offset: filtros.offset || 0,
+      p_empresa_id: filtros.empresa_id || null,
+      p_cliente: filtros.cliente || null,
+      p_data_solicitada: filtros.data_solicitada || null,
+      p_busca: filtros.busca || null,
+      p_tipos: filtros.tipos && filtros.tipos.length > 0 ? filtros.tipos : null,
     });
 
     if (error) {
@@ -159,6 +175,72 @@ export const solicitacoesService = {
     }
 
     return data || [];
+  },
+
+  /**
+   * Igual a `listarTodas`, mas percorre as páginas até esgotar o resultado.
+   *
+   * Por que existe: a Central de Liberações aplica quase todos os seus
+   * filtros (categoria, cliente, data, empresa, busca) no cliente. Com uma
+   * página só, esses filtros varriam um recorte truncado e devolviam
+   * "nenhum resultado" para registros que existiam — sem nenhum aviso.
+   *
+   * `truncado` informa que o teto de segurança foi atingido, para a tela
+   * poder avisar em vez de mentir. A correção definitiva é filtrar no banco:
+   * a RPC hoje só aceita status, rota e tipo.
+   */
+  async listarTodasCompleto(
+    userId: string,
+    filtros: FiltrosSolicitacoes = {},
+    opcoes?: { tamanhoPagina?: number; maxRegistros?: number }
+  ): Promise<{ itens: Solicitacao[]; truncado: boolean }> {
+    const tamanhoPagina = opcoes?.tamanhoPagina ?? 200;
+    const maxRegistros = opcoes?.maxRegistros ?? 5000;
+
+    const itens: Solicitacao[] = [];
+    let offset = 0;
+
+    while (itens.length < maxRegistros) {
+      const pagina = await this.listarTodas(userId, {
+        ...filtros,
+        limite: tamanhoPagina,
+        offset,
+      });
+
+      itens.push(...pagina);
+
+      // Página incompleta = acabou o resultado
+      if (pagina.length < tamanhoPagina) {
+        return { itens, truncado: false };
+      }
+      offset += tamanhoPagina;
+    }
+
+    return { itens, truncado: true };
+  },
+
+  /**
+   * Contadores por status de TODA a base visível ao usuário, sem os filtros
+   * da tela. Existe porque os cards de Pendentes/Aprovadas/Rejeitadas devem
+   * mostrar o total real — antes eram contados sobre a lista já carregada,
+   * então mudavam conforme o filtro aplicado.
+   */
+  async contarCentral(userId: string): Promise<{ pendentes: number; aprovadas: number; rejeitadas: number }> {
+    const { data, error } = await supabase.rpc('fn_contar_solicitacoes_central', {
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.error('Erro ao contar solicitações:', error);
+      return { pendentes: 0, aprovadas: 0, rejeitadas: 0 };
+    }
+
+    const r = Array.isArray(data) ? data[0] : data;
+    return {
+      pendentes: Number(r?.pendentes || 0),
+      aprovadas: Number(r?.aprovadas || 0),
+      rejeitadas: Number(r?.rejeitadas || 0),
+    };
   },
 
   // Aprovar solicitação

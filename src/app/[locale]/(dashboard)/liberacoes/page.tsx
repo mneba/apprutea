@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   FileText, 
   Clock, 
@@ -22,7 +22,6 @@ import {
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import { comCache, chave, temCache, invalidarCache, TTL_CURTO, TTL_LONGO } from '@/lib/cacheDados';
-import { organizacaoService } from '@/services/organizacao';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
 import { usuariosService } from '@/services/usuarios';
 import { ModalDetalhesCliente } from '@/components/clientes';
@@ -132,7 +131,7 @@ function ModalDetalhesSolicitacao({
   onVendaResolvida?: () => void;
   loading: boolean;
   /** País › Estado › Cidade da empresa; string vazia quando não resolvido */
-  descreverOrigem: (empresaId: string | null) => string;
+  descreverOrigem: (s: Solicitacao) => string;
 }) {
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [motivoAprovacao, setMotivoAprovacao] = useState('');
@@ -499,8 +498,8 @@ function ModalDetalhesSolicitacao({
                   <span className="text-sm text-gray-500">Empresa</span>
                   <div className="text-right min-w-0">
                     <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                    {descreverOrigem(solicitacao.empresa_id) && (
-                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    {descreverOrigem(solicitacao) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao)}</p>
                     )}
                   </div>
                 </div>
@@ -548,8 +547,8 @@ function ModalDetalhesSolicitacao({
                   <span className="text-sm text-gray-500">Empresa</span>
                   <div className="text-right min-w-0">
                     <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                    {descreverOrigem(solicitacao.empresa_id) && (
-                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    {descreverOrigem(solicitacao) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao)}</p>
                     )}
                   </div>
                 </div>
@@ -611,8 +610,8 @@ function ModalDetalhesSolicitacao({
                   <span className="text-sm text-gray-500">Empresa</span>
                   <div className="text-right min-w-0">
                     <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                    {descreverOrigem(solicitacao.empresa_id) && (
-                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    {descreverOrigem(solicitacao) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao)}</p>
                     )}
                   </div>
                 </div>
@@ -716,8 +715,8 @@ function ModalDetalhesSolicitacao({
                   <span className="text-sm text-gray-500">Empresa</span>
                   <div className="text-right min-w-0">
                     <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                    {descreverOrigem(solicitacao.empresa_id) && (
-                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    {descreverOrigem(solicitacao) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao)}</p>
                     )}
                   </div>
                 </div>
@@ -818,8 +817,8 @@ function ModalDetalhesSolicitacao({
                       <span className="text-sm text-gray-500">Empresa</span>
                       <div className="text-right min-w-0">
                         <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
-                        {descreverOrigem(solicitacao.empresa_id) && (
-                          <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                        {descreverOrigem(solicitacao) && (
+                          <p className="text-xs text-gray-500">{descreverOrigem(solicitacao)}</p>
                         )}
                       </div>
                     </div>
@@ -1252,9 +1251,12 @@ function BadgeStatus({ status }: { status: string }) {
 
 // Página Principal
 export default function LiberacoesPage() {
-  const { user, isSuperAdmin } = useUser();
+  const { user, isSuperAdmin, profile } = useUser();
   const [loading, setLoading] = useState(true);
   const [todasSolicitacoes, setTodasSolicitacoes] = useState<Solicitacao[]>([]);
+  // Teto de segurança da paginação foi atingido: os filtros locais podem
+  // estar varrendo um conjunto incompleto e o usuário precisa saber.
+  const [listaTruncada, setListaTruncada] = useState(false);
   const [solicitacaoSelecionada, setSolicitacaoSelecionada] = useState<Solicitacao | null>(null);
   const [loadingAcao, setLoadingAcao] = useState(false);
 
@@ -1275,20 +1277,77 @@ export default function LiberacoesPage() {
     'CLIENTES': ['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL', 'CLIENTE_OUTRA_ROTA'],
   };
 
-  // Carregar TODAS as solicitações (sem filtro de status)
+  // Texto digitado só vai ao servidor depois que o usuário para de digitar
+  const [buscaAplicada, setBuscaAplicada] = useState('');
+  const [clienteAplicado, setClienteAplicado] = useState('');
+
+  useEffect(() => {
+    const t = setTimeout(() => setBuscaAplicada(busca.trim()), 350);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setClienteAplicado(filtroCliente.trim()), 350);
+    return () => clearTimeout(t);
+  }, [filtroCliente]);
+
+  // Tipos a enviar ao banco. Junta o filtro por categoria com os tipos cujo
+  // RÓTULO casa com o termo buscado — o dicionário de rótulos é do front, e
+  // duplicá-lo em SQL seria uma armadilha de manutenção. Assim a busca por
+  // "renovação" continua encontrando RENOVACAO_EXCEDE_LIMITE, como antes.
+  const tiposDoFiltro = useMemo(() => {
+    const daCategoria = filtroCategoria ? (CATEGORIAS[filtroCategoria] || []) : null;
+
+    let porRotulo: string[] | null = null;
+    if (buscaAplicada) {
+      const termo = buscaAplicada.toLowerCase();
+      porRotulo = Object.entries(TIPO_SOLICITACAO_LABELS)
+        .filter(([, rotulo]) => rotulo.toLowerCase().includes(termo))
+        .map(([codigo]) => codigo);
+    }
+
+    if (daCategoria && porRotulo) {
+      // Interseção: precisa satisfazer os dois
+      const set = new Set(porRotulo);
+      return daCategoria.filter((t) => set.has(t));
+    }
+    return daCategoria || porRotulo;
+  }, [filtroCategoria, buscaAplicada]);
+
+  // Todos os filtros vão ao banco. A lista que chega já é o resultado final —
+  // a tela não filtra mais nada em memória, então não há como um registro
+  // existente sumir por estar fora de um recorte carregado.
   const carregarSolicitacoes = async (opts?: { forcar?: boolean }) => {
     if (!user) return;
+
+    const filtros = {
+      status: filtroStatus || null,
+      tipo: filtroTipo || null,
+      tipos: tiposDoFiltro,
+      empresa_id: filtroEmpresa || null,
+      cliente: clienteAplicado || null,
+      data_solicitada: filtroData || null,
+      busca: buscaAplicada || null,
+    };
+
     // TTL curto de propósito: esta é uma fila de trabalho e ver uma
     // solicitação já resolvida (ou não ver uma nova) é pior do que esperar.
     // Toda aprovação/rejeição invalida a chave logo abaixo.
-    const k = chave('liberacoes:lista', user.id, filtroTipo);
+    const k = chave(
+      'liberacoes:lista', user.id, filtroStatus, filtroTipo,
+      tiposDoFiltro || undefined, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada
+    );
     if (!temCache(k)) setLoading(true);
     try {
-      const data = await comCache(k, () => solicitacoesService.listarTodas(user.id, {
-        status: null, // Busca todas
-        tipo: filtroTipo || null,
-      }), { ttlMs: TTL_CURTO, forcar: opts?.forcar });
-      setTodasSolicitacoes(data);
+      // O conjunto filtrado é pequeno, mas ainda paginamos até esgotar para
+      // que a tabela nunca mostre um recorte silencioso.
+      const { itens, truncado } = await comCache(
+        k,
+        () => solicitacoesService.listarTodasCompleto(user.id, filtros),
+        { ttlMs: TTL_CURTO, forcar: opts?.forcar }
+      );
+      setTodasSolicitacoes(itens);
+      setListaTruncada(truncado);
     } catch (err) {
       console.error('Erro ao carregar solicitações:', err);
     } finally {
@@ -1298,7 +1357,29 @@ export default function LiberacoesPage() {
 
   useEffect(() => {
     carregarSolicitacoes();
-  }, [user, filtroTipo]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, filtroStatus, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada]);
+
+  // Contadores dos cards: total real da base visível, independente dos
+  // filtros. Antes eram contados sobre a lista carregada e encolhiam junto
+  // com o filtro aplicado, o que confundia.
+  const [contadores, setContadores] = useState({ pendentes: 0, aprovadas: 0, rejeitadas: 0 });
+
+  const carregarContadores = useCallback(async (opts?: { forcar?: boolean }) => {
+    if (!user) return;
+    try {
+      const totais = await comCache(
+        chave('liberacoes:contadores', user.id),
+        () => solicitacoesService.contarCentral(user.id),
+        { ttlMs: TTL_CURTO, forcar: opts?.forcar }
+      );
+      setContadores(totais);
+    } catch (err) {
+      console.error('Erro ao carregar contadores:', err);
+    }
+  }, [user]);
+
+  useEffect(() => { carregarContadores(); }, [carregarContadores]);
 
   // ============================================
   // ORIGEM DA SOLICITAÇÃO (país › cidade)
@@ -1306,43 +1387,39 @@ export default function LiberacoesPage() {
   // A RPC fn_listar_solicitacoes_central devolve só empresa_nome e rota_nome.
   // Em vez de alterar a função no banco, montamos aqui o caminho completo a
   // partir de empresas (que já traz a hierarquia com país/estado) e cidades.
-  const [empresasIndex, setEmpresasIndex] = useState<Record<string, { pais: string; estado: string; cidade: string }>>({});
+  const [empresasIndex, setEmpresasIndex] = useState<Record<string, { nome: string }>>({});
 
   useEffect(() => {
     let ativo = true;
     (async () => {
       try {
         const empresas = await comCache(chave('usuarios:empresas'), () => usuariosService.listarEmpresas(), { ttlMs: TTL_LONGO });
-        const cidades = await comCache(chave('organizacao:cidades'), () => organizacaoService.listarTodasCidades(), { ttlMs: TTL_LONGO });
         if (!ativo) return;
 
-        const nomeCidadePorId: Record<string, string> = {};
-        (cidades || []).forEach((c: any) => { nomeCidadePorId[c.id] = c.nome; });
+        // SUPER_ADMIN enxerga todas; os demais, só as empresas do próprio perfil.
+        const permitidas = isSuperAdmin ? null : new Set(profile?.empresas_ids || []);
 
-        const index: Record<string, { pais: string; estado: string; cidade: string }> = {};
+        const index: Record<string, { nome: string }> = {};
         (empresas || []).forEach((e: any) => {
-          index[e.id] = {
-            pais: e.hierarquia?.pais || '',
-            estado: e.hierarquia?.estado || '',
-            cidade: e.cidade_id ? (nomeCidadePorId[e.cidade_id] || '') : '',
-          };
+          if (permitidas && !permitidas.has(e.id)) return;
+          index[e.id] = { nome: e.nome };
         });
         setEmpresasIndex(index);
       } catch (err) {
-        // Sem o índice a tela continua funcionando, só não mostra país/cidade
-        console.error('Erro ao carregar origem das empresas:', err);
+        // Sem o índice o dropdown de empresas fica vazio, o resto funciona
+        console.error('Erro ao carregar empresas do filtro:', err);
       }
     })();
     return () => { ativo = false; };
-  }, []);
+  }, [isSuperAdmin, profile?.empresas_ids]);
 
-  /** "Brasil › São Paulo › Campinas" — vazio quando a empresa é desconhecida */
-  const descreverOrigem = useCallback((empresaId: string | null): string => {
-    if (!empresaId) return '';
-    const o = empresasIndex[empresaId];
-    if (!o) return '';
-    return [o.pais, o.estado, o.cidade].filter(Boolean).join(' › ');
-  }, [empresasIndex]);
+  /**
+   * "Brasil › São Paulo › Campinas" — agora vem pronto da RPC, que faz o
+   * JOIN com hierarquias e cidades. Não depende mais de índice no cliente.
+   */
+  const descreverOrigem = useCallback((s: Solicitacao): string => {
+    return [s.pais, s.estado, s.cidade_nome].filter(Boolean).join(' › ');
+  }, []);
 
   // Aprovar solicitação
   const handleAprovar = async (motivo?: string) => {
@@ -1368,6 +1445,7 @@ export default function LiberacoesPage() {
         setSolicitacaoSelecionada(null);
         invalidarCache('liberacoes:');
         carregarSolicitacoes({ forcar: true });
+        carregarContadores({ forcar: true });
       } else {
         alert(resultado.message);
       }
@@ -1393,6 +1471,7 @@ export default function LiberacoesPage() {
         setSolicitacaoSelecionada(null);
         invalidarCache('liberacoes:');
         carregarSolicitacoes({ forcar: true });
+        carregarContadores({ forcar: true });
       } else {
         alert(resultado.message);
       }
@@ -1404,52 +1483,8 @@ export default function LiberacoesPage() {
     }
   };
 
-  // Contadores (baseados em TODAS as solicitações)
-  const contadores = {
-    pendentes: todasSolicitacoes.filter((s) => s.status === 'PENDENTE').length,
-    aprovadas: todasSolicitacoes.filter((s) => s.status === 'APROVADO').length,
-    rejeitadas: todasSolicitacoes.filter((s) => s.status === 'REJEITADO').length,
-  };
-
-  // Filtrar por status e busca (para a tabela)
-  const solicitacoesFiltradas = todasSolicitacoes.filter((s) => {
-    // Filtro de status
-    if (filtroStatus && s.status !== filtroStatus) return false;
-    
-    // Filtro de tipo específico
-    if (filtroTipo && s.tipo_solicitacao !== filtroTipo) return false;
-
-    // Filtro de categoria
-    if (filtroCategoria && CATEGORIAS[filtroCategoria]) {
-      if (!CATEGORIAS[filtroCategoria].includes(s.tipo_solicitacao)) return false;
-    }
-
-    // Filtro de cliente
-    if (filtroCliente) {
-      const termoCliente = filtroCliente.toLowerCase();
-      if (!s.cliente_nome?.toLowerCase().includes(termoCliente)) return false;
-    }
-
-    // Filtro de data (data_solicitada)
-    if (filtroData && s.data_solicitada !== filtroData) return false;
-
-    // Filtro de empresa (apenas SUPER_ADMIN usa; para os demais fica sempre vazio)
-    if (filtroEmpresa && s.empresa_id !== filtroEmpresa) return false;
-    
-    // Filtro de busca geral
-    if (busca) {
-      const termo = busca.toLowerCase();
-      const encontrou = (
-        s.vendedor_nome?.toLowerCase().includes(termo) ||
-        s.rota_nome?.toLowerCase().includes(termo) ||
-        s.cliente_nome?.toLowerCase().includes(termo) ||
-        TIPO_SOLICITACAO_LABELS[s.tipo_solicitacao]?.toLowerCase().includes(termo)
-      );
-      if (!encontrou) return false;
-    }
-
-    return true;
-  });
+  // A lista já vem filtrada do banco — nada mais é descartado aqui.
+  const solicitacoesFiltradas = todasSolicitacoes;
 
   // Limpar todos os filtros
   const limparFiltros = () => {
@@ -1468,14 +1503,16 @@ export default function LiberacoesPage() {
   // Filtro de empresa é exclusivo do SUPER_ADMIN (só ele vê várias empresas)
   const ehSuperAdmin = isSuperAdmin;
 
-  // Empresas presentes nas solicitações carregadas (para o dropdown)
-  const empresasDisponiveis = (() => {
-    const map = new Map<string, string>();
-    for (const s of todasSolicitacoes) {
-      if (s.empresa_id) map.set(s.empresa_id, s.empresa_nome || '—');
-    }
-    return Array.from(map, ([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome));
-  })();
+  // Empresas do dropdown: vêm do cadastro (já restrito por permissão), não
+  // das solicitações carregadas. Antes a lista era derivada do resultado, o
+  // que a fazia encolher a cada filtro aplicado e escondia empresas cuja
+  // solicitação estivesse fora da página carregada.
+  const empresasDisponiveis = useMemo(
+    () => Object.entries(empresasIndex)
+      .map(([id, e]) => ({ id, nome: e.nome }))
+      .sort((a, b) => a.nome.localeCompare(b.nome)),
+    [empresasIndex]
+  );
 
   const formatarData = (data: string) => {
     return new Date(data).toLocaleDateString('pt-BR', {
@@ -1497,7 +1534,7 @@ export default function LiberacoesPage() {
             <p className="text-gray-500 mt-1">Gerencie as solicitações de autorização dos vendedores</p>
           </div>
           <button
-            onClick={() => { invalidarCache('liberacoes:'); carregarSolicitacoes({ forcar: true }); }}
+            onClick={() => { invalidarCache('liberacoes:'); carregarSolicitacoes({ forcar: true }); carregarContadores({ forcar: true }); }}
             disabled={loading}
             className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
           >
@@ -1505,6 +1542,19 @@ export default function LiberacoesPage() {
             Atualizar
           </button>
         </div>
+
+        {/* Aviso de conjunto incompleto — os filtros desta tela são locais,
+            então é preciso dizer quando eles não estão vendo tudo. */}
+        {listaTruncada && (
+          <div className="flex items-start gap-2 px-4 py-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800">
+              Exibindo as {todasSolicitacoes.length} solicitações mais recentes. Há registros
+              mais antigos que não foram carregados — os filtros e a busca abaixo consideram
+              apenas as exibidas. Use o filtro de tipo para reduzir o conjunto.
+            </p>
+          </div>
+        )}
 
         {/* Estatísticas */}
         <div className="grid grid-cols-3 gap-4">
@@ -1719,8 +1769,8 @@ export default function LiberacoesPage() {
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-gray-600">{solicitacao.empresa_nome || '-'}</p>
-                      {descreverOrigem(solicitacao.empresa_id) && (
-                        <p className="text-xs text-gray-400">{descreverOrigem(solicitacao.empresa_id)}</p>
+                      {descreverOrigem(solicitacao) && (
+                        <p className="text-xs text-gray-400">{descreverOrigem(solicitacao)}</p>
                       )}
                     </td>
                     <td className="px-4 py-3 text-gray-600">{solicitacao.rota_nome}</td>
@@ -1755,6 +1805,7 @@ export default function LiberacoesPage() {
             setSolicitacaoSelecionada(null);
             invalidarCache('liberacoes:');
             carregarSolicitacoes({ forcar: true });
+            carregarContadores({ forcar: true });
           }}
           loading={loadingAcao}
           descreverOrigem={descreverOrigem}
