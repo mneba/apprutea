@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   FileText, 
   Clock, 
@@ -21,8 +21,10 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
-import { comCache, chave, temCache, invalidarCache, TTL_CURTO } from '@/lib/cacheDados';
+import { comCache, chave, temCache, invalidarCache, TTL_CURTO, TTL_LONGO } from '@/lib/cacheDados';
+import { organizacaoService } from '@/services/organizacao';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
+import { usuariosService } from '@/services/usuarios';
 import { ModalDetalhesCliente } from '@/components/clientes';
 
 // Labels e ícones por tipo de solicitação
@@ -121,6 +123,7 @@ function ModalDetalhesSolicitacao({
   onRejeitar,
   onVendaResolvida,
   loading,
+  descreverOrigem,
 }: {
   solicitacao: Solicitacao;
   onClose: () => void;
@@ -128,6 +131,8 @@ function ModalDetalhesSolicitacao({
   onRejeitar: (motivo: string) => void;
   onVendaResolvida?: () => void;
   loading: boolean;
+  /** País › Estado › Cidade da empresa; string vazia quando não resolvido */
+  descreverOrigem: (empresaId: string | null) => string;
 }) {
   const [motivoRejeicao, setMotivoRejeicao] = useState('');
   const [motivoAprovacao, setMotivoAprovacao] = useState('');
@@ -490,9 +495,14 @@ function ModalDetalhesSolicitacao({
                   </div>
                 </div>
                 <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start gap-3">
                   <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                  <div className="text-right min-w-0">
+                    <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                    {descreverOrigem(solicitacao.empresa_id) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
@@ -534,9 +544,14 @@ function ModalDetalhesSolicitacao({
                   </div>
                 </div>
                 <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start gap-3">
                   <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                  <div className="text-right min-w-0">
+                    <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                    {descreverOrigem(solicitacao.empresa_id) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
@@ -592,9 +607,14 @@ function ModalDetalhesSolicitacao({
                   </div>
                 </div>
                 <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start gap-3">
                   <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                  <div className="text-right min-w-0">
+                    <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                    {descreverOrigem(solicitacao.empresa_id) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
@@ -692,9 +712,14 @@ function ModalDetalhesSolicitacao({
                   </div>
                 </div>
                 <div className="border-t border-gray-200" />
-                <div className="flex justify-between items-center">
+                <div className="flex justify-between items-start gap-3">
                   <span className="text-sm text-gray-500">Empresa</span>
-                  <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                  <div className="text-right min-w-0">
+                    <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                    {descreverOrigem(solicitacao.empresa_id) && (
+                      <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="border-t border-gray-200" />
                 <div className="flex justify-between items-center">
@@ -789,9 +814,14 @@ function ModalDetalhesSolicitacao({
                       </div>
                     </div>
                     <div className="border-t border-gray-200" />
-                    <div className="flex justify-between items-center">
+                    <div className="flex justify-between items-start gap-3">
                       <span className="text-sm text-gray-500">Empresa</span>
-                      <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                      <div className="text-right min-w-0">
+                        <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                        {descreverOrigem(solicitacao.empresa_id) && (
+                          <p className="text-xs text-gray-500">{descreverOrigem(solicitacao.empresa_id)}</p>
+                        )}
+                      </div>
                     </div>
                     <div className="border-t border-gray-200" />
                     <div className="flex justify-between items-center">
@@ -1270,6 +1300,50 @@ export default function LiberacoesPage() {
     carregarSolicitacoes();
   }, [user, filtroTipo]);
 
+  // ============================================
+  // ORIGEM DA SOLICITAÇÃO (país › cidade)
+  // ============================================
+  // A RPC fn_listar_solicitacoes_central devolve só empresa_nome e rota_nome.
+  // Em vez de alterar a função no banco, montamos aqui o caminho completo a
+  // partir de empresas (que já traz a hierarquia com país/estado) e cidades.
+  const [empresasIndex, setEmpresasIndex] = useState<Record<string, { pais: string; estado: string; cidade: string }>>({});
+
+  useEffect(() => {
+    let ativo = true;
+    (async () => {
+      try {
+        const empresas = await comCache(chave('usuarios:empresas'), () => usuariosService.listarEmpresas(), { ttlMs: TTL_LONGO });
+        const cidades = await comCache(chave('organizacao:cidades'), () => organizacaoService.listarTodasCidades(), { ttlMs: TTL_LONGO });
+        if (!ativo) return;
+
+        const nomeCidadePorId: Record<string, string> = {};
+        (cidades || []).forEach((c: any) => { nomeCidadePorId[c.id] = c.nome; });
+
+        const index: Record<string, { pais: string; estado: string; cidade: string }> = {};
+        (empresas || []).forEach((e: any) => {
+          index[e.id] = {
+            pais: e.hierarquia?.pais || '',
+            estado: e.hierarquia?.estado || '',
+            cidade: e.cidade_id ? (nomeCidadePorId[e.cidade_id] || '') : '',
+          };
+        });
+        setEmpresasIndex(index);
+      } catch (err) {
+        // Sem o índice a tela continua funcionando, só não mostra país/cidade
+        console.error('Erro ao carregar origem das empresas:', err);
+      }
+    })();
+    return () => { ativo = false; };
+  }, []);
+
+  /** "Brasil › São Paulo › Campinas" — vazio quando a empresa é desconhecida */
+  const descreverOrigem = useCallback((empresaId: string | null): string => {
+    if (!empresaId) return '';
+    const o = empresasIndex[empresaId];
+    if (!o) return '';
+    return [o.pais, o.estado, o.cidade].filter(Boolean).join(' › ');
+  }, [empresasIndex]);
+
   // Aprovar solicitação
   const handleAprovar = async (motivo?: string) => {
     if (!solicitacaoSelecionada || !user) return;
@@ -1643,7 +1717,12 @@ export default function LiberacoesPage() {
                       <p className="text-gray-900">{solicitacao.vendedor_nome}</p>
                       <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{solicitacao.empresa_nome || '-'}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-gray-600">{solicitacao.empresa_nome || '-'}</p>
+                      {descreverOrigem(solicitacao.empresa_id) && (
+                        <p className="text-xs text-gray-400">{descreverOrigem(solicitacao.empresa_id)}</p>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-600">{solicitacao.rota_nome}</td>
                     <td className="px-4 py-3 text-gray-600">{formatarData(solicitacao.created_at)}</td>
                     <td className="px-4 py-3 text-center">
@@ -1678,6 +1757,7 @@ export default function LiberacoesPage() {
             carregarSolicitacoes({ forcar: true });
           }}
           loading={loadingAcao}
+          descreverOrigem={descreverOrigem}
         />
       )}
     </div>
