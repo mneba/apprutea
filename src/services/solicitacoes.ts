@@ -220,6 +220,28 @@ export const solicitacoesService = {
   },
 
   /**
+   * Empresas que possuem ao menos uma solicitação visível ao usuário.
+   * Fonte do dropdown de filtro: o cadastro inteiro polui e derivar da lista
+   * carregada faria o dropdown encolher a cada filtro aplicado.
+   */
+  async listarEmpresasComSolicitacoes(userId: string): Promise<Array<{ id: string; nome: string; total: number }>> {
+    const { data, error } = await supabase.rpc('fn_listar_empresas_com_solicitacoes', {
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.error('Erro ao listar empresas com solicitações:', error);
+      return [];
+    }
+
+    return (data || []).map((e: any) => ({
+      id: e.empresa_id,
+      nome: e.empresa_nome || '—',
+      total: Number(e.total || 0),
+    }));
+  },
+
+  /**
    * Contadores por status de TODA a base visível ao usuário, sem os filtros
    * da tela. Existe porque os cards de Pendentes/Aprovadas/Rejeitadas devem
    * mostrar o total real — antes eram contados sobre a lista já carregada,

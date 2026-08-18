@@ -21,9 +21,8 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
-import { comCache, chave, temCache, invalidarCache, TTL_CURTO, TTL_LONGO } from '@/lib/cacheDados';
+import { comCache, chave, temCache, invalidarCache, TTL_CURTO } from '@/lib/cacheDados';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
-import { usuariosService } from '@/services/usuarios';
 import { ModalDetalhesCliente } from '@/components/clientes';
 
 // Labels e ícones por tipo de solicitação
@@ -1251,7 +1250,7 @@ function BadgeStatus({ status }: { status: string }) {
 
 // Página Principal
 export default function LiberacoesPage() {
-  const { user, isSuperAdmin, profile } = useUser();
+  const { user, isSuperAdmin } = useUser();
   const [loading, setLoading] = useState(true);
   const [todasSolicitacoes, setTodasSolicitacoes] = useState<Solicitacao[]>([]);
   // Teto de segurança da paginação foi atingido: os filtros locais podem
@@ -1382,36 +1381,31 @@ export default function LiberacoesPage() {
   useEffect(() => { carregarContadores(); }, [carregarContadores]);
 
   // ============================================
-  // ORIGEM DA SOLICITAÇÃO (país › cidade)
+  // EMPRESAS DO FILTRO
   // ============================================
-  // A RPC fn_listar_solicitacoes_central devolve só empresa_nome e rota_nome.
-  // Em vez de alterar a função no banco, montamos aqui o caminho completo a
-  // partir de empresas (que já traz a hierarquia com país/estado) e cidades.
-  const [empresasIndex, setEmpresasIndex] = useState<Record<string, { nome: string }>>({});
+  // Só as que têm alguma solicitação — o cadastro inteiro polui, e derivar
+  // da lista carregada faria o dropdown encolher a cada filtro aplicado.
+  // A permissão é aplicada dentro da própria RPC.
+  const [empresasComSolicitacao, setEmpresasComSolicitacao] = useState<Array<{ id: string; nome: string; total: number }>>([]);
 
   useEffect(() => {
+    if (!user) return;
     let ativo = true;
     (async () => {
       try {
-        const empresas = await comCache(chave('usuarios:empresas'), () => usuariosService.listarEmpresas(), { ttlMs: TTL_LONGO });
-        if (!ativo) return;
-
-        // SUPER_ADMIN enxerga todas; os demais, só as empresas do próprio perfil.
-        const permitidas = isSuperAdmin ? null : new Set(profile?.empresas_ids || []);
-
-        const index: Record<string, { nome: string }> = {};
-        (empresas || []).forEach((e: any) => {
-          if (permitidas && !permitidas.has(e.id)) return;
-          index[e.id] = { nome: e.nome };
-        });
-        setEmpresasIndex(index);
+        const lista = await comCache(
+          chave('liberacoes:empresas', user.id),
+          () => solicitacoesService.listarEmpresasComSolicitacoes(user.id),
+          { ttlMs: TTL_CURTO }
+        );
+        if (ativo) setEmpresasComSolicitacao(lista);
       } catch (err) {
-        // Sem o índice o dropdown de empresas fica vazio, o resto funciona
+        // Sem a lista o dropdown fica vazio; o resto da tela funciona
         console.error('Erro ao carregar empresas do filtro:', err);
       }
     })();
     return () => { ativo = false; };
-  }, [isSuperAdmin, profile?.empresas_ids]);
+  }, [user]);
 
   /**
    * "Brasil › São Paulo › Campinas" — agora vem pronto da RPC, que faz o
@@ -1507,12 +1501,21 @@ export default function LiberacoesPage() {
   // das solicitações carregadas. Antes a lista era derivada do resultado, o
   // que a fazia encolher a cada filtro aplicado e escondia empresas cuja
   // solicitação estivesse fora da página carregada.
-  const empresasDisponiveis = useMemo(
-    () => Object.entries(empresasIndex)
-      .map(([id, e]) => ({ id, nome: e.nome }))
-      .sort((a, b) => a.nome.localeCompare(b.nome)),
-    [empresasIndex]
-  );
+  const empresasDisponiveis = empresasComSolicitacao;
+
+  // Combobox de empresa: texto digitado filtra a lista
+  const [buscaEmpresa, setBuscaEmpresa] = useState('');
+  const [dropdownEmpresaAberto, setDropdownEmpresaAberto] = useState(false);
+
+  const empresasFiltradas = useMemo(() => {
+    const termo = buscaEmpresa.trim().toLowerCase();
+    if (!termo) return empresasDisponiveis;
+    return empresasDisponiveis.filter((e) => e.nome.toLowerCase().includes(termo));
+  }, [empresasDisponiveis, buscaEmpresa]);
+
+  const nomeEmpresaSelecionada = filtroEmpresa
+    ? (empresasDisponiveis.find((e) => e.id === filtroEmpresa)?.nome || 'Empresa selecionada')
+    : '';
 
   const formatarData = (data: string) => {
     return new Date(data).toLocaleDateString('pt-BR', {
@@ -1687,16 +1690,68 @@ export default function LiberacoesPage() {
             </select>
 
             {ehSuperAdmin && empresasDisponiveis.length > 0 && (
-              <select
-                value={filtroEmpresa}
-                onChange={(e) => setFiltroEmpresa(e.target.value)}
-                className="px-4 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white text-sm min-w-[180px]"
-              >
-                <option value="">Todas as empresas</option>
-                {empresasDisponiveis.map((emp) => (
-                  <option key={emp.id} value={emp.id}>{emp.nome}</option>
-                ))}
-              </select>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => { setDropdownEmpresaAberto((v) => !v); setBuscaEmpresa(''); }}
+                  className="flex items-center justify-between gap-2 px-4 py-2 rounded-lg border border-gray-200 bg-white text-sm min-w-[200px] hover:border-gray-300"
+                >
+                  <span className={filtroEmpresa ? 'text-gray-900 truncate' : 'text-gray-500'}>
+                    {filtroEmpresa ? nomeEmpresaSelecionada : 'Todas as empresas'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </button>
+
+                {dropdownEmpresaAberto && (
+                  <>
+                    {/* Camada para fechar ao clicar fora */}
+                    <div className="fixed inset-0 z-40" onClick={() => setDropdownEmpresaAberto(false)} />
+                    <div className="absolute left-0 top-full mt-1 w-72 bg-white rounded-lg shadow-lg border border-gray-200 z-50">
+                      <div className="p-2 border-b border-gray-100">
+                        <div className="relative">
+                          <Search className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                          <input
+                            type="text"
+                            autoFocus
+                            value={buscaEmpresa}
+                            onChange={(e) => setBuscaEmpresa(e.target.value)}
+                            placeholder="Digite para filtrar..."
+                            className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="max-h-64 overflow-y-auto py-1">
+                        <button
+                          type="button"
+                          onClick={() => { setFiltroEmpresa(''); setDropdownEmpresaAberto(false); }}
+                          className={`w-full text-left px-3 py-2 text-sm hover:bg-gray-50 ${!filtroEmpresa ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
+                        >
+                          Todas as empresas
+                        </button>
+
+                        {empresasFiltradas.map((emp) => (
+                          <button
+                            key={emp.id}
+                            type="button"
+                            onClick={() => { setFiltroEmpresa(emp.id); setDropdownEmpresaAberto(false); }}
+                            className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-gray-50 ${filtroEmpresa === emp.id ? 'text-blue-600 font-medium' : 'text-gray-700'}`}
+                          >
+                            <span className="truncate text-left">{emp.nome}</span>
+                            <span className="text-xs text-gray-400 flex-shrink-0">{emp.total}</span>
+                          </button>
+                        ))}
+
+                        {empresasFiltradas.length === 0 && (
+                          <p className="px-3 py-3 text-sm text-gray-400 text-center">
+                            Nenhuma empresa encontrada
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
 
             {temFiltrosAtivos && (
