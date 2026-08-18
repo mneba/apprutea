@@ -20,3 +20,17 @@ body {
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
 }
+
+/* Campos monetários: sem as setinhas de incremento/decremento.
+   Em formulário financeiro elas não ajudam (ninguém lança valor de centavo
+   em centavo) e ainda ocupam espaço sobre o campo. */
+.sem-spinner {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.sem-spinner::-webkit-outer-spin-button,
+.sem-spinner::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

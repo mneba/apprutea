@@ -362,8 +362,9 @@ export function ModalNovaMovimentacao({
                   min="0.01"
                   value={valor}
                   onChange={(e) => setValor(e.target.value)}
+                  onWheel={(e) => e.currentTarget.blur()}
                   placeholder="0,00"
-                  className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>
@@ -662,8 +663,9 @@ export function ModalTransferencia({
                 max={contaOrigemObj?.saldo_atual || undefined}
                 value={valor}
                 onChange={(e) => setValor(e.target.value)}
+                onWheel={(e) => e.currentTarget.blur()}
                 placeholder="0,00"
-                className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
           </div>
@@ -899,8 +901,9 @@ export function ModalAjusteSaldo({
                     step="0.01"
                     value={saldoFinal}
                     onChange={(e) => setSaldoFinal(e.target.value)}
+                    onWheel={(e) => e.currentTarget.blur()}
                     placeholder="0,00"
-                    className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-amber-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
+                    className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-amber-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
                   />
                 </div>
               </div>
