@@ -1359,24 +1359,35 @@ export default function LiberacoesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, filtroStatus, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada]);
 
-  // Contadores dos cards: total real da base visível, independente dos
-  // filtros. Antes eram contados sobre a lista carregada e encolhiam junto
-  // com o filtro aplicado, o que confundia.
-  const [contadores, setContadores] = useState({ pendentes: 0, aprovadas: 0, rejeitadas: 0 });
+  // Contadores dos cards. Seguem os mesmos filtros da lista, EXCETO status:
+  // trocar de empresa muda os números, mas clicar em "Pendentes" não pode
+  // zerar os outros cards. Antes eram contados sobre a lista já carregada.
+  const [contadores, setContadores] = useState({ pendentes: 0, aprovadas: 0, rejeitadas: 0, total: 0 });
 
   const carregarContadores = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!user) return;
+    const filtrosContagem = {
+      tipo: filtroTipo || null,
+      tipos: tiposDoFiltro,
+      empresa_id: filtroEmpresa || null,
+      cliente: clienteAplicado || null,
+      data_solicitada: filtroData || null,
+      busca: buscaAplicada || null,
+    };
     try {
       const totais = await comCache(
-        chave('liberacoes:contadores', user.id),
-        () => solicitacoesService.contarCentral(user.id),
+        chave(
+          'liberacoes:contadores', user.id, filtroTipo,
+          tiposDoFiltro || undefined, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada
+        ),
+        () => solicitacoesService.contarCentral(user.id, filtrosContagem),
         { ttlMs: TTL_CURTO, forcar: opts?.forcar }
       );
       setContadores(totais);
     } catch (err) {
       console.error('Erro ao carregar contadores:', err);
     }
-  }, [user]);
+  }, [user, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada]);
 
   useEffect(() => { carregarContadores(); }, [carregarContadores]);
 
@@ -1559,8 +1570,28 @@ export default function LiberacoesPage() {
           </div>
         )}
 
-        {/* Estatísticas */}
-        <div className="grid grid-cols-3 gap-4">
+        {/* Estatísticas — respeitam empresa/tipo/cliente/data/busca, mas não
+            o status, senão selecionar um card zeraria os demais. */}
+        <div className="grid grid-cols-4 gap-4">
+          <button
+            onClick={() => setFiltroStatus('')}
+            className={`p-4 rounded-xl border-2 transition-colors ${
+              !filtroStatus
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 bg-white hover:border-blue-300'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-blue-600" />
+              </div>
+              <div className="text-left">
+                <p className="text-2xl font-bold text-blue-600">{contadores.total}</p>
+                <p className="text-sm text-gray-600">Total</p>
+              </div>
+            </div>
+          </button>
+
           <button
             onClick={() => setFiltroStatus('PENDENTE')}
             className={`p-4 rounded-xl border-2 transition-colors ${

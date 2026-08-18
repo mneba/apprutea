@@ -242,19 +242,28 @@ export const solicitacoesService = {
   },
 
   /**
-   * Contadores por status de TODA a base visível ao usuário, sem os filtros
-   * da tela. Existe porque os cards de Pendentes/Aprovadas/Rejeitadas devem
-   * mostrar o total real — antes eram contados sobre a lista já carregada,
-   * então mudavam conforme o filtro aplicado.
+   * Contadores dos cards. Aplica os MESMOS filtros da listagem, exceto o
+   * status: trocar de empresa tem de mudar os números, mas selecionar
+   * "Pendentes" não pode zerar os outros dois cards.
    */
-  async contarCentral(userId: string): Promise<{ pendentes: number; aprovadas: number; rejeitadas: number }> {
+  async contarCentral(
+    userId: string,
+    filtros: Omit<FiltrosSolicitacoes, 'status' | 'limite' | 'offset'> = {}
+  ): Promise<{ pendentes: number; aprovadas: number; rejeitadas: number; total: number }> {
     const { data, error } = await supabase.rpc('fn_contar_solicitacoes_central', {
       p_user_id: userId,
+      p_rota_id: filtros.rota_id || null,
+      p_tipo: filtros.tipo || null,
+      p_empresa_id: filtros.empresa_id || null,
+      p_cliente: filtros.cliente || null,
+      p_data_solicitada: filtros.data_solicitada || null,
+      p_busca: filtros.busca || null,
+      p_tipos: filtros.tipos && filtros.tipos.length > 0 ? filtros.tipos : null,
     });
 
     if (error) {
       console.error('Erro ao contar solicitações:', error);
-      return { pendentes: 0, aprovadas: 0, rejeitadas: 0 };
+      return { pendentes: 0, aprovadas: 0, rejeitadas: 0, total: 0 };
     }
 
     const r = Array.isArray(data) ? data[0] : data;
@@ -262,6 +271,7 @@ export const solicitacoesService = {
       pendentes: Number(r?.pendentes || 0),
       aprovadas: Number(r?.aprovadas || 0),
       rejeitadas: Number(r?.rejeitadas || 0),
+      total: Number(r?.total || 0),
     };
   },
 
