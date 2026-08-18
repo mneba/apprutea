@@ -1235,8 +1235,13 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [rota, carregarDadosCalendario]);
 
-  // Busca a data da última liquidação FECHADA/APROVADA da rota
-  // (usada pra validar se a liquidação atual pode ser reaberta)
+  // Data da ÚLTIMA liquidação da rota, em qualquer status.
+  // Serve para liberar a reabertura: só o último dia pode ser reaberto, e
+  // "último" significa que nenhum dia posterior foi iniciado. Antes esta
+  // consulta filtrava por FECHADO/APROVADO, então com 16/07 fechado e 17/07
+  // aberto o 16 aparecia como "a última fechada" e o botão liberava —
+  // reabrir ali quebraria a sequência de caixa, já que o saldo final do 16
+  // é o saldo inicial do 17, que já foi consumido.
   useEffect(() => {
     if (!rota) {
       setUltimaDataFechada(null);
@@ -1249,7 +1254,6 @@ export default function LiquidacaoDiariaPage() {
           .from('liquidacoes_diarias')
           .select('data_liquidacao')
           .eq('rota_id', rota.id)
-          .in('status', ['FECHADO', 'APROVADO'])
           .order('data_liquidacao', { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -1900,20 +1904,22 @@ export default function LiquidacaoDiariaPage() {
             )}
           </button>
           {liquidacao?.status === 'FECHADO' && podeReabrir && (() => {
-            // Só pode reabrir se for a última liquidação fechada da rota
+            // Só reabre se nenhum dia posterior da rota tiver sido iniciado.
+            // `ultimaDataFechada` guarda a última data em QUALQUER status, então
+            // basta ser ela própria. Mesma regra da fn_reabrir_liquidacao_diaria.
             const dataLiqAtual = (liquidacao as any)?.data_liquidacao
               || liquidacao?.data_abertura?.split('T')[0];
-            const ehUltimaFechada = !!ultimaDataFechada && dataLiqAtual === ultimaDataFechada;
-            const ultimaFmt = ultimaDataFechada
+            const ehUltimoDia = !!ultimaDataFechada && dataLiqAtual === ultimaDataFechada;
+            const posteriorFmt = ultimaDataFechada
               ? new Date(ultimaDataFechada + 'T12:00:00').toLocaleDateString('pt-BR')
               : '';
             return (
               <button
-                onClick={() => ehUltimaFechada && setModalReabrir(true)}
-                disabled={!ehUltimaFechada}
-                title={ehUltimaFechada
+                onClick={() => ehUltimoDia && setModalReabrir(true)}
+                disabled={!ehUltimoDia}
+                title={ehUltimoDia
                   ? 'Reabrir esta liquidação'
-                  : `Só é permitido reabrir a última liquidação fechada (${ultimaFmt}).`}
+                  : `Não é possível reabrir: o dia ${posteriorFmt} já foi iniciado. Só o último dia da rota pode ser reaberto.`}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-100"
               >
                 <RotateCcw className="w-3.5 h-3.5" />Reabrir
