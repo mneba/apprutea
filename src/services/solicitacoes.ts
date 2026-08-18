@@ -53,6 +53,7 @@ export interface Solicitacao {
   emprestimo_id: string | null;
   parcela_id: string | null;
   venda_pendente_id: string | null;
+  renovacao_pendente_id: string | null;
   valor_solicitado: number | null;
   valor_limite: number | null;
   resolvido_por: string | null;

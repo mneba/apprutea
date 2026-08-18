@@ -142,6 +142,10 @@ function ModalDetalhesSolicitacao({
   const [vendaPendente, setVendaPendente] = useState<any>(null);
   const [loadingVenda, setLoadingVenda] = useState(false);
   const [editVenda, setEditVenda] = useState<any>(null);
+  // Renovação pendente (RENOVACAO_EXCEDE_ANTERIOR)
+  const [renovacaoPendente, setRenovacaoPendente] = useState<any>(null);
+  const [loadingRenovacao, setLoadingRenovacao] = useState(false);
+  const [editRenovacao, setEditRenovacao] = useState<any>(null);
 
   const [movimentacaoPendente, setMovimentacaoPendente] = useState<any>(null);
   const [movimentacaoId, setMovimentacaoId] = useState<string | null>(null);
@@ -213,6 +217,7 @@ function ModalDetalhesSolicitacao({
   const isEmprestimoAdicional = solicitacao.tipo_solicitacao === 'EMPRESTIMO_ADICIONAL';
   const isAutorizacaoCliente = isRenegociacao || isEmprestimoAdicional;
   const isVendaExcedeLimite = solicitacao.tipo_solicitacao === 'VENDA_EXCEDE_LIMITE';
+  const isRenovacaoExcedeAnterior = solicitacao.tipo_solicitacao === 'RENOVACAO_EXCEDE_ANTERIOR';
   const isMovimentacaoExcedeLimite =
     solicitacao.tipo_solicitacao === 'DESPESA_EXCEDE_LIMITE' ||
     solicitacao.tipo_solicitacao === 'RECEITA_EXCEDE_LIMITE';
@@ -301,6 +306,50 @@ function ModalDetalhesSolicitacao({
 
     carregarVendaPendente();
   }, [isVendaExcedeLimite, (solicitacao as any).venda_pendente_id]);
+
+  // Carregar detalhes da renovação pendente (RENOVACAO_EXCEDE_ANTERIOR)
+  useEffect(() => {
+    const carregarRenovacaoPendente = async () => {
+      if (!isRenovacaoExcedeAnterior || !(solicitacao as any).renovacao_pendente_id) return;
+
+      setLoadingRenovacao(true);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase.rpc('fn_buscar_detalhes_renovacao_pendente', {
+          p_renovacao_pendente_id: (solicitacao as any).renovacao_pendente_id,
+        });
+
+        if (error) {
+          console.error('Erro ao buscar renovação pendente:', error);
+          setLoadingRenovacao(false);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const rp = data[0];
+          setRenovacaoPendente(rp);
+          setEditRenovacao({
+            valor_principal: rp.valor_principal ?? 0,
+            numero_parcelas: rp.numero_parcelas ?? 1,
+            taxa_juros: rp.taxa_juros ?? 0,
+            frequencia: rp.frequencia ?? 'DIARIO',
+            data_primeiro_vencimento: rp.data_primeiro_vencimento ?? '',
+            dia_semana_cobranca: rp.dia_semana_cobranca ?? null,
+            dia_mes_cobranca: rp.dia_mes_cobranca ?? null,
+            iniciar_proximo_mes: rp.iniciar_proximo_mes ?? false,
+            observacoes_emprestimo: rp.observacoes_emprestimo ?? '',
+            microseguro_valor: rp.microseguro_valor ?? null,
+          });
+        }
+      } catch (err) {
+        console.error('Erro ao carregar renovação pendente:', err);
+      } finally {
+        setLoadingRenovacao(false);
+      }
+    };
+
+    carregarRenovacaoPendente();
+  }, [isRenovacaoExcedeAnterior, (solicitacao as any).renovacao_pendente_id]);
 
   // Carrega a movimentação pendente (despesa/receita) vinculada à solicitação
   useEffect(() => {
@@ -395,6 +444,68 @@ function ModalDetalhesSolicitacao({
     } catch (err: any) {
       console.error('Erro ao rejeitar venda:', err);
       alert(err.message || 'Erro ao rejeitar venda');
+    } finally {
+      setSalvandoVenda(false);
+    }
+  };
+
+  const handleAprovarRenovacao = async () => {
+    if (!(solicitacao as any).renovacao_pendente_id || !editRenovacao) return;
+    setSalvandoVenda(true);
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const adminId = userData.user?.id;
+
+      const { data, error } = await supabase.rpc('fn_resolver_renovacao_pendente', {
+        p_renovacao_pendente_id: (solicitacao as any).renovacao_pendente_id,
+        p_acao: 'APROVAR',
+        p_admin_user_id: adminId,
+        p_motivo: motivoAprovacao || null,
+        p_dados_editados: editRenovacao,
+      });
+
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Erro ao aprovar renovação');
+        return;
+      }
+      onVendaResolvida?.();
+    } catch (err: any) {
+      console.error('Erro ao aprovar renovação:', err);
+      alert(err.message || 'Erro ao aprovar renovação');
+    } finally {
+      setSalvandoVenda(false);
+    }
+  };
+
+  const handleRejeitarRenovacao = async () => {
+    if (!(solicitacao as any).renovacao_pendente_id) return;
+    setSalvandoVenda(true);
+    try {
+      const supabase = createClient();
+      const { data: userData } = await supabase.auth.getUser();
+      const adminId = userData.user?.id;
+
+      const { data, error } = await supabase.rpc('fn_resolver_renovacao_pendente', {
+        p_renovacao_pendente_id: (solicitacao as any).renovacao_pendente_id,
+        p_acao: 'REJEITAR',
+        p_admin_user_id: adminId,
+        p_motivo: motivoRejeicao,
+        p_dados_editados: null,
+      });
+
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (res && res.sucesso === false) {
+        alert(res.mensagem || 'Erro ao rejeitar renovação');
+        return;
+      }
+      onVendaResolvida?.();
+    } catch (err: any) {
+      console.error('Erro ao rejeitar renovação:', err);
+      alert(err.message || 'Erro ao rejeitar renovação');
     } finally {
       setSalvandoVenda(false);
     }
@@ -698,7 +809,7 @@ function ModalDetalhesSolicitacao({
           )}
 
           {/* === OUTROS TIPOS (layout genérico) === */}
-          {!isAbertura && !isExclusaoParcela && !isAutorizacaoCliente && !isVendaExcedeLimite && (
+          {!isAbertura && !isExclusaoParcela && !isAutorizacaoCliente && !isVendaExcedeLimite && !isRenovacaoExcedeAnterior && (
             <>
               {/* Info Grid */}
               <div className="bg-gray-50 rounded-xl p-4 space-y-3">
@@ -1081,6 +1192,202 @@ function ModalDetalhesSolicitacao({
             </>
           )}
 
+          {/* === RENOVAÇÃO EXCEDE ÚLTIMO EMPRÉSTIMO === */}
+          {isRenovacaoExcedeAnterior && (
+            <>
+              {loadingRenovacao ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                </div>
+              ) : renovacaoPendente && editRenovacao ? (
+                <>
+                  {/* Cabeçalho: vendedor / rota / cliente / valor anterior */}
+                  <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Vendedor</span>
+                      <div className="text-right">
+                        <p className="font-medium text-gray-900">{solicitacao.vendedor_nome}</p>
+                        <p className="text-xs text-gray-500">{solicitacao.vendedor_codigo}</p>
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-start gap-3">
+                      <span className="text-sm text-gray-500">Empresa</span>
+                      <div className="text-right min-w-0">
+                        <p className="font-medium text-gray-900">{solicitacao.empresa_nome || '-'}</p>
+                        {descreverOrigem(solicitacao) && (
+                          <p className="text-xs text-gray-500">{descreverOrigem(solicitacao)}</p>
+                        )}
+                      </div>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Rota</span>
+                      <p className="font-medium text-gray-900">{solicitacao.rota_nome}</p>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Cliente</span>
+                      <p className="font-medium text-gray-900">
+                        {renovacaoPendente.cliente_nome || solicitacao.cliente_nome || '-'}
+                      </p>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Último empréstimo (quitado)</span>
+                      <p className="font-medium text-gray-900">{formatarMoeda(renovacaoPendente.valor_limite)}</p>
+                    </div>
+                    <div className="border-t border-gray-200" />
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-500">Valor solicitado</span>
+                      <p className="font-semibold text-amber-700 text-lg">{formatarMoeda(renovacaoPendente.valor_principal)}</p>
+                    </div>
+                  </div>
+
+                  {/* Bloco EMPRÉSTIMO (editável) */}
+                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                    <div className="bg-emerald-50 px-4 py-2 border-b border-gray-200">
+                      <h3 className="text-sm font-semibold text-emerald-900">Dados da Renovação</h3>
+                    </div>
+                    <div className="p-4 grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editRenovacao.valor_principal}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, valor_principal: parseFloat(e.target.value) || 0 })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Nº de parcelas</label>
+                        <input
+                          type="number"
+                          value={editRenovacao.numero_parcelas}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, numero_parcelas: parseInt(e.target.value) || 1 })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Taxa de juros (%)</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editRenovacao.taxa_juros}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, taxa_juros: parseFloat(e.target.value) || 0 })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Frequência</label>
+                        <select
+                          value={editRenovacao.frequencia}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, frequencia: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
+                        >
+                          <option value="DIARIO">Diário</option>
+                          <option value="SEMANAL">Semanal</option>
+                          <option value="QUINZENAL">Quinzenal</option>
+                          <option value="MENSAL">Mensal</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">1º vencimento</label>
+                        <input
+                          type="date"
+                          value={editRenovacao.data_primeiro_vencimento}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, data_primeiro_vencimento: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-gray-500 mb-1">Microseguro</label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editRenovacao.microseguro_valor ?? ''}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                      {editRenovacao.frequencia === 'SEMANAL' && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Dia da semana</label>
+                          <select
+                            value={editRenovacao.dia_semana_cobranca ?? ''}
+                            onChange={(e) => setEditRenovacao({ ...editRenovacao, dia_semana_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
+                            disabled={solicitacao.status !== 'PENDENTE'}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
+                          >
+                            <option value="">Selecione...</option>
+                            <option value="0">Domingo</option>
+                            <option value="1">Segunda-feira</option>
+                            <option value="2">Terça-feira</option>
+                            <option value="3">Quarta-feira</option>
+                            <option value="4">Quinta-feira</option>
+                            <option value="5">Sexta-feira</option>
+                            <option value="6">Sábado</option>
+                          </select>
+                        </div>
+                      )}
+                      {(editRenovacao.frequencia === 'MENSAL' || editRenovacao.frequencia === 'QUINZENAL') && (
+                        <div>
+                          <label className="block text-xs text-gray-500 mb-1">Dia do mês (1 a 31)</label>
+                          <input
+                            type="number" min="1" max="31"
+                            value={editRenovacao.dia_mes_cobranca ?? ''}
+                            onChange={(e) => {
+                              if (e.target.value === '') {
+                                setEditRenovacao({ ...editRenovacao, dia_mes_cobranca: null });
+                                return;
+                              }
+                              let v = parseInt(e.target.value);
+                              if (isNaN(v)) return;
+                              if (v < 1) v = 1;
+                              if (v > 31) v = 31;
+                              setEditRenovacao({ ...editRenovacao, dia_mes_cobranca: v });
+                            }}
+                            disabled={solicitacao.status !== 'PENDENTE'}
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          />
+                        </div>
+                      )}
+                      <div className="col-span-2">
+                        <label className="block text-xs text-gray-500 mb-1">Observações do empréstimo</label>
+                        <textarea
+                          value={editRenovacao.observacoes_emprestimo}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, observacoes_emprestimo: e.target.value })}
+                          disabled={solicitacao.status !== 'PENDENTE'}
+                          rows={2}
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Motivo do vendedor */}
+                  {solicitacao.motivo_solicitacao && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+                      <p className="text-xs text-amber-600 mb-1">Comentário do vendedor:</p>
+                      <p className="text-sm text-amber-900 whitespace-pre-wrap">{solicitacao.motivo_solicitacao}</p>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-sm text-gray-400">
+                  Não foi possível carregar os dados da renovação.
+                </div>
+              )}
+            </>
+          )}
+
           {/* Solicitado em */}
           <p className="text-xs text-gray-400 text-center">
             Solicitado em: {formatarDataHora(solicitacao.created_at)}
@@ -1158,12 +1465,12 @@ function ModalDetalhesSolicitacao({
                   Rejeitar
                 </button>
                 <button
-                  onClick={isVendaExcedeLimite ? handleAprovarVenda : isMovimentacaoExcedeLimite ? handleAprovarMovimentacao : handleConfirmarAprovacao}
+                  onClick={isVendaExcedeLimite ? handleAprovarVenda : isRenovacaoExcedeAnterior ? handleAprovarRenovacao : isMovimentacaoExcedeLimite ? handleAprovarMovimentacao : handleConfirmarAprovacao}
                   disabled={loading || salvandoVenda}
                   className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : isMovimentacaoExcedeLimite ? 'Aprovar' : 'Aprovar'}
+                  {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : isRenovacaoExcedeAnterior ? 'Aprovar Renovação' : isMovimentacaoExcedeLimite ? 'Aprovar' : 'Aprovar'}
                 </button>
               </>
             ) : (
@@ -1175,7 +1482,7 @@ function ModalDetalhesSolicitacao({
                   Voltar
                 </button>
                 <button
-                  onClick={isVendaExcedeLimite ? handleRejeitarVenda : isMovimentacaoExcedeLimite ? handleRejeitarMovimentacao : () => onRejeitar(motivoRejeicao)}
+                  onClick={isVendaExcedeLimite ? handleRejeitarVenda : isRenovacaoExcedeAnterior ? handleRejeitarRenovacao : isMovimentacaoExcedeLimite ? handleRejeitarMovimentacao : () => onRejeitar(motivoRejeicao)}
                   disabled={loading || salvandoVenda || !motivoRejeicao.trim()}
                   className="flex items-center gap-1.5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
