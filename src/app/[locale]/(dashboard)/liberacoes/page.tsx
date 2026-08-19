@@ -146,6 +146,9 @@ function ModalDetalhesSolicitacao({
   const [renovacaoPendente, setRenovacaoPendente] = useState<any>(null);
   const [loadingRenovacao, setLoadingRenovacao] = useState(false);
   const [editRenovacao, setEditRenovacao] = useState<any>(null);
+  // Se a rota trabalha aos domingos — controla se "Domingo" pode ser
+  // escolhido como dia de cobrança semanal
+  const [trabalhaDomingo, setTrabalhaDomingo] = useState(true);
 
   const [movimentacaoPendente, setMovimentacaoPendente] = useState<any>(null);
   const [movimentacaoId, setMovimentacaoId] = useState<string | null>(null);
@@ -270,6 +273,63 @@ function ModalDetalhesSolicitacao({
 
     carregarDetalhesEmprestimo();
   }, [isRenegociacao, solicitacao.emprestimo_id]);
+
+  // Se a rota trabalha aos domingos — filtra a opção "Domingo" do seletor
+  // de dia de cobrança semanal quando a rota não atende nesse dia.
+  useEffect(() => {
+    const carregarTrabalhaDomingo = async () => {
+      if (!solicitacao.rota_id) return;
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('rotas')
+          .select('trabalha_domingo')
+          .eq('id', solicitacao.rota_id)
+          .single();
+
+        if (error) {
+          console.error('Erro ao buscar configuração da rota:', error);
+          return;
+        }
+
+        setTrabalhaDomingo(data?.trabalha_domingo !== false);
+      } catch (err) {
+        console.error('Erro ao carregar configuração da rota:', err);
+      }
+    };
+
+    carregarTrabalhaDomingo();
+  }, [solicitacao.rota_id]);
+
+  // Se a rota não trabalha domingo e o dia de cobrança carregado é Domingo
+  // (ex.: dado antigo, ou pedido feito antes da rota mudar de configuração),
+  // limpa a seleção para forçar o admin a escolher um dia válido.
+  useEffect(() => {
+    if (trabalhaDomingo) return;
+    if (editVenda?.dia_semana_cobranca === 0) {
+      setEditVenda((prev: any) => (prev ? { ...prev, dia_semana_cobranca: null } : prev));
+    }
+  }, [trabalhaDomingo, editVenda?.dia_semana_cobranca]);
+
+  useEffect(() => {
+    if (trabalhaDomingo) return;
+    if (editRenovacao?.dia_semana_cobranca === 0) {
+      setEditRenovacao((prev: any) => (prev ? { ...prev, dia_semana_cobranca: null } : prev));
+    }
+  }, [trabalhaDomingo, editRenovacao?.dia_semana_cobranca]);
+
+  const DIAS_SEMANA_OPCOES = [
+    { value: '0', label: 'Domingo' },
+    { value: '1', label: 'Segunda-feira' },
+    { value: '2', label: 'Terça-feira' },
+    { value: '3', label: 'Quarta-feira' },
+    { value: '4', label: 'Quinta-feira' },
+    { value: '5', label: 'Sexta-feira' },
+    { value: '6', label: 'Sábado' },
+  ];
+  const diasSemanaDisponiveis = trabalhaDomingo
+    ? DIAS_SEMANA_OPCOES
+    : DIAS_SEMANA_OPCOES.filter((d) => d.value !== '0');
 
   // Carregar detalhes da venda pendente (VENDA_EXCEDE_LIMITE)
   useEffect(() => {
@@ -1147,14 +1207,13 @@ function ModalDetalhesSolicitacao({
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
                           >
                             <option value="">Selecione...</option>
-                            <option value="0">Domingo</option>
-                            <option value="1">Segunda-feira</option>
-                            <option value="2">Terça-feira</option>
-                            <option value="3">Quarta-feira</option>
-                            <option value="4">Quinta-feira</option>
-                            <option value="5">Sexta-feira</option>
-                            <option value="6">Sábado</option>
+                            {diasSemanaDisponiveis.map((d) => (
+                              <option key={d.value} value={d.value}>{d.label}</option>
+                            ))}
                           </select>
+                          {!trabalhaDomingo && (
+                            <p className="text-xs text-gray-400 mt-1">Esta rota não atende aos domingos.</p>
+                          )}
                         </div>
                       )}
                       {(editVenda.frequencia === 'MENSAL' || editVenda.frequencia === 'QUINZENAL') && (
@@ -1357,14 +1416,13 @@ function ModalDetalhesSolicitacao({
                             className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
                           >
                             <option value="">Selecione...</option>
-                            <option value="0">Domingo</option>
-                            <option value="1">Segunda-feira</option>
-                            <option value="2">Terça-feira</option>
-                            <option value="3">Quarta-feira</option>
-                            <option value="4">Quinta-feira</option>
-                            <option value="5">Sexta-feira</option>
-                            <option value="6">Sábado</option>
+                            {diasSemanaDisponiveis.map((d) => (
+                              <option key={d.value} value={d.value}>{d.label}</option>
+                            ))}
                           </select>
+                          {!trabalhaDomingo && (
+                            <p className="text-xs text-gray-400 mt-1">Esta rota não atende aos domingos.</p>
+                          )}
                         </div>
                       )}
                       {(editRenovacao.frequencia === 'MENSAL' || editRenovacao.frequencia === 'QUINZENAL') && (
