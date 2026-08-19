@@ -1078,7 +1078,7 @@ function ModalDetalhesSolicitacao({
                           value={editVenda.valor_principal}
                           onChange={(e) => setEditVenda({ ...editVenda, valor_principal: parseFloat(e.target.value) || 0 })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1088,7 +1088,7 @@ function ModalDetalhesSolicitacao({
                           value={editVenda.numero_parcelas}
                           onChange={(e) => setEditVenda({ ...editVenda, numero_parcelas: parseInt(e.target.value) || 1 })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1099,7 +1099,7 @@ function ModalDetalhesSolicitacao({
                           value={editVenda.taxa_juros}
                           onChange={(e) => setEditVenda({ ...editVenda, taxa_juros: parseFloat(e.target.value) || 0 })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1134,7 +1134,7 @@ function ModalDetalhesSolicitacao({
                           value={editVenda.microseguro_valor ?? ''}
                           onChange={(e) => setEditVenda({ ...editVenda, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       {editVenda.frequencia === 'SEMANAL' && (
@@ -1175,7 +1175,7 @@ function ModalDetalhesSolicitacao({
                               setEditVenda({ ...editVenda, dia_mes_cobranca: v });
                             }}
                             disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       )}
@@ -1274,7 +1274,7 @@ function ModalDetalhesSolicitacao({
                           value={editRenovacao.valor_principal}
                           onChange={(e) => setEditRenovacao({ ...editRenovacao, valor_principal: parseFloat(e.target.value) || 0 })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1284,7 +1284,7 @@ function ModalDetalhesSolicitacao({
                           value={editRenovacao.numero_parcelas}
                           onChange={(e) => setEditRenovacao({ ...editRenovacao, numero_parcelas: parseInt(e.target.value) || 1 })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1295,7 +1295,7 @@ function ModalDetalhesSolicitacao({
                           value={editRenovacao.taxa_juros}
                           onChange={(e) => setEditRenovacao({ ...editRenovacao, taxa_juros: parseFloat(e.target.value) || 0 })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
@@ -1344,7 +1344,7 @@ function ModalDetalhesSolicitacao({
                           value={editRenovacao.microseguro_valor ?? ''}
                           onChange={(e) => setEditRenovacao({ ...editRenovacao, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
                           disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       {editRenovacao.frequencia === 'SEMANAL' && (
@@ -1385,7 +1385,7 @@ function ModalDetalhesSolicitacao({
                               setEditRenovacao({ ...editRenovacao, dia_mes_cobranca: v });
                             }}
                             disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                           />
                         </div>
                       )}
