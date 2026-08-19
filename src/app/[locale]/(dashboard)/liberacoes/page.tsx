@@ -205,6 +205,22 @@ function ModalDetalhesSolicitacao({
     return `${dia}/${mes}/${ano}`;
   };
 
+  // Converte timestamp/Date para "YYYY-MM-DD" (formato aceito por <input type="date">)
+  const paraDataInput = (input: string | Date) => {
+    const d = input instanceof Date ? input : new Date(input);
+    const ano = d.getFullYear();
+    const mes = String(d.getMonth() + 1).padStart(2, '0');
+    const dia = String(d.getDate()).padStart(2, '0');
+    return `${ano}-${mes}-${dia}`;
+  };
+
+  // Limita uma data "YYYY-MM-DD" ao intervalo [min, max] (comparação lexicográfica funciona por ser ISO)
+  const clampDataInput = (data: string, min?: string, max?: string) => {
+    if (min && data < min) return min;
+    if (max && data > max) return max;
+    return data;
+  };
+
   const formatarMoeda = (valor: number | null) => {
     if (valor === null || valor === undefined) return '-';
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
@@ -1298,13 +1314,27 @@ function ModalDetalhesSolicitacao({
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">1º vencimento</label>
-                        <input
-                          type="date"
-                          value={editRenovacao.data_primeiro_vencimento}
-                          onChange={(e) => setEditRenovacao({ ...editRenovacao, data_primeiro_vencimento: e.target.value })}
-                          disabled={solicitacao.status !== 'PENDENTE'}
-                          className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
-                        />
+                        {(() => {
+                          // Mínimo: data da liquidação em que o vendedor pediu a renovação
+                          // (dia em que o empréstimo será registrado). Máximo: hoje + 2 meses.
+                          const dataMin = paraDataInput(renovacaoPendente.created_at);
+                          const hoje = new Date();
+                          const dataMax = paraDataInput(new Date(hoje.getFullYear(), hoje.getMonth() + 2, hoje.getDate()));
+                          return (
+                            <input
+                              type="date"
+                              value={editRenovacao.data_primeiro_vencimento}
+                              min={dataMin}
+                              max={dataMax}
+                              onChange={(e) => setEditRenovacao({
+                                ...editRenovacao,
+                                data_primeiro_vencimento: clampDataInput(e.target.value, dataMin, dataMax),
+                              })}
+                              disabled={solicitacao.status !== 'PENDENTE'}
+                              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50"
+                            />
+                          );
+                        })()}
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Microseguro</label>
