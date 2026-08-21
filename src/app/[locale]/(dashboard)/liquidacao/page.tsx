@@ -707,6 +707,11 @@ export default function LiquidacaoDiariaPage() {
   const [modalClienteAberto, setModalClienteAberto] = useState(false);
 
   const [filtroLista, setFiltroLista] = useState<FiltroLista>('TODOS');
+  // 'DIA' = só quem tem parcela vencendo na data da liquidação (mesma base de
+  // `clientes_iniciais`). 'CARREGADOS' inclui os atrasados de dias anteriores,
+  // que também vão para a rota. Começa em CARREGADOS para não mudar o que o
+  // usuário já via nesta tela.
+  const [escopoLista, setEscopoLista] = useState<'DIA' | 'CARREGADOS'>('CARREGADOS');
   const [buscaCliente, setBuscaCliente] = useState('');
   // Ordenação da lista: 'ROTA' (ordem_rota_cliente) ou 'ALFABETICA'
   const [ordenacao, setOrdenacao] = useState<'ROTA' | 'ALFABETICA'>('ROTA');
@@ -1700,20 +1705,6 @@ export default function LiquidacaoDiariaPage() {
     return mapa;
   }, [clientesDia, emprestimosDoDia]);
 
-  const contagens = useMemo(() => {
-    let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0, cancelados = 0;
-    for (const ev of eventosPorCliente.values()) {
-      if (ev.tipo === 'PAGOU') pagos++;
-      else if (ev.tipo === 'NAO_PAGOU') naoPagos++;
-      else if (ev.tipo === 'NOVO') novos++;
-      else if (ev.tipo === 'RENOVACAO') renovados++;
-      else if (ev.tipo === 'RENEGOCIACAO') renegociados++;
-      else if (ev.tipo === 'QUITADO') quitados++;
-      else if (ev.tipo === 'CANCELADO') cancelados++;
-    }
-    return { todos: eventosPorCliente.size, pagos, naoPagos, novos, renovados, renegociados, quitados, cancelados };
-  }, [eventosPorCliente]);
-
   const clientesComEvento = useMemo(() => {
     const seen = new Set<string>();
     const items: Array<{ cliente: ClienteDoDia; evento?: EventoCliente }> = [];
@@ -1742,8 +1733,57 @@ export default function LiquidacaoDiariaPage() {
     return items;
   }, [clientesDia, emprestimosDoDia, eventosPorCliente, rota]);
 
+  // ============================================================
+  // ESCOPO DA LISTA: do dia x carregados
+  // ============================================================
+  // A lista da liquidação traz, além dos clientes com parcela vencendo na
+  // data, os atrasados de dias anteriores — eles precisam ser cobrados, mas
+  // NÃO entram em `clientes_iniciais`, que por definição conta só o dia.
+  // O seletor deixa essa diferença explícita, em vez de ela parecer erro
+  // quando alguém compara a lista com o número do extrato.
+  const dataDaLiquidacao = (liquidacao as any)?.data_liquidacao
+    || liquidacao?.data_abertura?.split('T')[0]
+    || null;
+
+  const ehDoDia = useCallback((c: ClienteDoDia) => {
+    // Vendas do próprio dia (status NOVO) não têm parcela vencendo ainda,
+    // mas são operação do dia — nunca são "carregado de outro dia".
+    if (c.status_dia === 'NOVO') return true;
+    if (!dataDaLiquidacao || !c.data_vencimento) return true;
+    return c.data_vencimento.split('T')[0] === dataDaLiquidacao;
+  }, [dataDaLiquidacao]);
+
+  const clientesNoEscopo = useMemo(
+    () => (escopoLista === 'DIA'
+      ? clientesComEvento.filter(({ cliente }) => ehDoDia(cliente))
+      : clientesComEvento),
+    [clientesComEvento, escopoLista, ehDoDia]
+  );
+
+  const totaisEscopo = useMemo(() => ({
+    doDia: clientesComEvento.filter(({ cliente }) => ehDoDia(cliente)).length,
+    carregados: clientesComEvento.length,
+  }), [clientesComEvento, ehDoDia]);
+
+  // Contagens seguem o escopo — senão os chips mostrariam números que não
+  // batem com a lista exibida logo abaixo.
+  const contagens = useMemo(() => {
+    let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0, cancelados = 0;
+    for (const { evento: ev } of clientesNoEscopo) {
+      if (!ev) continue;
+      if (ev.tipo === 'PAGOU') pagos++;
+      else if (ev.tipo === 'NAO_PAGOU') naoPagos++;
+      else if (ev.tipo === 'NOVO') novos++;
+      else if (ev.tipo === 'RENOVACAO') renovados++;
+      else if (ev.tipo === 'RENEGOCIACAO') renegociados++;
+      else if (ev.tipo === 'QUITADO') quitados++;
+      else if (ev.tipo === 'CANCELADO') cancelados++;
+    }
+    return { todos: clientesNoEscopo.length, pagos, naoPagos, novos, renovados, renegociados, quitados, cancelados };
+  }, [clientesNoEscopo]);
+
   const clientesFiltrados = useMemo(() => {
-    return clientesComEvento.filter(({ cliente, evento }) => {
+    return clientesNoEscopo.filter(({ cliente, evento }) => {
       if (filtroLista !== 'TODOS') {
         if (!evento) return false;
         if (filtroLista === 'PAGOS' && evento.tipo !== 'PAGOU') return false;
@@ -1761,7 +1801,7 @@ export default function LiquidacaoDiariaPage() {
       }
       return true;
     });
-  }, [clientesComEvento, filtroLista, buscaCliente]);
+  }, [clientesNoEscopo, filtroLista, buscaCliente]);
 
   // Aplicar ordenação (ordem da rota ou alfabética)
   const clientesOrdenados = useMemo(() => {
@@ -2128,6 +2168,28 @@ export default function LiquidacaoDiariaPage() {
                   </button>
                   <span className="text-xs text-gray-500">{clientesOrdenados.length} de {contagens.todos}</span>
                 </div>
+              </div>
+              {/* Escopo da lista. Deixa explícito que "carregados" inclui os
+                  atrasados de outros dias, que não entram em clientes_iniciais. */}
+              <div className="flex items-center gap-1 mb-2 p-0.5 bg-gray-100 rounded-lg w-fit">
+                <button
+                  onClick={() => setEscopoLista('DIA')}
+                  title="Somente clientes com parcela vencendo na data desta liquidação"
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    escopoLista === 'DIA' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  Do dia <span className="text-gray-400">({totaisEscopo.doDia})</span>
+                </button>
+                <button
+                  onClick={() => setEscopoLista('CARREGADOS')}
+                  title="Inclui os atrasados de dias anteriores que também vão para a rota"
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    escopoLista === 'CARREGADOS' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-800'
+                  }`}
+                >
+                  Carregados <span className="text-gray-400">({totaisEscopo.carregados})</span>
+                </button>
               </div>
               <div className="flex flex-wrap gap-1 mb-2">
                 <ChipFiltro label="Todos" qtd={contagens.todos} ativo={filtroLista === 'TODOS'} onClick={() => setFiltroLista('TODOS')} cor="blue" />
