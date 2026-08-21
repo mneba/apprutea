@@ -1745,13 +1745,26 @@ export default function LiquidacaoDiariaPage() {
     || liquidacao?.data_abertura?.split('T')[0]
     || null;
 
-  const ehDoDia = useCallback((c: ClienteDoDia) => {
-    // Vendas do próprio dia (status NOVO) não têm parcela vencendo ainda,
-    // mas são operação do dia — nunca são "carregado de outro dia".
-    if (c.status_dia === 'NOVO') return true;
-    if (!dataDaLiquidacao || !c.data_vencimento) return true;
-    return c.data_vencimento.split('T')[0] === dataDaLiquidacao;
-  }, [dataDaLiquidacao]);
+  // Ids de quem tem ALGUMA parcela vencendo na data. Precisa varrer
+  // `clientesDia` inteiro: a lista traz uma linha por parcela/empréstimo e o
+  // agrupamento por cliente guarda só a primeira. Um cliente com dois
+  // empréstimos — um vencendo hoje, outro atrasado — era julgado pela linha
+  // retida e, se viesse a atrasada primeiro, sumia do escopo "Do dia".
+  const idsDoDia = useMemo(() => {
+    const ids = new Set<string>();
+    for (const c of clientesDia) {
+      // Venda do próprio dia: é operação desta liquidação, não carregada de outro dia
+      if (c.status_dia === 'NOVO') { ids.add(c.cliente_id); continue; }
+      if (!dataDaLiquidacao || !c.data_vencimento) { ids.add(c.cliente_id); continue; }
+      if (c.data_vencimento.split('T')[0] === dataDaLiquidacao) ids.add(c.cliente_id);
+    }
+    return ids;
+  }, [clientesDia, dataDaLiquidacao]);
+
+  const ehDoDia = useCallback(
+    (c: ClienteDoDia) => idsDoDia.has(c.cliente_id) || c.status_dia === 'NOVO',
+    [idsDoDia]
+  );
 
   const clientesNoEscopo = useMemo(
     () => (escopoLista === 'DIA'
