@@ -689,7 +689,7 @@ export const clientesService = {
 
     const { data, error } = await supabase
       .from('pagamentos_parcelas')
-      .select('parcela_id, valor_pago_atual, valor_credito_usado, valor_credito_gerado, liquidacao_id, forma_pagamento, estornado, created_at, motivo_estorno, estornado_por, data_estorno')
+      .select('id, parcela_id, valor_pago_atual, valor_credito_usado, valor_credito_gerado, liquidacao_id, forma_pagamento, estornado, created_at, motivo_estorno, estornado_por, data_estorno')
       .in('parcela_id', parcelaIds)
       .order('created_at', { ascending: true });
 

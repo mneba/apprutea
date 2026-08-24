@@ -38,13 +38,17 @@ import {
   Wallet,
   Ban,
   RotateCcw,
+  Paperclip,
+  Receipt,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
 import { FotoClienteUpload, AvatarCliente } from '@/components/clientes/FotoClienteUpload';
+import { AnexosCliente } from '@/components/clientes/AnexosCliente';
 import { LightboxImagem } from '@/components/liquidacao/CardsFinanceiros';
 import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
 import { ModalQuitarEmprestimo } from '@/components/liquidacao/ModalQuitarEmprestimo';
 import { usePermissaoModulo } from '@/hooks/usePermissaoModulo';
+import { useUser } from '@/contexts/UserContext';
 import type { 
   Cliente, 
   EmprestimoHistorico, 
@@ -261,6 +265,9 @@ function CardEmprestimo({
   datasLiquidacao = {},
   totalPagoRealValor,
   pagamentosPorParcela = {},
+  clienteIdAnexos = null,
+  anexoAutorId = null,
+  anexoAutorNome = null,
 }: {
   emprestimo: EmprestimoHistorico;
   expandido: boolean;
@@ -276,7 +283,12 @@ function CardEmprestimo({
   datasLiquidacao?: Record<string, string>;
   totalPagoRealValor?: number;
   pagamentosPorParcela?: Record<string, any[]>;
+  clienteIdAnexos?: string | null;
+  anexoAutorId?: string | null;
+  anexoAutorNome?: string | null;
 }) {
+  // Um comprovante aberto por vez dentro do card.
+  const [comprovanteAberto, setComprovanteAberto] = useState<string | null>(null);
   const percentualPago = emprestimo.percentual_valor_pago || 0;
   const temParcelasPendentes = parcelas.length === 0 || parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
   const emprestimoAtivo = ['ATIVO', 'VENCIDO'].includes(emprestimo.emprestimo_status);
@@ -430,6 +442,31 @@ function CardEmprestimo({
                                   )}
                                   {pg.credito_gerado > 0 && !autoQuitacao && (
                                     <span className="block text-purple-600">+{formatarMoeda(pg.credito_gerado)} crédito</span>
+                                  )}
+                                  {/* Comprovante DESTE pagamento. Abre sob demanda:
+                                      a lista consulta o banco ao montar, e uma
+                                      parcela pode ter vários pagamentos. */}
+                                  {clienteIdAnexos && pg.id && (
+                                    <div className="mt-1">
+                                      <button
+                                        type="button"
+                                        onClick={() => setComprovanteAberto(comprovanteAberto === pg.id ? null : pg.id)}
+                                        className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-700"
+                                      >
+                                        <Receipt className="w-3 h-3" />
+                                        {comprovanteAberto === pg.id ? 'Ocultar comprovante' : 'Comprovante'}
+                                      </button>
+                                      {comprovanteAberto === pg.id && (
+                                        <div className="mt-2 p-3 rounded-lg border border-gray-200 bg-gray-50/60">
+                                          <AnexosCliente
+                                            clienteId={clienteIdAnexos}
+                                            pagamentoId={pg.id}
+                                            enviadoPor={anexoAutorId}
+                                            enviadoPorNome={anexoAutorNome}
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               );
@@ -917,7 +954,8 @@ export function ModalDetalhesCliente({
   rotaId,
   tipoUsuario,
 }: Props) {
-  const [abaAtiva, setAbaAtiva] = useState<'dados' | 'ativos' | 'historico'>('dados');
+  const { profile } = useUser();
+  const [abaAtiva, setAbaAtiva] = useState<'dados' | 'ativos' | 'historico' | 'documentos'>('dados');
   const [clienteCompleto, setClienteCompleto] = useState<Cliente | null>(null);
   const [emprestimosAtivos, setEmprestimosAtivos] = useState<EmprestimoHistorico[]>([]);
   const [emprestimosFinalizados, setEmprestimosFinalizados] = useState<EmprestimoHistorico[]>([]);
@@ -1063,6 +1101,7 @@ export function ModalDetalhesCliente({
       const porParcela: Record<string, any[]> = {};
       (pagamentos || []).forEach((p: any) => {
         (porParcela[p.parcela_id] ||= []).push({
+          id: p.id,   // âncora do comprovante — anexo prende no PAGAMENTO
           valor: Number(p.valor_pago_atual) || 0,
           credito_usado: Number(p.valor_credito_usado) || 0,
           credito_gerado: Number(p.valor_credito_gerado) || 0,
@@ -1287,6 +1326,19 @@ export function ModalDetalhesCliente({
               )}
             </div>
           </button>
+          <button
+            onClick={() => { setAbaAtiva('documentos'); setModoEdicao(false); }}
+            className={`flex-1 px-4 py-3 text-sm font-medium transition-colors ${
+              abaAtiva === 'documentos'
+                ? 'text-blue-600 border-b-2 border-blue-600 bg-white'
+                : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <Paperclip className="w-4 h-4" />
+              Documentos
+            </div>
+          </button>
         </div>
 
         {/* Conteúdo */}
@@ -1480,6 +1532,9 @@ export function ModalDetalhesCliente({
                         datasLiquidacao={datasLiquidacao}
                         totalPagoRealValor={totalPagoReal[emp.emprestimo_id]}
                         pagamentosPorParcela={pagamentosPorParcela[emp.emprestimo_id] || {}}
+                        clienteIdAnexos={cliente?.id || null}
+                        anexoAutorId={profile?.user_id || null}
+                        anexoAutorNome={profile?.nome || null}
                         onRecarregar={() => recarregarTudo(emp.emprestimo_id)}
                         onRenegociar={(emprestimoId) => {
                           console.log('Renegociar empréstimo:', emprestimoId);
@@ -1520,6 +1575,9 @@ export function ModalDetalhesCliente({
                         datasLiquidacao={datasLiquidacao}
                         totalPagoRealValor={totalPagoReal[emp.emprestimo_id]}
                         pagamentosPorParcela={pagamentosPorParcela[emp.emprestimo_id] || {}}
+                        clienteIdAnexos={cliente?.id || null}
+                        anexoAutorId={profile?.user_id || null}
+                        anexoAutorNome={profile?.nome || null}
                       />
                     ))
                   ) : (
@@ -1532,6 +1590,15 @@ export function ModalDetalhesCliente({
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* ABA: DOCUMENTOS E EVIDÊNCIAS */}
+              {abaAtiva === 'documentos' && cliente?.id && (
+                <AnexosCliente
+                  clienteId={cliente.id}
+                  enviadoPor={profile?.user_id || null}
+                  enviadoPorNome={profile?.nome || null}
+                />
               )}
             </>
           )}

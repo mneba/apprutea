@@ -1,4 +1,4 @@
-// File: C:\Github\apprutea\src\app\api\convites\enviar\route.ts
+// File: C:\Github\rutea\apprutea\src\app\api\convites\enviar\route.ts
 import * as entry from '../../../../../../src/app/api/convites/enviar/route.js'
 import type { NextRequest } from 'next/server.js'
 
