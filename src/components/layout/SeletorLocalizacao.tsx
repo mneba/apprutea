@@ -555,7 +555,6 @@ export function SeletorLocalizacao() {
                           // Quantidade de empresas ativas deste estado
                           const totalEmpresas = (hierarquia as any).total_empresas_ativas || 0;
                           const cidadesAqui = cidadesDaHierarquia(hierarquia.id);
-                          const cidadeUnica = cidadesAqui.length === 1;
                           const expandido = hierarquiaIdSelecionada === hierarquia.id;
 
                           return (
@@ -593,36 +592,9 @@ export function SeletorLocalizacao() {
                                     <div className="px-3 py-2 text-xs text-gray-400 italic">
                                       Nenhuma cidade cadastrada
                                     </div>
-                                  ) : cidadeUnica ? (
-                                    // 1 cidade só: pula direto pra empresas
-                                    empresasDaCidade(cidadesAqui[0].id).length > 0 ? (
-                                      <div className="space-y-1">
-                                        {empresasDaCidade(cidadesAqui[0].id).map((empresa) => (
-                                          <button
-                                            key={empresa.id}
-                                            onClick={() => handleSelecionarEmpresa(empresa)}
-                                            className={`
-                                              w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
-                                              ${localizacao.empresa_id === empresa.id
-                                                ? 'bg-green-100 text-green-700 border border-green-300'
-                                                : 'hover:bg-gray-100 text-gray-600'}
-                                            `}
-                                          >
-                                            <Building2 className="w-3 h-3" />
-                                            {empresa.nome}
-                                            {localizacao.empresa_id === empresa.id && (
-                                              <Check className="w-3 h-3 ml-auto" />
-                                            )}
-                                          </button>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      <div className="px-3 py-2 text-xs text-gray-400 italic">
-                                        Nenhuma empresa cadastrada
-                                      </div>
-                                    )
                                   ) : (
-                                    // 2+ cidades: mostra nível extra
+                                    // Sempre mostra o nível da cidade (mesmo com 1 só),
+                                    // para a cidade ficar explícita na árvore.
                                     cidadesAqui.map((cidade) => {
                                       const empresasAqui = empresasDaCidade(cidade.id);
                                       const cidadeExpandida = cidadeIdSelecionada === cidade.id;
