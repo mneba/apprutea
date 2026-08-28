@@ -37,7 +37,7 @@ import {
   ModalTransferencia, 
   ModalAjusteSaldo 
 } from '@/components/financeiro';
-import { LightboxImagem, BotaoVerComprovante } from '@/components/liquidacao/CardsFinanceiros';
+import { LightboxImagem, BotaoVerComprovante, comprovantesDe } from '@/components/liquidacao/CardsFinanceiros';
 import type {
   SaldosContas,
   MovimentoFinanceiro,
@@ -73,7 +73,7 @@ function LinhaExtrato({
   categorias: CategoriaFinanceira[];
   podeAnular?: boolean;
   onAnular?: (movimento: MovimentoFinanceiro) => void;
-  onVerComprovante?: (url: string) => void;
+  onVerComprovante?: (urls: string[]) => void;
 }) {
   const categoria = categorias.find(c => c.codigo === movimento.categoria);
   const isEntrada = movimento.tipo === 'RECEBER';
@@ -191,8 +191,11 @@ function LinhaExtrato({
           {movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
         </span>
         <div className="flex items-center justify-end gap-1.5 mt-1">
-          {(movimento as any).foto_url && (
-            <BotaoVerComprovante onClick={() => onVerComprovante?.((movimento as any).foto_url)} />
+          {comprovantesDe(movimento).length > 0 && (
+            <BotaoVerComprovante
+              quantidade={comprovantesDe(movimento).length}
+              onClick={() => onVerComprovante?.(comprovantesDe(movimento))}
+            />
           )}
           {podeAnular && anulavel && !isAnulado && movimento.status !== 'CANCELADO' && (
             <button
@@ -435,7 +438,7 @@ export default function FinanceiroPage() {
   const [movimentos, setMovimentos] = useState<MovimentoFinanceiro[]>([]);
   const [contas, setContas] = useState<ContaComDetalhes[]>([]);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
-  const [comprovante, setComprovante] = useState<string | null>(null);
+  const [comprovante, setComprovante] = useState<string[] | null>(null);
 
   // Os três abaixo usam cache de módulo: entrar e sair do Financeiro deixou
   // de refazer as queries. `forcar` é usado pelas ações que gravam.
@@ -1226,7 +1229,7 @@ export default function FinanceiroPage() {
                   <tr><td colSpan={3} className="px-4 py-12 text-center"><Loader2 className="w-7 h-7 animate-spin text-gray-400 mx-auto" /></td></tr>
                 ) : movimentosFiltrados.length > 0 ? (
                   movimentosFiltrados.map(m => (
-                    <LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} onVerComprovante={(url) => setComprovante(url)} />
+                    <LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} onVerComprovante={(urls) => setComprovante(urls)} />
                   ))
                 ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
                   <tr><td colSpan={3} className="px-4 py-12 text-center">
@@ -1552,7 +1555,7 @@ export default function FinanceiroPage() {
         corIcone="text-amber-600"
       />
 
-      {comprovante && <LightboxImagem url={comprovante} onClose={() => setComprovante(null)} />}
+      {comprovante && <LightboxImagem urls={comprovante} onClose={() => setComprovante(null)} />}
     </div>
   );
 }

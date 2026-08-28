@@ -15,6 +15,8 @@ import {
   CreditCard,
   Banknote,
   Image as ImageIcon,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { ClienteDoDia } from '@/types/liquidacao';
@@ -23,7 +25,58 @@ import type { ClienteDoDia } from '@/types/liquidacao';
 // COMPROVANTE (lightbox de imagem reutilizável)
 // =====================================================
 
-export function LightboxImagem({ url, onClose }: { url: string; onClose: () => void }) {
+/**
+ * Um lançamento pode ter até 5 comprovantes (`comprovantes_urls`), mas os
+ * registros anteriores à coluna têm só `foto_url`. Esta é a única regra de
+ * leitura — use sempre daqui, para web e relatórios não divergirem.
+ */
+export function comprovantesDe(registro: any): string[] {
+  const lista = registro?.comprovantes_urls;
+  if (Array.isArray(lista) && lista.length > 0) return lista.filter(Boolean);
+  return registro?.foto_url ? [registro.foto_url] : [];
+}
+
+/**
+ * Aceita `url` (uma imagem só — foto de cliente, comprovante antigo) ou
+ * `urls` (galeria navegável). `urls` tem precedência quando vem preenchida.
+ */
+export function LightboxImagem({
+  url,
+  urls,
+  indiceInicial = 0,
+  onClose,
+}: {
+  url?: string;
+  urls?: string[];
+  indiceInicial?: number;
+  onClose: () => void;
+}) {
+  const lista = useMemo(
+    () => (urls && urls.length > 0 ? urls : url ? [url] : []),
+    [urls, url]
+  );
+  const [i, setI] = useState(indiceInicial);
+  const total = lista.length;
+
+  // Índice sempre dentro da lista, mesmo se ela encolher entre renders.
+  const idx = total > 0 ? Math.min(Math.max(i, 0), total - 1) : 0;
+
+  const anterior = () => setI((p) => (p - 1 + total) % total);
+  const proxima = () => setI((p) => (p + 1) % total);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      if (total < 2) return;
+      if (e.key === 'ArrowLeft') setI((p) => (p - 1 + total) % total);
+      if (e.key === 'ArrowRight') setI((p) => (p + 1) % total);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [total, onClose]);
+
+  if (total === 0) return null;
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/80" />
@@ -34,9 +87,33 @@ export function LightboxImagem({ url, onClose }: { url: string; onClose: () => v
       >
         <X className="w-6 h-6" />
       </button>
+
+      {total > 1 && (
+        <>
+          <button
+            onClick={(e) => { e.stopPropagation(); anterior(); }}
+            className="absolute left-4 z-10 p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            aria-label="Comprovante anterior"
+          >
+            <ChevronLeft className="w-7 h-7" />
+          </button>
+          <button
+            onClick={(e) => { e.stopPropagation(); proxima(); }}
+            className="absolute right-4 z-10 p-2 text-white/80 hover:text-white bg-white/10 hover:bg-white/20 rounded-full transition-colors"
+            aria-label="Próximo comprovante"
+          >
+            <ChevronRight className="w-7 h-7" />
+          </button>
+          <div className="absolute bottom-6 z-10 px-3 py-1 rounded-full bg-black/60 text-white text-sm font-medium">
+            {idx + 1} / {total}
+          </div>
+        </>
+      )}
+
       <img
-        src={url}
-        alt="Comprovante"
+        key={lista[idx]}
+        src={lista[idx]}
+        alt={total > 1 ? `Comprovante ${idx + 1} de ${total}` : 'Comprovante'}
         className="relative max-w-full max-h-[90vh] rounded-lg shadow-2xl object-contain"
         onClick={(e) => e.stopPropagation()}
         onError={(e) => {
@@ -51,15 +128,16 @@ export function LightboxImagem({ url, onClose }: { url: string; onClose: () => v
   );
 }
 
-export function BotaoVerComprovante({ onClick }: { onClick: () => void }) {
+export function BotaoVerComprovante({ onClick, quantidade = 1 }: { onClick: () => void; quantidade?: number }) {
+  const varios = quantidade > 1;
   return (
     <button
       onClick={onClick}
       className="inline-flex items-center gap-1 mt-2 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-md transition-colors"
-      title="Ver comprovante anexado"
+      title={varios ? `Ver ${quantidade} comprovantes anexados` : 'Ver comprovante anexado'}
     >
       <ImageIcon className="w-3.5 h-3.5" />
-      Ver comprovante
+      {varios ? `Ver ${quantidade} comprovantes` : 'Ver comprovante'}
     </button>
   );
 }
@@ -83,6 +161,8 @@ interface MovimentacaoFinanceiro {
   ref_emprestimo_id: string | null;
   status: string;
   foto_url?: string | null;
+  // Até 5 comprovantes; vazio nos lançamentos anteriores à coluna.
+  comprovantes_urls?: string[] | null;
 }
 
 interface MicroseguroVenda {
@@ -316,7 +396,7 @@ interface ModalDespesasProps {
 export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qtdFallback }: ModalDespesasProps) {
   const [loading, setLoading] = useState(true);
   const [registros, setRegistros] = useState<MovimentacaoFinanceiro[]>([]);
-  const [comprovante, setComprovante] = useState<string | null>(null);
+  const [comprovante, setComprovante] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (isOpen && liquidacaoId) {
@@ -377,7 +457,12 @@ export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qt
                 </div>
                 <div className="flex items-center justify-between mt-2">
                   <p className="text-xs text-gray-400">{formatarHora(reg.created_at)}</p>
-                  {reg.foto_url && <BotaoVerComprovante onClick={() => setComprovante(reg.foto_url!)} />}
+                  {comprovantesDe(reg).length > 0 && (
+                    <BotaoVerComprovante
+                      quantidade={comprovantesDe(reg).length}
+                      onClick={() => setComprovante(comprovantesDe(reg))}
+                    />
+                  )}
                 </div>
               </div>
             ))}
@@ -394,7 +479,7 @@ export function ModalDespesas({ isOpen, onClose, liquidacaoId, totalFallback, qt
           <span className="font-bold text-red-800">{formatarMoeda(total)}</span>
         </div>
       </div>
-      {comprovante && <LightboxImagem url={comprovante} onClose={() => setComprovante(null)} />}
+      {comprovante && <LightboxImagem urls={comprovante} onClose={() => setComprovante(null)} />}
     </ModalBase>
   );
 }
