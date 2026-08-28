@@ -21,6 +21,7 @@ import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
+import { baixarXlsx, type ColunaPlanilha } from '@/utils/xlsx';
 
 // =====================================================
 // TIPOS
@@ -290,54 +291,41 @@ function exportarCSV(clientes: ClienteComTotais[]) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Exportação para Excel.
+ *
+ * Gerava SpreadsheetML 2003 (`<Cell><Data ss:Type=...>`) com extensão .xls —
+ * o Excel moderno recusava ou mostrava o XML cru, reclamação do campo em
+ * 25/05, 15/06 e 17/07 de 2026. Também não escapava nada: um `&` no endereço
+ * corrompia o arquivo inteiro.
+ *
+ * Agora sai .xlsx de verdade, via src/utils/xlsx.ts. As colunas seguem as
+ * mesmas do CSV, na mesma ordem — os dois botões devem produzir o mesmo
+ * conteúdo, mudando só o formato.
+ */
+const COLUNAS_CLIENTES: ColunaPlanilha<ClienteComTotais>[] = [
+  { titulo: 'Código',        largura: 10, numero: true, valor: c => c.codigo_cliente ?? null },
+  { titulo: 'Nome',          largura: 32, valor: c => c.nome },
+  { titulo: 'Documento',     largura: 16, valor: c => c.documento },
+  { titulo: 'Telefone',      largura: 16, valor: c => c.telefone_celular },
+  { titulo: 'Email',         largura: 26, valor: c => c.email },
+  { titulo: 'Endereço',      largura: 36, valor: c => c.endereco },
+  { titulo: 'Rota',          largura: 20, valor: c => c.rotas_nomes },
+  { titulo: 'Saldo Devedor', largura: 14, numero: true, valor: c => c.valor_saldo_devedor || 0 },
+  { titulo: 'Emp. Ativos',   largura: 12, numero: true, valor: c => c.qtd_emprestimos_ativos || 0 },
+  { titulo: 'Total Emp.',    largura: 12, numero: true, valor: c => c.qtd_emprestimos_total || 0 },
+  { titulo: 'Status',        largura: 12, valor: c => c.status },
+  { titulo: 'Data Cadastro', largura: 14,
+    valor: c => (c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : '') },
+];
+
 function exportarExcel(clientes: ClienteComTotais[]) {
-  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n';
-  xml += '<?mso-application progid="Excel.Sheet"?>\n';
-  xml += '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"\n';
-  xml += '  xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">\n';
-  xml += '<Worksheet ss:Name="Clientes">\n<Table>\n';
-
-  xml += '<Row>\n';
-  xml += '<Cell><Data ss:Type="String">Código</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Nome</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Documento</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Telefone</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Email</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Endereço</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Rota</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Saldo Devedor</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Emp. Ativos</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Total Emp.</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Status</Data></Cell>\n';
-  xml += '<Cell><Data ss:Type="String">Data Cadastro</Data></Cell>\n';
-  xml += '</Row>\n';
-
-  clientes.forEach(c => {
-    xml += '<Row>\n';
-    xml += `<Cell><Data ss:Type="String">${c.codigo_cliente || ''}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.nome}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.documento || ''}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.telefone_celular || ''}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.email || ''}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.endereco || ''}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.rotas_nomes || ''}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="Number">${c.valor_saldo_devedor || 0}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="Number">${c.qtd_emprestimos_ativos || 0}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="Number">${c.qtd_emprestimos_total || 0}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.status}</Data></Cell>\n`;
-    xml += `<Cell><Data ss:Type="String">${c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''}</Data></Cell>\n`;
-    xml += '</Row>\n';
-  });
-
-  xml += '</Table>\n</Worksheet>\n</Workbook>';
-
-  const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `clientes_${new Date().toISOString().split('T')[0]}.xls`;
-  link.click();
-  URL.revokeObjectURL(url);
+  baixarXlsx(
+    `clientes_${new Date().toISOString().split('T')[0]}.xlsx`,
+    'Clientes',
+    COLUNAS_CLIENTES,
+    clientes,
+  );
 }
 
 // =====================================================
