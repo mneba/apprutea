@@ -354,3 +354,44 @@ export interface ParcelaView {
   data_pagamento?: string;
   status: string;
 }
+// =====================================================
+// EXPORTAÇÃO — uma linha por empréstimo
+// =====================================================
+//
+// Retorno de `fn_exportar_emprestimos`. Espelha o relatório do sistema legado
+// do cliente, que lista EMPRÉSTIMOS e não clientes.
+//
+// Campos de frequência vêm crus e separados de propósito: o texto final
+// ("Semanal (Sábado)" em pt-BR, "Semanal (Sábado)" em es) é montado no front,
+// que conhece o idioma da sessão.
+export interface LinhaExportacaoEmprestimo {
+  pais: string | null;
+  estado: string | null;
+  cidade: string | null;
+  vendedor_nome: string | null;
+  rota_nome: string | null;
+  data_emprestimo: string | null;
+  codigo_cliente: number | null;
+  cliente_nome: string;
+  cliente_documento: string | null;
+  cliente_telefone: string | null;
+  cliente_endereco: string | null;
+  valor_principal: number;
+  valor_total: number;
+  valor_juros: number;
+  taxa_juros: number;
+  valor_parcela: number;
+  numero_parcelas: number;
+  /** Fracionário, como no legado (ex.: 4,79). (valor_total − saldo) / valor_parcela */
+  parcelas_pagas: number;
+  parcelas_restantes: number;
+  valor_saldo: number;
+  valor_multa: number;
+  frequencia_pagamento: string | null;
+  dia_semana_cobranca: number | null;
+  dia_mes_cobranca: number | null;
+  dias_mes_cobranca: number[] | null;
+  /** Data da LIQUIDAÇÃO do último pagamento, não o created_at do registro. */
+  ultimo_pagamento: string | null;
+  status: string | null;
+}

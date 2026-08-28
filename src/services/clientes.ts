@@ -22,6 +22,7 @@ import type {
   ProximaParcela,
   EmprestimoHistorico,
   ParcelaView,
+  LinhaExportacaoEmprestimo,
 } from '@/types/clientes';
 
 // =====================================================
@@ -791,6 +792,37 @@ export const clientesService = {
       taxa_juros: taxaJuros,
       numero_parcelas: numeroParcelas,
     };
+  },
+
+  // ==================================================
+  // EXPORTAÇÃO — uma linha por EMPRÉSTIMO
+  // ==================================================
+  //
+  // Origem das exportações CSV e Excel da tela de Clientes. Espelha o
+  // relatório do sistema legado do cliente, que é por empréstimo (`ID. VENTA`)
+  // e não por cliente — um cliente com dois empréstimos gera duas linhas.
+  //
+  // A RPC devolve dados crus: `frequencia_pagamento` e os dias de cobrança vêm
+  // separados, porque quem monta "Semanal (Sábado)" / "Semanal (Sábado)" é o
+  // front, que sabe o idioma da sessão.
+  async exportarEmprestimos(
+    empresaId: string,
+    rotaId?: string | null,
+    incluirQuitados = false,
+  ): Promise<LinhaExportacaoEmprestimo[]> {
+    const supabase = createClient();
+
+    const { data, error } = await supabase.rpc('fn_exportar_emprestimos', {
+      p_empresa_id: empresaId,
+      p_rota_id: rotaId || null,
+      p_incluir_quitados: incluirQuitados,
+    });
+
+    if (error) {
+      console.error('Erro ao exportar empréstimos:', error);
+      throw error;
+    }
+    return (data || []) as LinhaExportacaoEmprestimo[];
   },
 
   // Calcular data do primeiro vencimento baseado na frequência

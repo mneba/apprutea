@@ -21,7 +21,12 @@ import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
 import type { ClienteComTotais, Segmento, RotaSimples } from '@/types/clientes';
-import { baixarXlsx, type ColunaPlanilha } from '@/utils/xlsx';
+import { useLocale } from 'next-intl';
+import { baixarXlsx } from '@/utils/xlsx';
+import {
+  colunasEmprestimos, linhaTotal, montarCsv,
+  nomeArquivoExportacao, nomeAbaExportacao,
+} from '@/utils/exportacaoEmprestimos';
 
 // =====================================================
 // TIPOS
@@ -242,93 +247,6 @@ function AvisoSemRotas() {
 }
 
 // =====================================================
-// FUNÇÕES DE EXPORTAÇÃO
-// =====================================================
-
-function exportarCSV(clientes: ClienteComTotais[]) {
-  const headers = [
-    'Código',
-    'Nome',
-    'Documento',
-    'Telefone',
-    'Email',
-    'Endereço',
-    'Rota',
-    'Saldo Devedor',
-    'Empréstimos Ativos',
-    'Total Empréstimos',
-    'Status',
-    'Data Cadastro'
-  ];
-  
-  const rows = clientes.map(c => [
-    c.codigo_cliente || '',
-    c.nome,
-    c.documento || '',
-    c.telefone_celular || '',
-    c.email || '',
-    c.endereco || '',
-    c.rotas_nomes || '',
-    c.valor_saldo_devedor || 0,
-    c.qtd_emprestimos_ativos || 0,
-    c.qtd_emprestimos_total || 0,
-    c.status,
-    c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : ''
-  ]);
-
-  const csvContent = [
-    headers.join(';'),
-    ...rows.map(row => row.map(cell => `"${cell}"`).join(';'))
-  ].join('\n');
-
-  const BOM = '\uFEFF';
-  const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = `clientes_${new Date().toISOString().split('T')[0]}.csv`;
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-/**
- * Exportação para Excel.
- *
- * Gerava SpreadsheetML 2003 (`<Cell><Data ss:Type=...>`) com extensão .xls —
- * o Excel moderno recusava ou mostrava o XML cru, reclamação do campo em
- * 25/05, 15/06 e 17/07 de 2026. Também não escapava nada: um `&` no endereço
- * corrompia o arquivo inteiro.
- *
- * Agora sai .xlsx de verdade, via src/utils/xlsx.ts. As colunas seguem as
- * mesmas do CSV, na mesma ordem — os dois botões devem produzir o mesmo
- * conteúdo, mudando só o formato.
- */
-const COLUNAS_CLIENTES: ColunaPlanilha<ClienteComTotais>[] = [
-  { titulo: 'Código',        largura: 10, numero: true, valor: c => c.codigo_cliente ?? null },
-  { titulo: 'Nome',          largura: 32, valor: c => c.nome },
-  { titulo: 'Documento',     largura: 16, valor: c => c.documento },
-  { titulo: 'Telefone',      largura: 16, valor: c => c.telefone_celular },
-  { titulo: 'Email',         largura: 26, valor: c => c.email },
-  { titulo: 'Endereço',      largura: 36, valor: c => c.endereco },
-  { titulo: 'Rota',          largura: 20, valor: c => c.rotas_nomes },
-  { titulo: 'Saldo Devedor', largura: 14, numero: true, valor: c => c.valor_saldo_devedor || 0 },
-  { titulo: 'Emp. Ativos',   largura: 12, numero: true, valor: c => c.qtd_emprestimos_ativos || 0 },
-  { titulo: 'Total Emp.',    largura: 12, numero: true, valor: c => c.qtd_emprestimos_total || 0 },
-  { titulo: 'Status',        largura: 12, valor: c => c.status },
-  { titulo: 'Data Cadastro', largura: 14,
-    valor: c => (c.data_cadastro ? new Date(c.data_cadastro).toLocaleDateString('pt-BR') : '') },
-];
-
-function exportarExcel(clientes: ClienteComTotais[]) {
-  baixarXlsx(
-    `clientes_${new Date().toISOString().split('T')[0]}.xlsx`,
-    'Clientes',
-    COLUNAS_CLIENTES,
-    clientes,
-  );
-}
-
-// =====================================================
 // PÁGINA PRINCIPAL
 // =====================================================
 
@@ -336,6 +254,9 @@ export default function ClientesPage() {
   const { localizacao, profile, isSuperAdmin, permissoes } = useUser();
   const podeNovoCliente = isSuperAdmin || permissoes?.['GESTAO_CLIENTES']?.pode_guardar === true;
   const empresaId = localizacao?.empresa_id;
+  // Idioma da sessão — só a exportação usa: o arquivo vai para o cliente
+  // final, que opera em espanhol. O resto desta tela tem português no código.
+  const locale = useLocale();
   const rotaIdContexto = localizacao?.rota_id;
   const userId = profile?.user_id;
 
@@ -349,6 +270,49 @@ export default function ClientesPage() {
   const [dropdownFreqAberto, setDropdownFreqAberto] = useState(false);
   const [statusFiltro, setStatusFiltro] = useState<string>('');
   const [rotaFiltro, setRotaFiltro] = useState<string>('');
+
+  // ─── Exportação ─────────────────────────────────────────────────────────
+  //
+  // Uma linha por EMPRÉSTIMO, como o relatório do sistema legado do cliente —
+  // a exportação anterior era por cliente. Os dois formatos compartilham a
+  // mesma definição de colunas (src/utils/exportacaoEmprestimos.ts), então não
+  // podem divergir.
+  //
+  // Os dados NÃO vêm da lista em tela: aquela está paginada e filtrada por
+  // busca. A exportação vai ao banco pela empresa (e pela rota, se houver
+  // filtro de rota ativo) para trazer a carteira completa.
+  const [exportando, setExportando] = useState(false);
+
+  const exportar = async (formato: 'csv' | 'xlsx') => {
+    if (!empresaId || exportando) return;
+    setExportando(true);
+    try {
+      const linhas = await clientesService.exportarEmprestimos(empresaId, rotaFiltro || null);
+      if (linhas.length === 0) {
+        alert('Não há empréstimos para exportar com os filtros atuais.');
+        return;
+      }
+      const colunas = colunasEmprestimos(locale);
+      const dados = [...linhas, linhaTotal(linhas, locale)];
+      const nome = nomeArquivoExportacao(locale);
+
+      if (formato === 'xlsx') {
+        baixarXlsx(`${nome}.xlsx`, nomeAbaExportacao(locale), colunas, dados);
+      } else {
+        const url = URL.createObjectURL(montarCsv(colunas, dados));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${nome}.csv`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch (e: any) {
+      console.error('Erro ao exportar:', e);
+      alert('Não foi possível exportar: ' + (e?.message || 'erro desconhecido'));
+    } finally {
+      setExportando(false);
+    }
+  };
   
   // Novos estados para ordenação
   const [ordenacao, setOrdenacao] = useState<TipoOrdenacao>('nome_asc');
@@ -681,7 +645,7 @@ export default function ClientesPage() {
                 <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 min-w-[160px]">
                   <button
                     onClick={() => {
-                      exportarCSV(clientesOrdenados);
+                      exportar('csv');
                       setMenuExportarAberto(false);
                     }}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
@@ -691,7 +655,7 @@ export default function ClientesPage() {
                   </button>
                   <button
                     onClick={() => {
-                      exportarExcel(clientesOrdenados);
+                      exportar('xlsx');
                       setMenuExportarAberto(false);
                     }}
                     className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
