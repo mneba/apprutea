@@ -104,6 +104,30 @@ function validarPermissaoRota(
   return false;
 }
 
+/**
+ * Dia OPERACIONAL da liquidação — o dia a que ela se refere.
+ *
+ * NÃO confundir com `data_abertura`, que é QUANDO a liquidação foi aberta.
+ * Numa abertura retroativa as duas divergem: no dia 03/09 abre-se a liquidação
+ * do dia 25/08. Foi o que produziu o aviso "reabrir a liquidação do dia 03/09"
+ * enquanto o admin visualizava a de 25/08 — relatado pelo campo em 12/08 e
+ * 07/09 de 2026.
+ *
+ * `data_abertura` ainda é timestamp UTC: `.split('T')[0]` devolve o dia UTC, e
+ * uma abertura às 19h na Colômbia (UTC−5) já cai no dia seguinte.
+ *
+ * O fallback existe para linhas anteriores à migration que criou
+ * `data_liquidacao`. Ver a seção "A liquidação é a régua do tempo" no CLAUDE.md.
+ */
+const diaOperacional = (liq: any): string =>
+  liq?.data_liquidacao?.substring(0, 10) || liq?.data_abertura?.split('T')[0] || '';
+
+/** O mesmo, como Date. Meio-dia local — evita o deslocamento de fuso ao parsear. */
+const diaOperacionalDate = (liq: any): Date => {
+  const d = diaOperacional(liq);
+  return d ? new Date(d + 'T12:00:00') : new Date();
+};
+
 // =====================================================
 // COMPONENTES AUXILIARES
 // =====================================================
@@ -805,7 +829,7 @@ export default function LiquidacaoDiariaPage() {
       ] = await Promise.all([
         liq.id
           ? liquidacaoService.buscarClientesDaLiquidacao(liq.id)
-          : liquidacaoService.buscarClientesDoDia(rotaId, liq.data_abertura.split('T')[0]),
+          : liquidacaoService.buscarClientesDoDia(rotaId, diaOperacional(liq)),
         liquidacaoService.buscarEmprestimosDoDia(liq.id),
         supabase
           .from('emprestimos')
@@ -1093,7 +1117,7 @@ export default function LiquidacaoDiariaPage() {
             setLiquidacaoAtiva(null); // Não há liquidação ativa (aberta)
             setVisualizandoOutroDia(false); // É hoje, não outro dia
             await carregarDadosLiquidacao(liqFechadaHoje, rotaId, opts);
-            setDataSelecionada(new Date(liqFechadaHoje.data_abertura));
+            setDataSelecionada(diaOperacionalDate(liqFechadaHoje));
             setLoading(false);
             return; // Importante: sair aqui
           }
@@ -1129,7 +1153,7 @@ export default function LiquidacaoDiariaPage() {
       if (liquidacaoData) {
         setVisualizandoOutroDia(false);
         await carregarDadosLiquidacao(liquidacaoData, rotaId, opts);
-        setDataSelecionada(new Date(liquidacaoData.data_abertura));
+        setDataSelecionada(diaOperacionalDate(liquidacaoData));
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -1208,7 +1232,7 @@ export default function LiquidacaoDiariaPage() {
   const voltarParaLiquidacaoAtiva = useCallback(async () => {
     if (rota) { try { sessionStorage.removeItem(`liq_ultima_data_${rota.id}`); } catch {} }
     if (liquidacaoAtiva && rota) {
-      setDataSelecionada(new Date(liquidacaoAtiva.data_abertura));
+      setDataSelecionada(diaOperacionalDate(liquidacaoAtiva));
       setLiquidacao(liquidacaoAtiva);
       setVisualizandoOutroDia(false);
       setPrevisaoDia(null);
@@ -1448,7 +1472,7 @@ export default function LiquidacaoDiariaPage() {
       }
 
       // Atualiza states de modo coordenado
-      const dataAberturaLiq = new Date(novaLiquidacao.data_abertura);
+      const dataAberturaLiq = diaOperacionalDate(novaLiquidacao);
       setLiquidacao(novaLiquidacao);
 
       if (ehRetroativa && dataAlvo) {
@@ -2352,7 +2376,7 @@ export default function LiquidacaoDiariaPage() {
           </div>
         </div>
       )}
-      <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={liquidacao?.data_abertura?.split('T')[0] || ''} />
+      <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={diaOperacional(liquidacao)} />
       <ModalExtratoLiquidacao isOpen={modalExtrato} onClose={() => setModalExtrato(false)} liquidacao={liquidacao} rotaNome={rota?.nome || ''} vendedorNome={vendedor?.nome} empresaNome={empresaNome} />
       <ModalDetalhesCliente isOpen={modalClienteAberto} onClose={() => { setModalClienteAberto(false); setClienteSelecionado(null); }} cliente={clienteSelecionado} />
 
@@ -2368,7 +2392,7 @@ export default function LiquidacaoDiariaPage() {
           liquidacaoId={liquidacao.id}
           autorId={userId || ''}
           autorNome={profile?.nome || 'Administrador'}
-          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+          dataReferencia={diaOperacional(liquidacao)}
         />
       )}
 
@@ -2383,7 +2407,7 @@ export default function LiquidacaoDiariaPage() {
           autorId={userId || ''}
           autorNome={profile?.nome || 'Administrador'}
           autorTipo={profile?.tipo_usuario || 'ADMIN'}
-          dataReferencia={liquidacao.data_abertura.split('T')[0]}
+          dataReferencia={diaOperacional(liquidacao)}
           clientes={clientesDia}
           onChanged={recarregarContagemNotas}
         />
