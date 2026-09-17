@@ -2082,7 +2082,10 @@ export default function LiquidacaoDiariaPage() {
             />
 
             {/* Carteira */}
-            <CardSaldo titulo="Carteira (A Receber)" inicial={liquidacao.carteira_inicial} final={liquidacao.carteira_final} icone={TrendingUp} corBase="purple" />
+            {/* `carteira_atual` e nao `carteira_final`: o campo gravado e acumulador
+                e nao desce com pagamento enquanto o dia esta aberto.
+                Ver sql/2026-09-16_carteira_derivada.sql. */}
+            <CardSaldo titulo="Carteira (A Receber)" inicial={liquidacao.carteira_inicial} final={liquidacao.carteira_atual ?? liquidacao.carteira_final} icone={TrendingUp} corBase="purple" />
 
             {/* Meta do dia */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">

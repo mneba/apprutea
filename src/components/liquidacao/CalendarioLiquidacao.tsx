@@ -384,7 +384,10 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
 
   // CARTEIRA
   const carteiraInicial = Number(liquidacao.carteira_inicial || 0);
-  const carteiraFinal = Number(liquidacao.carteira_final || 0);
+  // `carteira_atual` primeiro: o `carteira_final` gravado e acumulador e nao
+  // desce com pagamento enquanto o dia esta aberto. Ver
+  // sql/2026-09-16_carteira_derivada.sql.
+  const carteiraFinal = Number((liquidacao as any).carteira_atual ?? liquidacao.carteira_final ?? 0);
   const jurosDia = Number(liquidacao.total_juros_dia || 0);
 
   // MICROSEGURO

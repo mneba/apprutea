@@ -26,6 +26,11 @@ import type {
 // SERVICE PRINCIPAL
 // =====================================================
 
+// Leituras vêm de `vw_liquidacoes_diarias`, não da tabela: a view acrescenta
+// `carteira_atual`, derivada dos saldos reais enquanto o dia está aberto e
+// igual ao valor gravado depois de fechado. `carteira_final` na tabela é
+// acumulador e não desce com pagamento — ver sql/2026-09-16_carteira_derivada.sql.
+// Escritas continuam pelas RPCs fn_*, que gravam na tabela.
 export const liquidacaoService = {
   // ==================================================
   // BUSCAR VENDEDOR POR USER_ID (usuário logado)
@@ -188,7 +193,7 @@ export const liquidacaoService = {
     const supabase = createClient();
     
     const { data, error } = await supabase
-      .from('liquidacoes_diarias')
+      .from('vw_liquidacoes_diarias')
       .select('*')
       .eq('rota_id', rotaId)
       .in('status', ['ABERTO', 'REABERTO'])
@@ -211,7 +216,7 @@ export const liquidacaoService = {
     const supabase = createClient();
     
     const { data, error } = await supabase
-      .from('liquidacoes_diarias')
+      .from('vw_liquidacoes_diarias')
       .select('*')
       .eq('id', liquidacaoId)
       .single();
@@ -234,7 +239,7 @@ export const liquidacaoService = {
     const supabase = createClient();
     
     let query = supabase
-      .from('liquidacoes_diarias')
+      .from('vw_liquidacoes_diarias')
       .select('*')
       .eq('rota_id', rotaId)
       .order('data_abertura', { ascending: false });
@@ -665,7 +670,7 @@ export const liquidacaoService = {
     // em outro mês, e filtrar por ela cortava dias do calendário (ex.: dias
     // referentes a julho mas abertos em agosto sumiam). data_liquidacao é DATE.
     const { data, error } = await supabase
-      .from('liquidacoes_diarias')
+      .from('vw_liquidacoes_diarias')
       .select('*')
       .eq('rota_id', rotaId)
       .gte('data_liquidacao', primeiroDia)
@@ -734,7 +739,7 @@ export const liquidacaoService = {
     // e NÃO por data_abertura (timestamp de criação). Importante para liquidações retroativas:
     // uma liquidação criada hoje pode se referir a um dia passado.
     const { data: liquidacoes, error } = await supabase
-      .from('liquidacoes_diarias')
+      .from('vw_liquidacoes_diarias')
       .select('*')
       .eq('rota_id', rotaId)
       .eq('data_liquidacao', data)

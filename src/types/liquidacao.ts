@@ -16,7 +16,18 @@ export interface LiquidacaoDiaria {
   caixa_inicial: number;
   caixa_final: number;
   carteira_inicial: number;
+  /**
+   * Acumulador gravado na tabela. NÃO exiba: durante o dia aberto ele sobe
+   * com empréstimo novo e não desce com pagamento, porque a função que faria
+   * isso está órfã. Só é confiável depois do fechamento.
+   */
   carteira_final: number;
+  /**
+   * Carteira de verdade, vinda de `vw_liquidacoes_diarias`: derivada dos
+   * saldos reais enquanto o dia está aberto, e igual ao valor gravado depois
+   * de fechado. É esta que vai para a tela.
+   */
+  carteira_atual?: number;
   
   // Valores do dia
   valor_esperado_dia: number;
