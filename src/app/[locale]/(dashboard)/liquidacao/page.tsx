@@ -767,6 +767,9 @@ export default function LiquidacaoDiariaPage() {
     diasPulados: string[];
   }>({ dataProxima: null, diasPulados: [] });
   const [modalDiasPulados, setModalDiasPulados] = useState(false);
+  // Pedidos de abertura pendentes para OUTRO dia, detectados na hora de abrir.
+  const [solicConflito, setSolicConflito] = useState<any[]>([]);
+  const [modalSolicConflito, setModalSolicConflito] = useState(false);
   const [caixaInicialPendente, setCaixaInicialPendente] = useState<number | null>(null);
   // Data alvo p/ abrir (pode ser hoje ou retroativo)
   const [dataAlvoAbertura, setDataAlvoAbertura] = useState<Date | null>(null);
@@ -1426,7 +1429,61 @@ export default function LiquidacaoDiariaPage() {
       setModalDiasPulados(true);
       return;
     }
+
+    // Pedido de abrir OUTRO dia ainda sem resposta.
+    //
+    // Este é o único momento em que esse pedido vira contradição: ele foi
+    // feito justamente porque não havia dia aberto, e agora se está abrindo
+    // outro. Sem esta pergunta ele fica PENDENTE para sempre — a limpeza de
+    // solicitações mora no FECHAMENTO, e um pedido sem liquidação não tem a
+    // que se prender.
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const dataAlvoStr = dataAlvoAbertura
+        ? `${dataAlvoAbertura.getFullYear()}-${String(dataAlvoAbertura.getMonth() + 1).padStart(2, '0')}-${String(dataAlvoAbertura.getDate()).padStart(2, '0')}`
+        : null;
+      const { data } = await supabase.rpc('fn_solicitacoes_abertura_pendentes', {
+        p_rota_id: rota.id,
+        p_data_alvo: dataAlvoStr,
+      });
+      if (Array.isArray(data) && data.length > 0) {
+        setCaixaInicialPendente(caixaInicial);
+        setSolicConflito(data);
+        setModalAbrir(false);
+        setModalSolicConflito(true);
+        return;
+      }
+    } catch (err) {
+      // Falha na verificação não pode impedir a abertura do dia: o campo para
+      // se isto travar. Segue, e o pedido fica para a próxima.
+      console.error('Erro ao verificar solicitações de abertura:', err);
+    }
+
     await abrirLiquidacaoEfetivamente(caixaInicial);
+  };
+
+  // "Rejeitar e abrir": encerra cada pedido e segue com a abertura.
+  const rejeitarSolicitacoesEAbrir = async () => {
+    if (!userId || caixaInicialPendente === null) return;
+    setLoadingAcao(true);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      for (const sol of solicConflito) {
+        await supabase.rpc('fn_encerrar_solicitacao_abertura', {
+          p_solicitacao_id: sol.id,
+          p_user_id: userId,
+          p_motivo: 'Rejeitada pelo administrador ao abrir outro dia',
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao encerrar solicitações:', err);
+    } finally {
+      setLoadingAcao(false);
+    }
+    const caixa = caixaInicialPendente;
+    setModalSolicConflito(false);
+    setSolicConflito([]);
+    await abrirLiquidacaoEfetivamente(caixa);
   };
 
   const abrirLiquidacaoEfetivamente = async (caixaInicial: number) => {
@@ -2321,6 +2378,65 @@ export default function LiquidacaoDiariaPage() {
         diasPulados={proximaInfo.diasPulados}
         dataProxima={proximaInfo.dataProxima}
       />
+
+      {/* Pedido de abertura pendente para outro dia.
+          Aparece só quando o admin vai abrir um dia DIFERENTE do que o
+          vendedor pediu — é ali que o pedido vira contradição e precisa de
+          decisão, em vez de ficar pendente para sempre. */}
+      {modalSolicConflito && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => !loadingAcao && setModalSolicConflito(false)} />
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md max-h-[85vh] flex flex-col">
+            <div className="flex items-center gap-3 px-6 py-4 border-b">
+              <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+                <AlertTriangle className="w-5 h-5 text-amber-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Solicitação de abertura pendente</h3>
+                <p className="text-xs text-gray-500">Decida antes de abrir: cancelar não abre o dia</p>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 overflow-y-auto space-y-2">
+              {solicConflito.map((sol: any) => (
+                <div key={sol.id} className="rounded-lg border border-gray-200 p-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-gray-900">
+                      {sol.data_solicitada ? String(sol.data_solicitada).substring(0, 10).split('-').reverse().join('/') : '—'}
+                    </span>
+                    {sol.vencida && (
+                      <span className="text-[10px] font-bold uppercase text-amber-700 bg-amber-50 px-2 py-0.5 rounded">
+                        vencida
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {sol.vendedor_nome || 'Vendedor'}
+                    {sol.motivo_solicitacao ? ` · ${sol.motivo_solicitacao}` : ''}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="px-6 py-4 border-t flex gap-3">
+              <button
+                onClick={() => setModalSolicConflito(false)}
+                disabled={loadingAcao}
+                className="flex-1 px-4 py-2.5 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={rejeitarSolicitacoesEAbrir}
+                disabled={loadingAcao}
+                className="flex-1 px-4 py-2.5 rounded-lg bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loadingAcao ? 'Abrindo…' : 'Rejeitar e abrir'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <ModalFecharLiquidacao isOpen={modalFechar} onClose={() => setModalFechar(false)} onConfirmar={handleFecharLiquidacao} loading={loadingAcao} liquidacao={liquidacao} />
 
       {modalPendencias && (
