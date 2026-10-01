@@ -15,7 +15,8 @@ import {
   LogOut,
   User,
   ShieldCheck,
-  Tag
+  Tag,
+  BarChart3
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
@@ -48,6 +49,16 @@ const menuGroups: MenuGroup[] = [
       { key: 'liquidacao', label: 'Liquidação Diária', icon: <FileText className="w-5 h-5" />, href: '/liquidacao', modulo: 'LIQUIDACAO_DIARIA' },
       { key: 'clientes', label: 'Clientes', icon: <Users className="w-5 h-5" />, href: '/clientes', modulo: 'GESTAO_CLIENTES' },
       { key: 'financeiro', label: 'Financeiro', icon: <DollarSign className="w-5 h-5" />, href: '/financeiro', modulo: 'FINANCEIRO' },
+      // `sempreAtivo` de propósito: os demais itens ficam travados enquanto
+      // `localizacao.empresa_id` for nulo, e Relatórios existe justamente para
+      // NÃO depender do seletor global — cada relatório escolhe o próprio
+      // recorte, de uma rota ao país inteiro. Sem isso, o seletor trancaria a
+      // tela feita para dispensá-lo.
+      //
+      // Gateado só por `roles` enquanto há um relatório. Quando houver vários,
+      // vale criar o módulo RELATORIOS em `modulos_sistema` e passar a usar
+      // `user_permissoes`, como os outros.
+      { key: 'relatorios', label: 'Relatórios', icon: <BarChart3 className="w-5 h-5" />, href: '/relatorios', roles: ['SUPER_ADMIN', 'ADMIN', 'MONITOR'], sempreAtivo: true },
     ],
   },
   {
