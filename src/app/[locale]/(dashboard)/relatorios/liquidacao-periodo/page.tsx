@@ -27,14 +27,15 @@
 // Nenhuma conta acontece aqui: tudo vem de `fn_liquidacoes_periodo`, inclusive
 // o que NÃO somar. Ver sql/2026-10-01_fn_liquidacoes_periodo.sql.
 
-import { ArrowLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { ArrowLeft, ChevronDown, ChevronRight, Download, Globe, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PainelCobranca from '@/components/relatorios/PainelCobranca';
+import PainelVendas from '@/components/relatorios/PainelVendas';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
 import SeletorPeriodo from '@/components/relatorios/SeletorPeriodo';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
-import type { EstruturaVisivel, LiquidacoesPeriodo } from '@/types/relatorios';
+import type { EstruturaVisivel, LiquidacoesPeriodo, RotaNo } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
 const fmt = (n: number | null | undefined) =>
@@ -58,6 +59,14 @@ const primeiroDoMes = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+/** Todas as rotas da árvore, achatadas, para resolver nome e vendedor. */
+const achatar = (e: EstruturaVisivel | null): RotaNo[] =>
+  (e?.paises ?? []).flatMap((p) =>
+    p.estados.flatMap((es) =>
+      es.cidades.flatMap((c) => c.empresas.flatMap((em) => em.rotas))
+    )
+  );
+
 /** Cor da barra de atingido, na mesma escala da tela de Liquidação Diária. */
 const corPct = (p: number) =>
   p >= 100 ? 'bg-emerald-500' : p >= 70 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500';
@@ -71,7 +80,9 @@ export default function LiquidacaoPeriodoPage() {
   const [dados, setDados] = useState<LiquidacoesPeriodo | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [painel, setPainel] = useState(false);
+  const [painel, setPainel] = useState<'cobranca' | 'venda' | null>(null);
+  const [escopoAberto, setEscopoAberto] = useState(false);
+  const caixaEscopo = useRef<HTMLDivElement>(null);
 
   // O recorte usado na última geração, não o marcado agora. Sem isso, mexer na
   // árvore trocaria o conteúdo do painel sem o relatório ter sido refeito.
@@ -80,6 +91,55 @@ export default function LiquidacaoPeriodoPage() {
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
   }, []);
+
+  // O popover fecha ao clicar fora ou com Esc. Sem isso ele fica preso aberto
+  // sobre a tela, e a árvore de 52 rotas é alta.
+  useEffect(() => {
+    if (!escopoAberto) return;
+    const fora = (ev: MouseEvent) => {
+      if (caixaEscopo.current && !caixaEscopo.current.contains(ev.target as Node)) {
+        setEscopoAberto(false);
+      }
+    };
+    const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setEscopoAberto(false); };
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [escopoAberto]);
+
+  const todasAsRotas = useMemo(() => achatar(estrutura), [estrutura]);
+
+  // O rótulo do botão de escopo. Nome quando dá para nomear, contagem quando
+  // são muitas — "23 rotas" diz mais que uma lista cortada no meio.
+  const rotuloEscopo = useMemo(() => {
+    if (selecionadas.size === 0) return 'Selecione o escopo';
+    if (selecionadas.size === todasAsRotas.length) return 'Tudo';
+    if (selecionadas.size === 1) {
+      const r = todasAsRotas.find((x) => selecionadas.has(x.rota_id));
+      return r?.nome ?? '1 rota';
+    }
+    const paisCheio = (estrutura?.paises ?? []).find((p) => {
+      const ids = p.estados.flatMap((e) =>
+        e.cidades.flatMap((c) => c.empresas.flatMap((em) => em.rotas.map((r) => r.rota_id)))
+      );
+      return ids.length === selecionadas.size && ids.every((i) => selecionadas.has(i));
+    });
+    return paisCheio ? paisCheio.pais : `${selecionadas.size} rotas`;
+  }, [selecionadas, todasAsRotas, estrutura]);
+
+  // As rotas do recorte, com o vendedor. Sai do que foi GERADO, não do que
+  // está marcado agora — o cabeçalho descreve o relatório na tela.
+  const rotasDoResumo = useMemo(() => {
+    if (!escopoGerado) return [];
+    const mapa = new Map(todasAsRotas.map((r) => [r.rota_id, r]));
+    return escopoGerado.rotas
+      .map((id) => mapa.get(id))
+      .filter((r): r is RotaNo => !!r)
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [escopoGerado, todasAsRotas]);
 
   const podeGerar = selecionadas.size > 0 && !!de && !!ate && ate >= de && !carregando;
 
@@ -146,40 +206,54 @@ export default function LiquidacaoPeriodoPage() {
         </div>
       </div>
 
-      {/* ── Filtros ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Escopo</h2>
-          {!estrutura ? (
-            <div className="flex items-center gap-2 text-sm text-gray-400">
-              <Loader2 className="w-4 h-4 animate-spin" /> Carregando estrutura…
+      {/* ── Filtros, numa barra só ──
+          Antes eram dois cartões altos lado a lado. Filtro não é conteúdo:
+          devolver a altura para o dado é o ganho. O escopo virou um botão que
+          abre a árvore num popover; período e atalhos ficam na mesma linha. */}
+      <div className="bg-white rounded-lg border border-gray-200 p-2.5 flex flex-wrap items-center gap-2.5">
+        <div className="relative" ref={caixaEscopo}>
+          <button
+            onClick={() => setEscopoAberto((v) => !v)}
+            aria-expanded={escopoAberto}
+            className="inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50"
+          >
+            <Globe className="w-4 h-4 text-gray-400" />
+            <span className="font-semibold text-gray-900">{rotuloEscopo}</span>
+            {selecionadas.size > 0 && (
+              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 tabular-nums">
+                {selecionadas.size}
+              </span>
+            )}
+            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
+          </button>
+
+          {escopoAberto && (
+            <div className="absolute z-30 mt-1 w-[380px] max-w-[90vw] bg-white rounded-lg border border-gray-200 shadow-lg p-3">
+              {!estrutura ? (
+                <div className="flex items-center gap-2 text-sm text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando estrutura…
+                </div>
+              ) : (
+                <ArvoreEscopo
+                  estrutura={estrutura}
+                  selecionadas={selecionadas}
+                  onChange={setSelecionadas}
+                />
+              )}
             </div>
-          ) : (
-            <ArvoreEscopo
-              estrutura={estrutura}
-              selecionadas={selecionadas}
-              onChange={setSelecionadas}
-            />
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-4 lg:col-span-2 flex flex-col">
-          <h2 className="text-sm font-semibold text-gray-900 mb-3">Período</h2>
-          <SeletorPeriodo de={de} ate={ate} onChange={(d, a) => { setDe(d); setAte(a); }} />
-          <div className="mt-auto pt-4 flex items-center gap-3">
-            <button
-              onClick={gerar}
-              disabled={!podeGerar}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-200 disabled:cursor-not-allowed"
-            >
-              {carregando && <Loader2 className="w-4 h-4 animate-spin" />}
-              {carregando ? 'Gerando…' : 'Gerar'}
-            </button>
-            {selecionadas.size === 0 && (
-              <span className="text-xs text-gray-500">Escolha ao menos uma rota.</span>
-            )}
-          </div>
-        </div>
+        <SeletorPeriodo de={de} ate={ate} onChange={(d, a) => { setDe(d); setAte(a); }} compacto />
+
+        <button
+          onClick={gerar}
+          disabled={!podeGerar}
+          className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-200 disabled:cursor-not-allowed"
+        >
+          {carregando && <Loader2 className="w-4 h-4 animate-spin" />}
+          {carregando ? 'Gerando…' : 'Gerar'}
+        </button>
       </div>
 
       {erro && (
@@ -218,6 +292,30 @@ export default function LiquidacaoPeriodoPage() {
                   <b className="text-gray-500 tabular-nums">{fmt(c.caixa_final)}</b>
                 </span>
               </p>
+
+              {/* As rotas do recorte, com quem as opera. Cortadas em seis: com
+                  48 marcadas a lista viraria um parágrafo e empurraria os
+                  números para baixo. O `title` carrega todas, para conferência
+                  sem sair da tela. */}
+              {rotasDoResumo.length > 0 && (
+                <p
+                  className="text-[11.5px] text-gray-400 mt-1"
+                  title={rotasDoResumo
+                    .map((r) => (r.vendedor_nome ? `${r.nome} (${r.vendedor_nome})` : r.nome))
+                    .join(' · ')}
+                >
+                  {rotasDoResumo.slice(0, 6).map((r, i) => (
+                    <span key={r.rota_id}>
+                      {i > 0 && <span className="text-gray-300"> · </span>}
+                      <span className="text-gray-500">{r.nome}</span>
+                      {r.vendedor_nome && <span> ({r.vendedor_nome})</span>}
+                    </span>
+                  ))}
+                  {rotasDoResumo.length > 6 && (
+                    <span className="text-gray-400"> e mais {rotasDoResumo.length - 6}</span>
+                  )}
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_0.8fr]">
@@ -227,7 +325,7 @@ export default function LiquidacaoPeriodoPage() {
                   Cobrança
                 </p>
                 <button
-                  onClick={() => setPainel(true)}
+                  onClick={() => setPainel('cobranca')}
                   className="group inline-flex items-center gap-2 text-left"
                 >
                   <span className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums border-b-2 border-transparent group-hover:border-current">
@@ -255,9 +353,15 @@ export default function LiquidacaoPeriodoPage() {
                 <p className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
                   Venda
                 </p>
-                <p className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums">
-                  {fmt(c.emprestado)}
-                </p>
+                <button
+                  onClick={() => setPainel('venda')}
+                  className="group inline-flex items-center gap-2 text-left"
+                >
+                  <span className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums border-b-2 border-transparent group-hover:border-current">
+                    {fmt(c.emprestado)}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
+                </button>
                 <p className="text-[11.5px] text-gray-400 mt-0.5">
                   {c.qtd_emprestimos} empréstimos · {c.clientes_novos} novos, {c.clientes_renovados} renovações
                 </p>
@@ -396,14 +500,24 @@ export default function LiquidacaoPeriodoPage() {
       )}
 
       {escopoGerado && (
-        <PainelCobranca
-          aberto={painel}
-          onFechar={() => setPainel(false)}
-          rotaIds={escopoGerado.rotas}
-          de={escopoGerado.de}
-          ate={escopoGerado.ate}
-          totalCard={c?.recebido ?? 0}
-        />
+        <>
+          <PainelCobranca
+            aberto={painel === 'cobranca'}
+            onFechar={() => setPainel(null)}
+            rotaIds={escopoGerado.rotas}
+            de={escopoGerado.de}
+            ate={escopoGerado.ate}
+            totalCard={c?.recebido ?? 0}
+          />
+          <PainelVendas
+            aberto={painel === 'venda'}
+            onFechar={() => setPainel(null)}
+            rotaIds={escopoGerado.rotas}
+            de={escopoGerado.de}
+            ate={escopoGerado.ate}
+            totalCard={c?.emprestado ?? 0}
+          />
+        </>
       )}
     </div>
   );

@@ -14,7 +14,8 @@
 
 import { createClient } from '@/lib/supabase/client';
 import type {
-  CobrancaPeriodo, EstruturaVisivel, FiltrosCobranca, LiquidacoesPeriodo,
+  CobrancaPeriodo, EstruturaVisivel, FiltrosCobranca, FiltrosVendas,
+  LiquidacoesPeriodo, VendasPeriodo,
 } from '@/types/relatorios';
 
 const supabase = createClient();
@@ -107,6 +108,38 @@ export const relatoriosService = {
     }
 
     const r = data as CobrancaPeriodo | null;
+    if (!r) return null;
+
+    return { ...r, linhas: r.linhas ?? [] };
+  },
+
+  /**
+   * A listagem atrás do total emprestado, com a renovação classificada em
+   * MAIOR/IGUAL/MENOR contra o empréstimo anterior do cliente.
+   */
+  async buscarVendas(
+    rotaIds: string[],
+    de: string,
+    ate: string,
+    filtros: FiltrosVendas = {}
+  ): Promise<VendasPeriodo | null> {
+    const { data, error } = await supabase.rpc('fn_vendas_periodo', {
+      p_rotas: rotaIds,
+      p_de: de,
+      p_ate: ate,
+      p_busca: filtros.busca?.trim() || null,
+      p_tipo: filtros.tipo || null,
+      p_classe: filtros.classe || null,
+      p_limite: filtros.limite ?? 100,
+      p_offset: filtros.offset ?? 0,
+    });
+
+    if (error) {
+      console.error('Erro ao buscar as vendas do período:', error);
+      return null;
+    }
+
+    const r = data as VendasPeriodo | null;
     if (!r) return null;
 
     return { ...r, linhas: r.linhas ?? [] };

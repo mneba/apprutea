@@ -81,6 +81,9 @@ const menuGroups: MenuGroup[] = [
 // Componente interno que usa o contexto
 function DashboardContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  // `usePathname` do next/navigation traz o prefixo de locale — ver CLAUDE.md,
+  // "Routing".
+  const ehRelatorios = pathname.replace(/^\/(pt-BR|es)/, '').startsWith('/relatorios');
   const router = useRouter();
   const { user, profile, localizacao, temPermissao } = useUser();
   const temLocalizacao = !!localizacao.empresa_id;
@@ -206,8 +209,13 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 <Menu className="w-5 h-5 text-gray-600" />
               </button>
               
-              {/* Seletor de Localização */}
-              <SeletorLocalizacao />
+              {/* Seletor de Localização
+                  Fica de fora dos Relatórios: lá cada relatório escolhe o
+                  próprio recorte — de uma rota ao país inteiro — e o seletor
+                  global não tem efeito nenhum sobre o que está na tela.
+                  Deixá-lo ali faria o usuário mexer nele esperando filtrar o
+                  relatório, e não filtraria nada. */}
+              {!ehRelatorios && <SeletorLocalizacao />}
             </div>
 
             {/* Right side */}

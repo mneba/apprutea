@@ -22,7 +22,7 @@
 // O componente não decide visibilidade: a árvore já chega recortada pelo
 // perfil, de `fn_estrutura_visivel`.
 
-import { ChevronDown, ChevronRight, Minus, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, Minus, Check, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { EstruturaVisivel, PaisNo } from '@/types/relatorios';
 
@@ -130,8 +130,13 @@ function Linha({
   );
 }
 
+/** Sem acento e em minúscula, para "São Paulo" casar com "sao paulo". */
+const chave = (t: string) =>
+  t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Props) {
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
+  const [busca, setBusca] = useState('');
 
   const alternarAberto = (chave: string) => {
     setAbertos((prev) => {
@@ -156,6 +161,52 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
     [estrutura]
   );
 
+  // A busca poda a árvore em vez de produzir uma lista achatada: o usuário
+  // precisa continuar vendo de qual empresa e cidade a rota é — é o que
+  // distingue "Prueba 1" de "Prueba 2". Casa com rota, vendedor, empresa,
+  // cidade, estado e país, porque qualquer um deles é um jeito legítimo de
+  // procurar.
+  const visivel = useMemo(() => {
+    const q = chave(busca.trim());
+    if (!q) return estrutura.paises;
+
+    return estrutura.paises
+      .map((p) => {
+        const paisCasa = chave(p.pais).includes(q);
+        const estados = p.estados
+          .map((e) => {
+            const estadoCasa = paisCasa || chave(e.estado).includes(q);
+            const cidades = e.cidades
+              .map((c) => {
+                const cidadeCasa = estadoCasa || chave(c.nome).includes(q);
+                const empresas = c.empresas
+                  .map((em) => {
+                    const empresaCasa = cidadeCasa || chave(em.nome).includes(q);
+                    const rotas = empresaCasa
+                      ? em.rotas
+                      : em.rotas.filter(
+                          (r) =>
+                            chave(r.nome).includes(q) ||
+                            chave(r.vendedor_nome ?? '').includes(q)
+                        );
+                    return { ...em, rotas };
+                  })
+                  .filter((em) => em.rotas.length > 0);
+                return { ...c, empresas };
+              })
+              .filter((c) => c.empresas.length > 0);
+            return { ...e, cidades };
+          })
+          .filter((e) => e.cidades.length > 0);
+        return { ...p, estados };
+      })
+      .filter((p) => p.estados.length > 0);
+  }, [estrutura, busca]);
+
+  // Procurar e ter de abrir nó por nó seria absurdo: com busca ativa tudo
+  // já vem aberto.
+  const estaAberto = (k: string) => !!busca.trim() || abertos.has(k);
+
   if (!estrutura.sucesso) {
     return (
       <p className="text-sm text-red-600">
@@ -170,6 +221,18 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
 
   return (
     <div>
+      <div className="relative mb-2">
+        <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+        <input
+          id="escopo-busca"
+          type="search"
+          value={busca}
+          onChange={(e) => setBusca(e.target.value)}
+          placeholder="Buscar rota, vendedor, empresa ou cidade"
+          className="w-full border border-gray-300 rounded-lg pl-8 pr-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
       <div className="flex items-center gap-2 mb-2 pb-2 border-b border-gray-100">
         <button
           type="button"
@@ -190,11 +253,15 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
         </span>
       </div>
 
+      {busca.trim() && visivel.length === 0 && (
+        <p className="text-sm text-gray-500 py-3">Nada encontrado para “{busca}”.</p>
+      )}
+
       <div className="max-h-80 overflow-y-auto pr-1">
-        {estrutura.paises.map((p) => {
+        {visivel.map((p) => {
           const chaveP = `p:${p.pais}`;
           const idsP = rotasDoPais(p);
-          const abertoP = abertos.has(chaveP);
+          const abertoP = estaAberto(chaveP);
           return (
             <div key={chaveP}>
               <Linha
@@ -215,7 +282,7 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
                   const idsE = e.cidades.flatMap((c) =>
                     c.empresas.flatMap((em) => em.rotas.map((r) => r.rota_id))
                   );
-                  const abertoE = abertos.has(chaveE);
+                  const abertoE = estaAberto(chaveE);
                   return (
                     <div key={chaveE}>
                       <Linha
@@ -235,7 +302,7 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
                           const idsC = c.empresas.flatMap((em) =>
                             em.rotas.map((r) => r.rota_id)
                           );
-                          const abertoC = abertos.has(chaveC);
+                          const abertoC = estaAberto(chaveC);
                           return (
                             <div key={chaveC}>
                               <Linha
@@ -253,7 +320,7 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
                                 c.empresas.map((em) => {
                                   const chaveEm = `em:${em.empresa_id}`;
                                   const idsEm = em.rotas.map((r) => r.rota_id);
-                                  const abertoEm = abertos.has(chaveEm);
+                                  const abertoEm = estaAberto(chaveEm);
                                   return (
                                     <div key={chaveEm}>
                                       <Linha
@@ -272,7 +339,15 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
                                           <Linha
                                             key={r.rota_id}
                                             nivel={4}
-                                            rotulo={r.nome}
+                                            // O nome da rota sozinho não
+                                            // identifica: há "Prueba 1",
+                                            // "Prueba 2" e "Andrea 3" no
+                                            // cadastro real.
+                                            rotulo={
+                                              r.vendedor_nome
+                                                ? `${r.nome} (${r.vendedor_nome})`
+                                                : r.nome
+                                            }
                                             ids={[r.rota_id]}
                                             selecionadas={selecionadas}
                                             onToggle={toggle}

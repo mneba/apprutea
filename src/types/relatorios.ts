@@ -12,6 +12,11 @@
 export interface RotaNo {
   rota_id: string;
   nome: string;
+  /**
+   * Quem opera a rota. Nulo é caso real — rota sem vendedor vinculado existe,
+   * e é o motivo de alguém não conseguir entrar no app.
+   */
+  vendedor_nome: string | null;
 }
 
 export interface EmpresaNo {
@@ -197,6 +202,67 @@ export interface FiltrosCobranca {
   busca?: string;
   tipo?: string;
   forma?: string;
+  limite?: number;
+  offset?: number;
+}
+
+// ── Listagem das vendas ────────────────────────────────────────────────
+
+export interface LinhaVenda {
+  emprestimo_id: string;
+  quando: string;
+  data_operacional: string;
+  cliente_nome: string | null;
+  cliente_documento: string | null;
+  rota_nome: string | null;
+  tipo_emprestimo: string;
+  frequencia: string;
+  status: string;
+  valor_principal: number;
+  valor_total: number;
+  juros: number;
+  taxa_juros: number | null;
+  numero_parcelas: number;
+  valor_parcela: number;
+  saldo: number;
+  /** Principal do empréstimo de origem. Zero quando é o primeiro do cliente. */
+  valor_anterior: number;
+  /**
+   * A renovação contra o empréstimo anterior. Comparada sobre o PRINCIPAL: o
+   * total embute juro, e mudar a taxa faria renovação de mesmo valor parecer
+   * maior.
+   */
+  classificacao: 'MAIOR' | 'IGUAL' | 'MENOR' | 'PRIMEIRO';
+}
+
+export interface TotaisVendas {
+  principal: number;
+  total: number;
+  juros: number;
+  registros: number;
+  /** A leitura de carteira: cresceu, ficou parada ou encolheu. */
+  maior: number;
+  igual: number;
+  menor: number;
+  primeiro: number;
+}
+
+export interface VendasPeriodo {
+  sucesso: boolean;
+  mensagem?: string;
+  de: string;
+  ate: string;
+  total_registros: number;
+  limite: number;
+  offset: number;
+  totais: TotaisVendas | null;
+  linhas: LinhaVenda[];
+}
+
+export interface FiltrosVendas {
+  busca?: string;
+  tipo?: string;
+  classe?: string;
   limite?: number;
   offset?: number;
 }

@@ -20,6 +20,12 @@ interface Props {
   de: string;
   ate: string;
   onChange: (de: string, ate: string) => void;
+  /**
+   * Tudo numa linha, sem rótulos acima dos campos, para caber na barra de
+   * filtros. Os rótulos saem porque `De` e `Até` se leem pela ordem e pelo
+   * "a" entre eles — e na barra cada linha extra custa altura do dado.
+   */
+  compacto?: boolean;
 }
 
 /** `Date` local → `YYYY-MM-DD`, sem passar por UTC. */
@@ -51,9 +57,60 @@ function atalhos() {
   ];
 }
 
-export default function SeletorPeriodo({ de, ate, onChange }: Props) {
+export default function SeletorPeriodo({ de, ate, onChange, compacto }: Props) {
   const opcoes = atalhos();
   const invalido = !!de && !!ate && ate < de;
+
+  if (compacto) {
+    return (
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          type="date"
+          id="periodo-de"
+          value={de}
+          max={ate || undefined}
+          onChange={(e) => onChange(e.target.value, ate)}
+          aria-label="De"
+          className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <span className="text-sm text-gray-400">a</span>
+        <input
+          type="date"
+          id="periodo-ate"
+          value={ate}
+          min={de || undefined}
+          onChange={(e) => onChange(de, e.target.value)}
+          aria-label="Até"
+          className="border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+
+        {opcoes.map((o) => {
+          const ativo = o.de === de && o.ate === ate;
+          return (
+            <button
+              key={o.rotulo}
+              type="button"
+              onClick={() => onChange(o.de, o.ate)}
+              className={`text-xs font-medium px-2.5 py-1 rounded-full border transition-colors ${
+                ativo
+                  ? 'bg-blue-600 border-blue-600 text-white'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {o.rotulo}
+            </button>
+          );
+        })}
+
+        {invalido && (
+          <span className="flex items-center gap-1 text-xs text-amber-700">
+            <Calendar className="w-3.5 h-3.5" />
+            Data final anterior à inicial
+          </span>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div>
