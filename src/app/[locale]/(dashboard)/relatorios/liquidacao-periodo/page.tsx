@@ -4,26 +4,32 @@
 // RELATÓRIO: LIQUIDAÇÃO POR PERÍODO
 // =====================================================================
 //
-// Substitui, numa tela, as abas "Liquidacion" e "Resumen" do sistema legado —
-// elas mostram o mesmo dado em granularidades diferentes, então viram
-// consolidado em cima e quebra por rota embaixo.
+// Substitui as abas "Liquidacion" e "Resumen" do sistema legado — elas
+// mostram o mesmo dado em granularidades diferentes.
 //
-// E acrescenta o que o legado não tem: a SÉRIE DIÁRIA. Lá dá para ver o total
-// do período e o total por rota, mas não que a quarta-feira caiu.
+// A HIERARQUIA DO RESUMO
+// Cobrança e venda são as duas OPERAÇÕES da rota: peso visual igual entre si,
+// lado a lado. O lucro é o RESULTADO delas, apartado à direita e com a margem
+// sobre o cobrado, porque 6.450,76 sozinho não diz se foi bom. Caixa e base de
+// clientes descrevem o CENÁRIO, não a operação, e por isso vivem na linha do
+// cabeçalho, miúdos. A carteira mora dentro da venda — é o que a venda
+// acumula.
 //
-// Nenhuma conta acontece aqui. Tudo vem de `fn_liquidacoes_periodo` — inclusive
-// o que NÃO somar. Ver o cabeçalho da função: caixa e carteira somam entre
-// rotas e nunca entre dias; a ganancia é juro realizado, distinta do juro
-// vendido; e o período não tem percentual de recebimento de propósito.
+// NÃO HÁ GRÁFICO DE COBRADO CONTRA EMPRESTADO. São fluxos diferentes, e
+// barras lado a lado convidam a uma comparação que não significa nada.
+//
+// NÃO HÁ PERCENTUAL NO PERÍODO. Somar o esperado ao longo de semanas mistura
+// coisas que não se comparam: a parcela que vencia no dia 3 e foi paga no dia
+// 10 entra nos dois lados; a que vence no dia 30 entra só num. Numa rota real
+// deu 107%, com dias de 231% e 419%. No dia a dia os dois campos ficam, porque
+// ali significam o que o vendedor entende.
+//
+// Nenhuma conta acontece aqui: tudo vem de `fn_liquidacoes_periodo`, inclusive
+// o que NÃO somar. Ver sql/2026-10-01_fn_liquidacoes_periodo.sql.
 
-import {
-  ArrowLeft, Banknote, Download, Loader2, PiggyBank,
-  TrendingUp, Users, Wallet,
-} from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts';
+import { ArrowLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import PainelCobranca from '@/components/relatorios/PainelCobranca';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
 import SeletorPeriodo from '@/components/relatorios/SeletorPeriodo';
 import { Link } from '@/i18n/routing';
@@ -33,6 +39,8 @@ import { baixarCsv, numCsv } from '@/utils/csv';
 
 const fmt = (n: number | null | undefined) =>
   (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const int = (n: number | null | undefined) => (n ?? 0).toLocaleString('pt-BR');
 
 /** `YYYY-MM-DD` → `DD/MM`. Sem `new Date`: evita o recuo de fuso. */
 const diaCurto = (d: string) => {
@@ -50,6 +58,10 @@ const primeiroDoMes = () => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
 };
 
+/** Cor da barra de atingido, na mesma escala da tela de Liquidação Diária. */
+const corPct = (p: number) =>
+  p >= 100 ? 'bg-emerald-500' : p >= 70 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500';
+
 export default function LiquidacaoPeriodoPage() {
   const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
@@ -59,12 +71,14 @@ export default function LiquidacaoPeriodoPage() {
   const [dados, setDados] = useState<LiquidacoesPeriodo | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [painel, setPainel] = useState(false);
+
+  // O recorte usado na última geração, não o marcado agora. Sem isso, mexer na
+  // árvore trocaria o conteúdo do painel sem o relatório ter sido refeito.
+  const [escopoGerado, setEscopoGerado] = useState<{ rotas: string[]; de: string; ate: string } | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const e = await relatoriosService.buscarEstrutura();
-      setEstrutura(e);
-    })();
+    (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
   }, []);
 
   const podeGerar = selecionadas.size > 0 && !!de && !!ate && ate >= de && !carregando;
@@ -73,35 +87,21 @@ export default function LiquidacaoPeriodoPage() {
     if (selecionadas.size === 0) return;
     setCarregando(true);
     setErro(null);
+    const rotas = Array.from(selecionadas);
     try {
-      const r = await relatoriosService.buscarLiquidacoesPeriodo(
-        Array.from(selecionadas), de, ate
-      );
-      if (!r) {
-        setErro('Não foi possível gerar o relatório.');
+      const r = await relatoriosService.buscarLiquidacoesPeriodo(rotas, de, ate);
+      if (!r || !r.sucesso) {
+        setErro(r?.mensagem || 'Não foi possível gerar o relatório.');
         setDados(null);
-      } else if (!r.sucesso) {
-        setErro(r.mensagem || 'Não foi possível gerar o relatório.');
-        setDados(null);
+        setEscopoGerado(null);
       } else {
         setDados(r);
+        setEscopoGerado({ rotas, de, ate });
       }
     } finally {
       setCarregando(false);
     }
   }, [selecionadas, de, ate]);
-
-  const c = dados?.consolidado ?? null;
-
-  const grafico = useMemo(
-    () =>
-      (dados?.por_dia ?? []).map((d) => ({
-        dia: diaCurto(d.data),
-        Recebido: d.recebido,
-        Emprestado: d.emprestado,
-      })),
-    [dados]
-  );
 
   const exportarDias = () => {
     if (!dados) return;
@@ -110,15 +110,14 @@ export default function LiquidacaoPeriodoPage() {
       [
         { cabecalho: 'Data', valor: (d) => d.data },
         { cabecalho: 'Rotas', valor: (d) => d.rotas },
-        { cabecalho: 'Recebido', valor: (d) => numCsv(d.recebido) },
+        { cabecalho: 'Cobrado', valor: (d) => numCsv(d.recebido) },
         { cabecalho: 'Esperado do dia', valor: (d) => numCsv(d.esperado) },
-        { cabecalho: '% do dia', valor: (d) => numCsv(d.percentual_recebimento) },
+        { cabecalho: 'Atingido %', valor: (d) => numCsv(d.percentual_recebimento) },
         { cabecalho: 'Emprestado', valor: (d) => numCsv(d.emprestado) },
-        { cabecalho: 'Juros vendidos', valor: (d) => numCsv(d.juros_vendidos) },
-        { cabecalho: 'Ganancia', valor: (d) => numCsv(d.ganancia) },
+        { cabecalho: 'Lucro', valor: (d) => numCsv(d.ganancia) },
         { cabecalho: 'Empréstimos', valor: (d) => d.qtd_emprestimos },
-        { cabecalho: 'Clientes pagos', valor: (d) => d.clientes_pagos },
-        { cabecalho: 'Clientes não pagos', valor: (d) => d.clientes_nao_pagos },
+        { cabecalho: 'Pagos', valor: (d) => d.clientes_pagos },
+        { cabecalho: 'Não pagos', valor: (d) => d.clientes_nao_pagos },
         { cabecalho: 'Caixa final', valor: (d) => numCsv(d.caixa_final) },
         { cabecalho: 'Carteira', valor: (d) => numCsv(d.carteira) },
       ],
@@ -126,24 +125,11 @@ export default function LiquidacaoPeriodoPage() {
     );
   };
 
-  const cards = c
-    ? [
-        { rot: 'Recebido', val: fmt(c.recebido), icon: Banknote, cor: 'bg-green-100 text-green-600' },
-        { rot: 'Ganancia', val: fmt(c.ganancia), icon: TrendingUp, cor: 'bg-emerald-100 text-emerald-600',
-          sub: 'juro realizado' },
-        { rot: 'Emprestado', val: fmt(c.emprestado), icon: PiggyBank, cor: 'bg-blue-100 text-blue-600',
-          sub: `${c.qtd_emprestimos} empréstimos` },
-        { rot: 'Carteira', val: fmt(c.carteira), icon: Wallet, cor: 'bg-indigo-100 text-indigo-600',
-          sub: 'último dia' },
-        { rot: 'Média diária', val: fmt(c.media_diaria), icon: TrendingUp, cor: 'bg-purple-100 text-purple-600',
-          sub: `${c.dias_trabalhados} dias trabalhados` },
-        { rot: 'Clientes', val: `${c.clientes_pagos}`, icon: Users, cor: 'bg-amber-100 text-amber-600',
-          sub: `${c.clientes_nao_pagos} não pagos` },
-      ]
-    : [];
+  const c = dados?.consolidado ?? null;
+  const margem = c && c.recebido > 0 ? (c.ganancia / c.recebido) * 100 : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="flex items-start gap-3">
         <Link
           href="/relatorios"
@@ -162,7 +148,7 @@ export default function LiquidacaoPeriodoPage() {
 
       {/* ── Filtros ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-white rounded-xl border border-gray-200 p-4 lg:col-span-1">
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
           <h2 className="text-sm font-semibold text-gray-900 mb-3">Escopo</h2>
           {!estrutura ? (
             <div className="flex items-center gap-2 text-sm text-gray-400">
@@ -179,18 +165,9 @@ export default function LiquidacaoPeriodoPage() {
 
         <div className="bg-white rounded-xl border border-gray-200 p-4 lg:col-span-2 flex flex-col">
           <h2 className="text-sm font-semibold text-gray-900 mb-3">Período</h2>
-          <SeletorPeriodo
-            de={de}
-            ate={ate}
-            onChange={(d, a) => {
-              setDe(d);
-              setAte(a);
-            }}
-          />
-
+          <SeletorPeriodo de={de} ate={ate} onChange={(d, a) => { setDe(d); setAte(a); }} />
           <div className="mt-auto pt-4 flex items-center gap-3">
             <button
-              type="button"
               onClick={gerar}
               disabled={!podeGerar}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-200 disabled:cursor-not-allowed"
@@ -206,9 +183,7 @@ export default function LiquidacaoPeriodoPage() {
       </div>
 
       {erro && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-          {erro}
-        </div>
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{erro}</div>
       )}
 
       {dados && !c && (
@@ -217,84 +192,118 @@ export default function LiquidacaoPeriodoPage() {
         </div>
       )}
 
-      {/* `dados` entra na guarda junto com `c`: o compilador nao liga um ao
-          outro so porque `c` saiu de `dados?.consolidado`. */}
       {dados && c && (
         <>
-          {/* ── Consolidado ── */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
-            {cards.map((k) => (
-              <div key={k.rot} className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-medium text-gray-500">{k.rot}</span>
-                  <span className={`p-1.5 rounded-lg ${k.cor}`}>
-                    <k.icon className="w-4 h-4" />
-                  </span>
-                </div>
-                <p className="text-xl font-bold text-gray-900 mt-2">{k.val}</p>
-                {k.sub && <p className="text-xs text-gray-400 mt-0.5">{k.sub}</p>}
-              </div>
-            ))}
-          </div>
-
-          {/* O caixa fica num bloco à parte, com o aviso do que ele é: somar
-              caixa entre dias não significa nada, e é o erro mais fácil de
-              cometer lendo um relatório de período. */}
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <div className="flex flex-wrap gap-6">
-              <div>
-                <p className="text-xs font-medium text-gray-500">Caixa inicial</p>
-                <p className="text-lg font-bold text-gray-900">{fmt(c.caixa_inicial)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500">Caixa final</p>
-                <p className="text-lg font-bold text-gray-900">{fmt(c.caixa_final)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500">Juros vendidos</p>
-                <p className="text-lg font-bold text-gray-900">{fmt(c.juros_vendidos)}</p>
-                <p className="text-xs text-gray-400">contratado, não recebido</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500">Novos / Renovados</p>
-                <p className="text-lg font-bold text-gray-900">
-                  {c.clientes_novos} / {c.clientes_renovados}
-                </p>
-              </div>
-              <p className="text-xs text-gray-400 max-w-xs self-end">
-                Caixa e carteira são do primeiro e do último dia de cada rota — não
-                somam entre dias.
+          {/* ── Resumo: um card só ── */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="px-4 py-2.5 border-b border-gray-100">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-900">
+                Resumo do período
+              </p>
+              {/* O CENÁRIO: o universo em que o período aconteceu. */}
+              <p className="text-[11.5px] text-gray-400 mt-1 flex flex-wrap gap-x-2.5 gap-y-1">
+                <span>{diaCurto(dados.de)} a {diaCurto(dados.ate)}</span>
+                <span className="text-gray-300">·</span>
+                <span><b className="text-gray-500 tabular-nums">{c.dias_trabalhados}</b> dias trabalhados</span>
+                <span className="text-gray-300">·</span>
+                <span><b className="text-gray-500 tabular-nums">{dados.rotas_no_escopo}</b> rotas</span>
+                <span className="text-gray-300">·</span>
+                <span>
+                  <b className="text-gray-500 tabular-nums">{int(c.clientes_ativos)}</b> clientes ativos,{' '}
+                  <b className="text-gray-500 tabular-nums">{int(c.clientes_suspensos)}</b> suspensos
+                </span>
+                <span className="text-gray-300">·</span>
+                <span>
+                  caixa <b className="text-gray-500 tabular-nums">{fmt(c.caixa_inicial)}</b> →{' '}
+                  <b className="text-gray-500 tabular-nums">{fmt(c.caixa_final)}</b>
+                </span>
               </p>
             </div>
-          </div>
 
-          {/* ── Série diária ── */}
-          {grafico.length > 1 && (
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h2 className="text-sm font-semibold text-gray-900 mb-4">Dia a dia</h2>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={grafico}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" vertical={false} />
-                    <XAxis dataKey="dia" tick={{ fontSize: 11, fill: '#9CA3AF' }} />
-                    <YAxis tick={{ fontSize: 11, fill: '#9CA3AF' }} />
-                    <Tooltip formatter={(v: number) => fmt(v)} />
-                    <Bar dataKey="Recebido" fill="#2563EB" radius={[3, 3, 0, 0]} />
-                    <Bar dataKey="Emprestado" fill="#A5B4FC" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_0.8fr]">
+              {/* Operação 1 — o dinheiro que volta */}
+              <div className="p-4 border-b lg:border-b-0 lg:border-r border-gray-100">
+                <p className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
+                  Cobrança
+                </p>
+                <button
+                  onClick={() => setPainel(true)}
+                  className="group inline-flex items-center gap-2 text-left"
+                >
+                  <span className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums border-b-2 border-transparent group-hover:border-current">
+                    {fmt(c.recebido)}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
+                </button>
+                <p className="text-[11.5px] text-gray-400 mt-0.5">
+                  {fmt(c.media_diaria)} por dia trabalhado
+                </p>
+                <div className="mt-3 pt-2 border-t border-gray-100 text-[12.5px] space-y-1">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Clientes atendidos</span>
+                    <span className="font-semibold text-gray-900 tabular-nums">{int(c.clientes_pagos)}</span>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Não pagos</span>
+                    <span className="font-semibold text-red-600 tabular-nums">{int(c.clientes_nao_pagos)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Operação 2 — o dinheiro que sai */}
+              <div className="p-4 border-b lg:border-b-0 lg:border-r border-gray-100">
+                <p className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
+                  Venda
+                </p>
+                <p className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums">
+                  {fmt(c.emprestado)}
+                </p>
+                <p className="text-[11.5px] text-gray-400 mt-0.5">
+                  {c.qtd_emprestimos} empréstimos · {c.clientes_novos} novos, {c.clientes_renovados} renovações
+                </p>
+                <div className="mt-3 pt-2 border-t border-gray-100 text-[12.5px] space-y-1">
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">Juro contratado</span>
+                    <span className="font-semibold text-gray-900 tabular-nums">{fmt(c.juros_vendidos)}</span>
+                  </div>
+                  {/* A carteira é o que a venda acumula — por isso mora aqui. */}
+                  <div className="flex justify-between gap-3 mt-1.5 pt-2 border-t border-dashed border-gray-200">
+                    <span className="text-violet-700 font-semibold">Carteira a receber</span>
+                    <span className="font-extrabold text-violet-700 tabular-nums">{fmt(c.carteira)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* O resultado das duas */}
+              <div className="p-4 bg-emerald-50 flex flex-col justify-center">
+                <p className="text-[10.5px] font-bold uppercase tracking-wide text-emerald-700 mb-1.5">
+                  Lucro
+                </p>
+                <p className="text-[30px] leading-tight font-extrabold text-emerald-700 tabular-nums">
+                  {fmt(c.ganancia)}
+                </p>
+                <p className="text-[11.5px] text-emerald-700/85 mt-0.5">juro recebido no período</p>
+                <div className="mt-2.5 pt-2 border-t border-emerald-200 flex justify-between gap-2 text-[12px] text-emerald-700">
+                  <span>Margem sobre o cobrado</span>
+                  <b className="tabular-nums font-extrabold">
+                    {margem.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
+                  </b>
+                </div>
               </div>
             </div>
-          )}
 
-          {/* ── Tabela dia a dia ── */}
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-100">
-              <h2 className="text-sm font-semibold text-gray-900">
-                Dia a dia ({dados.por_dia.length})
+            <div className="px-4 py-1.5 border-t border-gray-100 bg-gray-50 text-[10.5px] text-gray-400">
+              Clique no total para ver a listagem · carteira e caixa são do último dia de cada rota
+            </div>
+          </div>
+
+          {/* ── Dia a dia ── */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+            <div className="flex items-center justify-between p-3 border-b border-gray-100">
+              <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-900">
+                Dia a dia · {dados.por_dia.length} dias
               </h2>
               <button
-                type="button"
                 onClick={exportarDias}
                 className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
               >
@@ -305,33 +314,41 @@ export default function LiquidacaoPeriodoPage() {
               <table className="w-full text-sm">
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
-                    <th className="text-left font-medium px-4 py-2">Data</th>
-                    <th className="text-right font-medium px-4 py-2">Recebido</th>
-                    <th className="text-right font-medium px-4 py-2">Esperado do dia</th>
-                    <th className="text-right font-medium px-4 py-2">%</th>
-                    <th className="text-right font-medium px-4 py-2">Emprestado</th>
-                    <th className="text-right font-medium px-4 py-2">Ganancia</th>
-                    <th className="text-right font-medium px-4 py-2">Pagos</th>
-                    <th className="text-right font-medium px-4 py-2">Não pagos</th>
-                    <th className="text-right font-medium px-4 py-2">Caixa final</th>
+                    <th className="text-left font-medium px-3 py-2">Data</th>
+                    <th className="text-right font-medium px-3 py-2">Cobrado</th>
+                    <th className="text-right font-medium px-3 py-2">Esperado</th>
+                    <th className="text-right font-medium px-3 py-2">Atingido</th>
+                    <th className="text-right font-medium px-3 py-2">Emprestado</th>
+                    <th className="text-right font-medium px-3 py-2">Lucro</th>
+                    <th className="text-right font-medium px-3 py-2">Pagos</th>
+                    <th className="text-right font-medium px-3 py-2">Não pagos</th>
+                    <th className="text-right font-medium px-3 py-2">Caixa final</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {dados.por_dia.map((d) => (
                     <tr key={d.data} className="hover:bg-gray-50">
-                      <td className="px-4 py-2 text-gray-900">{diaCurto(d.data)}</td>
-                      <td className="px-4 py-2 text-right font-medium text-gray-900">
-                        {fmt(d.recebido)}
+                      <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{diaCurto(d.data)}</td>
+                      <td className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{fmt(d.recebido)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.esperado)}</td>
+                      <td className="px-3 py-2 text-right">
+                        <span className="inline-flex items-center gap-2 justify-end">
+                          <span className="w-11 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                            <span
+                              className={`block h-full ${corPct(d.percentual_recebimento)}`}
+                              style={{ width: `${Math.min(100, d.percentual_recebimento)}%` }}
+                            />
+                          </span>
+                          <span className="tabular-nums text-gray-600">
+                            {Math.round(d.percentual_recebimento)}%
+                          </span>
+                        </span>
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-500">{fmt(d.esperado)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">
-                        {fmt(d.percentual_recebimento)}%
-                      </td>
-                      <td className="px-4 py-2 text-right text-gray-500">{fmt(d.emprestado)}</td>
-                      <td className="px-4 py-2 text-right text-emerald-700">{fmt(d.ganancia)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{d.clientes_pagos}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{d.clientes_nao_pagos}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{fmt(d.caixa_final)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.emprestado)}</td>
+                      <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">{fmt(d.ganancia)}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{d.clientes_pagos}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{d.clientes_nao_pagos}</td>
+                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.caixa_final)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -339,42 +356,35 @@ export default function LiquidacaoPeriodoPage() {
             </div>
           </div>
 
-          {/* Por rota só aparece com mais de uma: com uma só, repetiria o
-              consolidado linha por linha. */}
+          {/* Por rota só com mais de uma: com uma só, repetiria o consolidado. */}
           {dados.por_rota.length > 1 && (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <div className="p-4 border-b border-gray-100">
-                <h2 className="text-sm font-semibold text-gray-900">
-                  Por rota ({dados.por_rota.length})
+            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+              <div className="p-3 border-b border-gray-100">
+                <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-900">
+                  Por rota · {dados.por_rota.length}
                 </h2>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-500">
                     <tr>
-                      <th className="text-left font-medium px-4 py-2">Rota</th>
-                      <th className="text-right font-medium px-4 py-2">Dias</th>
-                      <th className="text-right font-medium px-4 py-2">Recebido</th>
-                      <th className="text-right font-medium px-4 py-2">Emprestado</th>
-                      <th className="text-right font-medium px-4 py-2">Ganancia</th>
-                      <th className="text-right font-medium px-4 py-2">Empréstimos</th>
+                      <th className="text-left font-medium px-3 py-2">Rota</th>
+                      <th className="text-right font-medium px-3 py-2">Dias</th>
+                      <th className="text-right font-medium px-3 py-2">Cobrado</th>
+                      <th className="text-right font-medium px-3 py-2">Emprestado</th>
+                      <th className="text-right font-medium px-3 py-2">Lucro</th>
+                      <th className="text-right font-medium px-3 py-2">Empréstimos</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
                     {dados.por_rota.map((r) => (
                       <tr key={r.rota_id} className="hover:bg-gray-50">
-                        <td className="px-4 py-2 text-gray-900">{r.rota_nome || '—'}</td>
-                        <td className="px-4 py-2 text-right text-gray-500">{r.dias}</td>
-                        <td className="px-4 py-2 text-right font-medium text-gray-900">
-                          {fmt(r.recebido)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-500">{fmt(r.emprestado)}</td>
-                        <td className="px-4 py-2 text-right text-emerald-700">
-                          {fmt(r.ganancia)}
-                        </td>
-                        <td className="px-4 py-2 text-right text-gray-500">
-                          {r.qtd_emprestimos}
-                        </td>
+                        <td className="px-3 py-2 text-gray-900">{r.rota_nome || '—'}</td>
+                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{r.dias}</td>
+                        <td className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{fmt(r.recebido)}</td>
+                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(r.emprestado)}</td>
+                        <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">{fmt(r.ganancia)}</td>
+                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{r.qtd_emprestimos}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -383,6 +393,17 @@ export default function LiquidacaoPeriodoPage() {
             </div>
           )}
         </>
+      )}
+
+      {escopoGerado && (
+        <PainelCobranca
+          aberto={painel}
+          onFechar={() => setPainel(false)}
+          rotaIds={escopoGerado.rotas}
+          de={escopoGerado.de}
+          ate={escopoGerado.ate}
+          totalCard={c?.recebido ?? 0}
+        />
       )}
     </div>
   );

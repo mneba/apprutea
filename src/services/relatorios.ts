@@ -13,7 +13,9 @@
 // este projeto quatro correções em frentes diferentes.
 
 import { createClient } from '@/lib/supabase/client';
-import type { EstruturaVisivel, LiquidacoesPeriodo } from '@/types/relatorios';
+import type {
+  CobrancaPeriodo, EstruturaVisivel, FiltrosCobranca, LiquidacoesPeriodo,
+} from '@/types/relatorios';
 
 const supabase = createClient();
 
@@ -72,5 +74,41 @@ export const relatoriosService = {
       por_rota: r.por_rota ?? [],
       por_emprestimo: r.por_emprestimo ?? [],
     };
+  },
+
+  /**
+   * A listagem atrás do total cobrado: pagamentos e não pagos na mesma lista.
+   *
+   * Os totais devolvidos são do FILTRO inteiro, não da página — o rodapé
+   * precisa dizer o universo, senão o usuário lê o subtotal como total.
+   */
+  async buscarCobranca(
+    rotaIds: string[],
+    de: string,
+    ate: string,
+    filtros: FiltrosCobranca = {}
+  ): Promise<CobrancaPeriodo | null> {
+    const { data, error } = await supabase.rpc('fn_cobranca_periodo', {
+      p_rotas: rotaIds,
+      p_de: de,
+      p_ate: ate,
+      // String vazia tem de virar NULL: o filtro do banco testa `IS NULL`, e
+      // '' passaria a ser um termo de busca que não casa com nada.
+      p_busca: filtros.busca?.trim() || null,
+      p_tipo: filtros.tipo || null,
+      p_forma: filtros.forma || null,
+      p_limite: filtros.limite ?? 500,
+      p_offset: filtros.offset ?? 0,
+    });
+
+    if (error) {
+      console.error('Erro ao buscar a cobrança do período:', error);
+      return null;
+    }
+
+    const r = data as CobrancaPeriodo | null;
+    if (!r) return null;
+
+    return { ...r, linhas: r.linhas ?? [] };
   },
 };

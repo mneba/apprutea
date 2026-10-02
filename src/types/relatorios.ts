@@ -70,6 +70,12 @@ export interface ConsolidadoPeriodo {
   clientes_novos: number;
   clientes_renovados: number;
   clientes_renegociados: number;
+  /**
+   * A BASE, não o movimento. `clientes_pagos` acima conta atendimentos e soma
+   * entre dias; estes dois contam pessoas nas rotas do escopo.
+   */
+  clientes_ativos: number;
+  clientes_suspensos: number;
   /** Primeiro e último dia DE CADA ROTA, somados. Nunca soma entre dias. */
   caixa_inicial: number;
   caixa_final: number;
@@ -132,4 +138,65 @@ export interface LiquidacoesPeriodo {
   por_rota: RotaPeriodo[];
   /** Só vem preenchido quando a chamada pede detalhe. */
   por_emprestimo: EmprestimoGanancia[];
+}
+
+// ── Listagem da cobrança ───────────────────────────────────────────────
+//
+// O detalhe atrás do total cobrado. Pagamentos e não pagos na mesma lista,
+// como no sistema legado — separá-los esconderia o que não entrou.
+
+export interface LinhaCobranca {
+  registro_id: string;
+  /** `NAO_PAGO` vem de `nao_pagos_liquidacao` e entra zerado em todo valor. */
+  origem: 'PAGAMENTO' | 'NAO_PAGO';
+  emprestimo_id: string | null;
+  /** Instante real do lançamento. */
+  quando: string;
+  /** Dia da liquidação em que entrou. */
+  data_operacional: string;
+  cliente_nome: string | null;
+  cliente_documento: string | null;
+  rota_nome: string | null;
+  numero_parcela: number | null;
+  numero_parcelas: number | null;
+  tipo_operacao: string;
+  forma_pagamento: string | null;
+  /** O que entrou no caixa: o pago menos o crédito gasto. */
+  dinheiro: number;
+  credito_usado: number;
+  credito_gerado: number;
+  /** O juro embutido neste lançamento. Somado, bate com a ganancia. */
+  lucro: number;
+  saldo_depois: number;
+  /** Só em não pago: por que o cliente não pagou. */
+  observacao: string | null;
+}
+
+export interface TotaisCobranca {
+  dinheiro: number;
+  credito: number;
+  lucro: number;
+  registros: number;
+  nao_pagos: number;
+}
+
+export interface CobrancaPeriodo {
+  sucesso: boolean;
+  mensagem?: string;
+  de: string;
+  ate: string;
+  total_registros: number;
+  limite: number;
+  offset: number;
+  /** Do filtro inteiro, não da página visível. */
+  totais: TotaisCobranca | null;
+  linhas: LinhaCobranca[];
+}
+
+export interface FiltrosCobranca {
+  busca?: string;
+  tipo?: string;
+  forma?: string;
+  limite?: number;
+  offset?: number;
 }
