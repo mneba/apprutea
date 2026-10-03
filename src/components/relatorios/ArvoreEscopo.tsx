@@ -23,7 +23,7 @@
 // perfil, de `fn_estrutura_visivel`.
 
 import { ChevronDown, ChevronRight, Minus, Check, Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EstruturaVisivel, PaisNo } from '@/types/relatorios';
 
 interface Props {
@@ -137,6 +137,19 @@ const chave = (t: string) =>
 export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Props) {
   const [abertos, setAbertos] = useState<Set<string>>(new Set());
   const [busca, setBusca] = useState('');
+  const buscaRef = useRef<HTMLInputElement>(null);
+
+  // A árvore só é montada quando o popover abre, então montar e abrir são a
+  // mesma coisa: o cursor já chega na busca e o usuário digita o nome da rota
+  // sem um clique extra. Com 52 rotas em cinco níveis, procurar é o caminho
+  // normal, não a exceção.
+  //
+  // `preventScroll` porque o popover fica sobre a barra de filtros: focar
+  // rolaria a página para trazer o campo ao centro, e o resumo abaixo pularia
+  // debaixo do usuário.
+  useEffect(() => {
+    buscaRef.current?.focus({ preventScroll: true });
+  }, []);
 
   const alternarAberto = (chave: string) => {
     setAbertos((prev) => {
@@ -225,6 +238,7 @@ export default function ArvoreEscopo({ estrutura, selecionadas, onChange }: Prop
         <Search className="w-3.5 h-3.5 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
         <input
           id="escopo-busca"
+          ref={buscaRef}
           type="search"
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
