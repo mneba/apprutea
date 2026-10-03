@@ -49,6 +49,19 @@ const diaCurto = (d: string) => {
   return `${dd}/${m}`;
 };
 
+/**
+ * O dia da semana de um `YYYY-MM-DD`.
+ *
+ * `Date.UTC` e `getUTCDay`, nunca `new Date(iso)` seguido de `getDay`: o parse
+ * de string ISO dá meia-noite UTC e, na Colômbia (UTC−5), `getDay` devolve o
+ * dia ANTERIOR — uma segunda viraria domingo e a coluna inteira mentiria.
+ */
+const SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const diaSemana = (d: string) => {
+  const [a, m, dd] = d.substring(0, 10).split('-').map(Number);
+  return new Date(Date.UTC(a, m - 1, dd)).getUTCDay();
+};
+
 const hojeIso = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -432,7 +445,26 @@ export default function LiquidacaoPeriodoPage() {
                 <tbody className="divide-y divide-gray-50">
                   {dados.por_dia.map((d) => (
                     <tr key={d.data} className="hover:bg-gray-50">
-                      <td className="px-3 py-2 text-gray-900 whitespace-nowrap">{diaCurto(d.data)}</td>
+                      {/* O dia da semana na frente do dia do mês: sem ele,
+                          ler uma queda de cobrança exige contar no calendário.
+                          Domingo em vermelho discreto — na maioria das rotas
+                          `trabalha_domingo` é falso, e o dia aparecer fraco já
+                          explica o número baixo sem precisar de nota. */}
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        {(() => {
+                          const s = diaSemana(d.data) === 0;
+                          return (
+                            <>
+                              <span className={`text-[11px] font-semibold mr-1.5 ${s ? 'text-rose-600' : 'text-gray-400'}`}>
+                                {SEMANA[diaSemana(d.data)]}
+                              </span>
+                              <span className={s ? 'text-rose-700' : 'text-gray-900'}>
+                                {diaCurto(d.data)}
+                              </span>
+                            </>
+                          );
+                        })()}
+                      </td>
                       <td className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{fmt(d.recebido)}</td>
                       <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.esperado)}</td>
                       <td className="px-3 py-2 text-right">
