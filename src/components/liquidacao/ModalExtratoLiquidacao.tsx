@@ -351,6 +351,34 @@ export function ModalExtratoLiquidacao({
   const totalAjustes = registrosAjustes.reduce((s, r) => s + Number(r.valor), 0);
   const temAjustes = registrosAjustes.length > 0;
 
+  /**
+   * A diferença que as linhas não explicam.
+   *
+   * `caixa_final` é o saldo REAL da conta da rota, lido por
+   * `fn_fechar_liquidacao_diaria`. As linhas acima são os movimentos do dia.
+   * Quando os dois discordam, há dinheiro que se moveu fora deste dia —
+   * tipicamente uma correção retroativa, que altera a conta hoje e pertence a
+   * um dia antigo.
+   *
+   * O fechamento SEMPRE soube disso e gravava em `observacoes`. Ninguém lia.
+   * Em outubro de 2026 um vendedor passou quatro dias convencido de que tinha
+   * perdido 101,00 porque o extrato não fechava e nada na tela dizia por quê.
+   *
+   * Mostrar a linha não conserta a divergência — ela é legítima. Conserta o
+   * sigaínico: quem lê passa a ver que o sistema sabe, em vez de descobrir
+   * subtraindo na mão.
+   */
+  const caixaFinalGravado = Number(liquidacao?.caixa_final || 0);
+  const somaDasLinhas =
+    Number(liquidacao?.caixa_inicial || 0) +
+    totalCobrancas +
+    totalOutrasReceitas +
+    totalAjustes -
+    totalSaidasDespesas -
+    totalVendasEmprestimos;
+  const diferencaNaoExplicada = caixaFinalGravado - somaDasLinhas;
+  const temDiferenca = !!liquidacao && Math.abs(diferencaNaoExplicada) > 0.01;
+
   // Lista de saídas para exibição (inclui ANULADOS para mostrar riscados)
   const registrosSaidas = registros.filter(
     (r) =>
@@ -419,6 +447,7 @@ export function ModalExtratoLiquidacao({
   <div class="row"><span class="verm">(-) Despesas do dia</span><span class="verm">${formatarMoeda(totalSaidasDespesas)}</span></div>
   ${temAjustes ? `<div class="row"><span class="azul">(±) Ajustes de saldo</span><span class="azul">${totalAjustes >= 0 ? '+' : ''}${formatarMoeda(totalAjustes)}</span></div>` : ''}
   ${totalVendasEmprestimos > 0 ? `<div class="row"><span class="verm">(-) Empréstimos do dia</span><span class="verm">${formatarMoeda(totalVendasEmprestimos)}</span></div>` : ''}
+  ${temDiferenca ? `<div class="row"><span class="verm">(±) Diferença não explicada</span><span class="verm">${formatarMoeda(diferencaNaoExplicada)}</span></div>` : ''}
   <hr class="sep2">
   <div class="row"><span class="lg">(=) Caixa final</span><span class="lg">${formatarMoeda(liquidacao.caixa_final)}</span></div>
 
@@ -639,6 +668,13 @@ export function ModalExtratoLiquidacao({
                 )}
                 {totalVendasEmprestimos > 0 && (
                   <Linha label="(-) Empréstimos do dia" valor={formatarMoeda(totalVendasEmprestimos)} cor="verm" />
+                )}
+                {temDiferenca && (
+                  <Linha
+                    label="(±) Diferença não explicada"
+                    valor={`${diferencaNaoExplicada >= 0 ? '+' : ''}${formatarMoeda(diferencaNaoExplicada)}`}
+                    cor="verm"
+                  />
                 )}
                 <div className="border-t-2 border-gray-300 pt-3">
                   <Linha label="(=) Caixa final" valor={formatarMoeda(liquidacao.caixa_final)} bold large />

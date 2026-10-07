@@ -266,3 +266,121 @@ export interface FiltrosVendas {
   limite?: number;
   offset?: number;
 }
+
+// ─── Entradas e saídas ─────────────────────────────────────────────────────
+//
+// O relatório de fluxo de caixa. Pedido do cliente em 07/10/2026: além de
+// cobrado e emprestado, ver despesas, caixas, carteira, aportes, retiradas e
+// "qualquer movimentação de dinheiro".
+//
+// É esse "qualquer" que explica `por_categoria` ser uma lista aberta em vez de
+// campos fixos: a RPC agrupa pelo que existir em `financeiro`, então categoria
+// criada amanhã aparece sozinha.
+
+export interface MovimentoCategoria {
+  tipo: 'RECEBER' | 'PAGAR' | 'AJUSTE' | string;
+  categoria: string;
+  qtd: number;
+  total: number;
+}
+
+export interface DiaEntradaSaida {
+  data: string;
+  caixa_inicial: number;
+  caixa_final: number;
+  carteira_final: number;
+  entradas: number;
+  saidas: number;
+  cobrado: number;
+  emprestado: number;
+  despesas: number;
+}
+
+export interface ConsolidadoEntradaSaida {
+  dias: number;
+  /** Caixa e carteira são SALDO: vêm das pontas do período, não somados. */
+  caixa_inicial: number;
+  caixa_final: number;
+  carteira_inicial: number;
+  carteira_final: number;
+  entradas: number;
+  saidas: number;
+  ajustes: number;
+  cobrado: number;
+  emprestado: number;
+  /** Saída que não é empréstimo — o dinheiro emprestado virou carteira. */
+  despesas: number;
+  resultado: number;
+}
+
+export interface EntradasSaidasPeriodo {
+  sucesso: boolean;
+  mensagem?: string;
+  de: string;
+  ate: string;
+  rotas: number;
+  consolidado: ConsolidadoEntradaSaida | null;
+  por_categoria: MovimentoCategoria[];
+  por_dia: DiaEntradaSaida[];
+}
+
+// ─── Atrasos ───────────────────────────────────────────────────────────────
+//
+// FOTO numa data, não período: atraso é estado, não fluxo.
+//
+// `dias_atraso` vem em DIAS DE COBRANÇA — domingo sem expediente e feriado da
+// rota não contam. É a mesma regra de diasCobranca.ts no app, implementada uma
+// segunda vez no Postgres porque relatório de servidor não chama código do
+// aparelho. Se uma mudar, a outra muda junto.
+
+export interface LinhaAtraso {
+  emprestimo_id: string;
+  cliente_nome: string;
+  cliente_documento: string | null;
+  telefone: string | null;
+  rota_nome: string;
+  frequencia: string;
+  tipo_emprestimo: string;
+  data_emprestimo: string | null;
+  vencimento_antigo: string;
+  dias_atraso: number;
+  parcelas_vencidas: number;
+  valor_vencido: number;
+  saldo: number;
+  ultimo_pagamento: string | null;
+}
+
+export interface FaixaAtraso {
+  faixa: string;
+  clientes: number;
+  valor: number;
+}
+
+export interface TotaisAtrasos {
+  clientes: number;
+  emprestimos: number;
+  valor_vencido: number;
+  saldo_total: number;
+  parcelas_vencidas: number;
+  media_dias: number;
+  pior_caso: number;
+}
+
+export interface AtrasosRelatorio {
+  sucesso: boolean;
+  mensagem?: string;
+  data: string;
+  total_registros: number;
+  limite: number;
+  offset: number;
+  totais: TotaisAtrasos | null;
+  faixas: FaixaAtraso[];
+  linhas: LinhaAtraso[];
+}
+
+export interface FiltrosAtrasos {
+  minDias?: number;
+  busca?: string;
+  limite?: number;
+  offset?: number;
+}

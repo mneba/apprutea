@@ -17,7 +17,8 @@
 // quando as definições chegarem (janela do "sem renovar", dias do "por vencer",
 // o parcial do "que pagaram") eles acendem sem a tela mudar de forma.
 
-import { BarChart3, Clock, FileText, Lock, UserCheck, Users, UserX } from 'lucide-react';
+import {
+  ArrowLeftRight, BarChart3, Clock, FileText, Lock, UserCheck, Users, UserX } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 
 interface Cartao {
@@ -40,6 +41,14 @@ const cartoes: Cartao[] = [
     cor: 'bg-blue-100 text-blue-600',
   },
   {
+    titulo: 'Entradas e saídas',
+    descricao:
+      'Todo o dinheiro que entrou e saiu, por categoria: despesas, aportes, retiradas e o que mais existir. Com caixa e carteira nas pontas do período.',
+    href: '/relatorios/entradas-saidas',
+    icon: ArrowLeftRight,
+    cor: 'bg-teal-100 text-teal-600',
+  },
+  {
     titulo: 'Clientes ativos e inativos',
     descricao: 'Quem tem empréstimo em aberto e quem não tem, com a contagem de suspensos.',
     icon: Users,
@@ -47,12 +56,12 @@ const cartoes: Cartao[] = [
     pendente: 'Em definição',
   },
   {
-    titulo: 'Clientes atrasados',
+    titulo: 'Atrasos',
     descricao:
-      'Atraso pela data operacional e pelos dias de cobrança da rota — domingo e feriado não contam.',
+      'Quem está devendo numa data, há quanto tempo e quanto. Em dias de cobrança — domingo e feriado não contam — com as faixas e o telefone de cada um.',
+    href: '/relatorios/atrasos',
     icon: UserX,
     cor: 'bg-red-100 text-red-600',
-    pendente: 'Em definição',
   },
   {
     titulo: 'Clientes sem renovar',

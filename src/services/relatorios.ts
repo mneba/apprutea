@@ -14,8 +14,9 @@
 
 import { createClient } from '@/lib/supabase/client';
 import type {
-  CobrancaPeriodo, EstruturaVisivel, FiltrosCobranca, FiltrosVendas,
-  LiquidacoesPeriodo, VendasPeriodo,
+  AtrasosRelatorio, CobrancaPeriodo, EntradasSaidasPeriodo, EstruturaVisivel,
+  FiltrosAtrasos, FiltrosCobranca, FiltrosVendas, LiquidacoesPeriodo,
+  VendasPeriodo,
 } from '@/types/relatorios';
 
 const supabase = createClient();
@@ -143,5 +144,66 @@ export const relatoriosService = {
     if (!r) return null;
 
     return { ...r, linhas: r.linhas ?? [] };
+  },
+
+  /**
+   * Entradas e saídas do período — o fluxo de caixa completo.
+   *
+   * `por_categoria` vem como lista aberta: a RPC agrupa pelo que existir em
+   * `financeiro`, sem nomes fixos. Aporte e retirada aparecem por si, e
+   * categoria criada depois também.
+   */
+  async buscarEntradasSaidas(
+    rotaIds: string[],
+    de: string,
+    ate: string
+  ): Promise<EntradasSaidasPeriodo | null> {
+    const { data, error } = await supabase.rpc('fn_entradas_saidas_periodo', {
+      p_rotas: rotaIds,
+      p_de: de,
+      p_ate: ate,
+    });
+
+    if (error) {
+      console.error('Erro ao buscar entradas e saídas:', error);
+      return null;
+    }
+
+    const r = data as EntradasSaidasPeriodo | null;
+    if (!r) return null;
+
+    return { ...r, por_categoria: r.por_categoria ?? [], por_dia: r.por_dia ?? [] };
+  },
+
+  /**
+   * A foto dos atrasos numa data.
+   *
+   * Não recebe intervalo de propósito: atraso é estado, não fluxo. "Quanto
+   * atraso houve em setembro" não tem resposta única; "quem está atrasado
+   * nesta data, e há quanto tempo" tem.
+   */
+  async buscarAtrasos(
+    rotaIds: string[],
+    data: string | null,
+    filtros: FiltrosAtrasos = {}
+  ): Promise<AtrasosRelatorio | null> {
+    const { data: res, error } = await supabase.rpc('fn_atrasos', {
+      p_rotas: rotaIds,
+      p_data: data || null,
+      p_min_dias: filtros.minDias ?? 1,
+      p_busca: filtros.busca?.trim() || null,
+      p_limite: filtros.limite ?? 200,
+      p_offset: filtros.offset ?? 0,
+    });
+
+    if (error) {
+      console.error('Erro ao buscar os atrasos:', error);
+      return null;
+    }
+
+    const r = res as AtrasosRelatorio | null;
+    if (!r) return null;
+
+    return { ...r, faixas: r.faixas ?? [], linhas: r.linhas ?? [] };
   },
 };

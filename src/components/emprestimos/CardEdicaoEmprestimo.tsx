@@ -142,6 +142,20 @@ export function CardEdicaoEmprestimo({
   // Total já pago pelo cliente (valor_total contratado - saldo devedor)
   const totalPago = Math.max(0, (emprestimo.valor_total || 0) - (emprestimo.valor_saldo || 0));
 
+  /**
+   * Empréstimo que já recebeu dinheiro: valor e taxa ficam travados.
+   *
+   * Regra do cliente (06/10/2026): mudar o valor de um empréstimo que o
+   * cliente começou a pagar é acordo novo, e para isso existe a renegociação.
+   * O cronograma — frequência, dia de cobrança, número de parcelas — continua
+   * livre, redistribuindo o saldo que falta.
+   *
+   * `fn_alterar_emprestimo_completo` recusa de qualquer jeito e devolve
+   * `requer_renegociacao`. Travar aqui é para o usuário não preencher um
+   * formulário inteiro para ouvir não no fim.
+   */
+  const temPagamento = parcelasPagas > 0 || totalPago > 0;
+
   // O empréstimo precisa continuar em aberto após a alteração
   const alteracaoQuitaEmprestimo = calculosNovos.valorTotal <= totalPago;
 
@@ -530,7 +544,9 @@ export function CardEdicaoEmprestimo({
                     onChange={(e) => setValorPrincipal(parseFloat(e.target.value) || 0)}
                     min={0}
                     step={0.01}
-                    className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={temPagamento}
+                    title={temPagamento ? 'Já há pagamento neste empréstimo — use a renegociação para mudar o valor' : undefined}
+                    className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -549,7 +565,9 @@ export function CardEdicaoEmprestimo({
                     min={0}
                     max={100}
                     step={0.1}
-                    className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    disabled={temPagamento}
+                    title={temPagamento ? 'Já há pagamento neste empréstimo — use a renegociação para mudar a taxa' : undefined}
+                    className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -733,6 +751,23 @@ export function CardEdicaoEmprestimo({
                   <> Mínimo permitido: {dataLiquidacao.split('-').reverse().join('/')} (data da liquidação aberta).</>
                 )}
               </p>
+            </div>
+          )}
+
+          {/* Por que valor e taxa estão travados.
+              Sem esta linha o campo cinza vira dúvida: o usuário não sabe se
+              é falta de permissão, erro da tela, ou regra. */}
+          {temPagamento && (
+            <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
+              <div className="flex items-start gap-2 text-gray-600 text-xs">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <p>
+                  Este empréstimo já recebeu pagamento, então valor e taxa não podem
+                  mudar. Dá para alterar frequência, dia de cobrança e número de
+                  parcelas — o saldo que falta é redistribuído. Para mudar o valor,
+                  use a renegociação.
+                </p>
+              </div>
             </div>
           )}
 
