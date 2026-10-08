@@ -427,3 +427,114 @@ export interface FiltrosMovimentacoes {
   /** `ROTA` para o card de movimentações, `MICROSEGURO` para o do microseguro. */
   tipoConta?: 'ROTA' | 'MICROSEGURO';
 }
+
+// ─── Relatório de clientes ──────────────────────────────────────────────
+//
+// Os dez relatórios de clientes do sistema legado — ativos, inativos, sem
+// renovar, atrasados, que pagaram, crédito acima de X, por interesse,
+// vencidos ou por vencer, históricos e cancelados — são PRESETS de uma
+// função só, `fn_clientes`. Eles diferem apenas no predicado, e com filtros
+// combináveis o usuário consegue pedir o que dez telas separadas nunca
+// permitiriam: "atrasados com crédito acima de mil".
+//
+// É FOTO NUMA DATA, não período. Atraso e carteira em aberto são ESTADO:
+// "quantos atrasados houve em setembro" não tem resposta única. Por isso
+// `data` e não um intervalo — que existe só para "que pagaram".
+//
+// Ver sql/2026-10-09_fn_clientes.sql.
+
+export type SituacaoCliente = 'COM_ABERTO' | 'SEM_ABERTO' | 'CANCELADO' | 'TODOS';
+
+export interface LinhaCliente {
+  cliente_id: string;
+  cliente_nome: string;
+  cliente_documento: string | null;
+  telefone: string | null;
+  cliente_status: string;
+  rota_nome: string | null;
+  emprestimos_abertos: number;
+  emprestimos_total: number;
+  /** Soma dos saldos em aberto. */
+  saldo: number;
+  valor_vencido: number;
+  parcelas_vencidas: number;
+  /**
+   * Em DIAS DE COBRANÇA, não de calendário: domingo de rota que não trabalha
+   * domingo e feriado de `feriados_rota` não contam. Quando o cliente tem
+   * dois empréstimos em aberto, é o PIOR dos dois — quem deve em dois é
+   * cobrado pelo mais velho.
+   */
+  dias_atraso: number;
+  ultimo_pagamento: string | null;
+  dias_sem_pagar: number | null;
+  /** Quando o empréstimo em aberto termina. */
+  termina_em: string | null;
+  /** Negativo é prazo estourado; positivo é a fila de renovação. */
+  dias_para_terminar: number | null;
+  principal_atual: number;
+  taxa_atual: number | null;
+  frequencia: string | null;
+  ultimo_emprestimo: string | null;
+  /** Só preenchido quando a consulta pediu um intervalo de pagamento. */
+  pago_no_intervalo: number;
+}
+
+export interface TotaisClientes {
+  clientes: number;
+  com_aberto: number;
+  sem_aberto: number;
+  suspensos: number;
+  atrasados: number;
+  emprestimos: number;
+  saldo: number;
+  valor_vencido: number;
+  parcelas_vencidas: number;
+  media_dias: number;
+  pior_caso: number;
+  pago_no_intervalo: number;
+}
+
+/**
+ * As faixas usam os MESMOS limites da cor dos cards no app
+ * (apprutea_android/src/utils/diasCobranca.ts). Relatório e tela precisam
+ * contar a mesma história, senão o vendedor e o escritório discutem sobre
+ * quem está certo.
+ */
+export interface FaixaAtraso {
+  faixa: string;
+  clientes: number;
+  valor: number;
+}
+
+export interface ClientesRelatorio {
+  sucesso: boolean;
+  mensagem?: string;
+  data: string;
+  situacao: SituacaoCliente;
+  total_registros: number;
+  limite: number;
+  offset: number;
+  totais: TotaisClientes | null;
+  faixas: FaixaAtraso[];
+  linhas: LinhaCliente[];
+}
+
+export interface FiltrosClientes {
+  situacao?: SituacaoCliente;
+  /** Dias de cobrança. */
+  atrasoMin?: number | null;
+  /** Sem pagamento há N dias. */
+  semContatoDias?: number | null;
+  /** Piso e teto de dias até o empréstimo terminar. Negativo é vencido. */
+  venceDeDias?: number | null;
+  venceAteDias?: number | null;
+  pagouDe?: string | null;
+  pagouAte?: string | null;
+  principalMin?: number | null;
+  taxaMin?: number | null;
+  taxaMax?: number | null;
+  ordenar?: 'ATRASO' | 'SALDO' | 'NOME' | 'PAGAMENTO';
+  busca?: string;
+  limite?: number;
+  offset?: number;
+}

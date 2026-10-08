@@ -7,17 +7,15 @@
 // A grade de cartões existe porque é boa para descoberta — o usuário bate o
 // olho e acha o que quer, como na tela de Reportes do sistema legado.
 //
-// Mas, ao contrário do legado, os cartões de Clientes serão ATALHOS para um
-// relatório único com painel de filtros, não dez relatórios separados. Os dez
-// cartões de lá diferem só pelo predicado; dez telas seriam dez lugares para
-// manter em sincronia, e o usuário não conseguiria combinar — hoje ele não tem
-// como pedir "atrasados com crédito acima de mil".
-//
-// Os cartões desabilitados ficam à vista de propósito: o lugar já existe, e
-// quando as definições chegarem (janela do "sem renovar", dias do "por vencer",
-// o parcial do "que pagaram") eles acendem sem a tela mudar de forma.
+// Os dez relatórios de clientes do legado viraram UM, em 09/10/2026, como
+// este cabeçalho previa. Eles diferiam só pelo predicado; dez telas seriam dez
+// lugares para manter em sincronia, e o usuário não conseguiria combinar —
+// não tinha como pedir "atrasados com crédito acima de mil". Agora tem: são
+// presets de uma `fn_clientes` só, e os prazos que faltavam definir (janela
+// do "sem renovar", dias do "por vencer") viraram campo na tela, com 30 e 15
+// de padrão, em vez de constante no código.
 
-import { BarChart3, Clock, FileText, Lock, UserCheck, Users, UserX } from 'lucide-react';
+import { BarChart3, Lock, Users } from 'lucide-react';
 import { Link } from '@/i18n/routing';
 
 interface Cartao {
@@ -40,42 +38,12 @@ const cartoes: Cartao[] = [
     cor: 'bg-blue-100 text-blue-600',
   },
   {
-    titulo: 'Clientes ativos e inativos',
-    descricao: 'Quem tem empréstimo em aberto e quem não tem, com a contagem de suspensos.',
+    titulo: 'Clientes',
+    descricao:
+      'Ativos, inativos, atrasados, sem renovar, vencidos ou por vencer, que pagaram, crédito acima de um valor, por taxa de juro, cancelados e histórico — e qualquer combinação deles.',
+    href: '/relatorios/clientes',
     icon: Users,
     cor: 'bg-emerald-100 text-emerald-600',
-    pendente: 'Em definição',
-  },
-  {
-    titulo: 'Clientes atrasados',
-    descricao:
-      'Quem está devendo, há quanto tempo e quanto — em dias de cobrança, que é como o app conta.',
-    icon: UserX,
-    cor: 'bg-red-100 text-red-600',
-    pendente: 'Em definição',
-  },
-  {
-    titulo: 'Clientes sem renovar',
-    descricao: 'Quitou e não voltou. Falta definir a janela em dias.',
-    icon: UserCheck,
-    cor: 'bg-amber-100 text-amber-600',
-    pendente: 'Aguardando a janela',
-  },
-  {
-    titulo: 'Vencidos ou por vencer',
-    descricao:
-      'A fila de renovação: quem está a poucos dias de terminar. Falta definir quantos dias.',
-    icon: Clock,
-    cor: 'bg-purple-100 text-purple-600',
-    pendente: 'Aguardando o prazo',
-  },
-  {
-    titulo: 'Pagamentos e vendas',
-    descricao:
-      'Listagem de pagamentos (inclusive não pagos) e de vendas do período, com a renovação classificada em igual, maior ou menor valor.',
-    icon: FileText,
-    cor: 'bg-indigo-100 text-indigo-600',
-    pendente: 'Em definição',
   },
 ];
 

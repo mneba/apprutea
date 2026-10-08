@@ -14,8 +14,9 @@
 
 import { createClient } from '@/lib/supabase/client';
 import type {
-  CobrancaPeriodo, EstruturaVisivel, FiltrosCobranca, FiltrosMovimentacoes,
-  FiltrosVendas, LiquidacoesPeriodo, MovimentacoesPeriodo, VendasPeriodo,
+  ClientesRelatorio, CobrancaPeriodo, EstruturaVisivel, FiltrosClientes,
+  FiltrosCobranca, FiltrosMovimentacoes, FiltrosVendas, LiquidacoesPeriodo,
+  MovimentacoesPeriodo, VendasPeriodo,
 } from '@/types/relatorios';
 
 const supabase = createClient();
@@ -184,5 +185,48 @@ export const relatoriosService = {
     if (!r) return null;
 
     return { ...r, por_categoria: r.por_categoria ?? [], linhas: r.linhas ?? [] };
+  },
+
+  /**
+   * O relatório de clientes. Uma função, filtros combináveis — ver
+   * sql/2026-10-09_fn_clientes.sql.
+   *
+   * `null` em cada filtro é "ignore este", não "zero". Por isso os `?? null`
+   * em vez de `|| 0`: `atrasoMin: 0` significaria "atraso de pelo menos
+   * zero", que é todo mundo, e `0 || null` daria null por acidente.
+   */
+  async buscarClientes(
+    rotaIds: string[],
+    data: string,
+    filtros: FiltrosClientes = {}
+  ): Promise<ClientesRelatorio | null> {
+    const { data: d, error } = await supabase.rpc('fn_clientes', {
+      p_rotas: rotaIds,
+      p_data: data,
+      p_situacao: filtros.situacao ?? 'COM_ABERTO',
+      p_atraso_min: filtros.atrasoMin ?? null,
+      p_sem_contato_dias: filtros.semContatoDias ?? null,
+      p_vence_de_dias: filtros.venceDeDias ?? null,
+      p_vence_ate_dias: filtros.venceAteDias ?? null,
+      p_pagou_de: filtros.pagouDe ?? null,
+      p_pagou_ate: filtros.pagouAte ?? null,
+      p_principal_min: filtros.principalMin ?? null,
+      p_taxa_min: filtros.taxaMin ?? null,
+      p_taxa_max: filtros.taxaMax ?? null,
+      p_ordenar: filtros.ordenar ?? 'ATRASO',
+      p_busca: filtros.busca?.trim() || null,
+      p_limite: filtros.limite ?? 100,
+      p_offset: filtros.offset ?? 0,
+    });
+
+    if (error) {
+      console.error('Erro ao buscar o relatório de clientes:', error);
+      return null;
+    }
+
+    const r = d as ClientesRelatorio | null;
+    if (!r) return null;
+
+    return { ...r, faixas: r.faixas ?? [], linhas: r.linhas ?? [] };
   },
 };
