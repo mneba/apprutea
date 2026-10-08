@@ -7,13 +7,30 @@
 // Substitui as abas "Liquidacion" e "Resumen" do sistema legado — elas
 // mostram o mesmo dado em granularidades diferentes.
 //
-// A HIERARQUIA DO RESUMO
-// Cobrança e venda são as duas OPERAÇÕES da rota: peso visual igual entre si,
-// lado a lado. O lucro é o RESULTADO delas, apartado à direita e com a margem
-// sobre o cobrado, porque 6.450,76 sozinho não diz se foi bom. Caixa e base de
-// clientes descrevem o CENÁRIO, não a operação, e por isso vivem na linha do
-// cabeçalho, miúdos. A carteira mora dentro da venda — é o que a venda
-// acumula.
+// A ANATOMIA, decidida com o cliente em 08/10/2026 depois de três tentativas:
+//
+//   INDICADORES no topo, largura cheia. O cenário do período: quantos dias,
+//     quantas rotas, quantos clientes, caixa e carteira nas duas pontas. É
+//     contexto — não se clica.
+//   TOTALIZADORES na lateral, 250px fixos. Cobrança, Venda, Lucro,
+//     Microseguro e Movimentações. São eles que mandam na lista.
+//   PALCO com a listagem do totalizador escolhido, sempre em largura cheia.
+//
+// A PÁGINA É TRAVADA e só a listagem rola, como a tela do Financeiro. Por
+// isso cada camada flexível leva `min-h-0`: sem ele o filho cresce além do
+// pai e a rolagem escapa para a página inteira.
+//
+// NADA ABRE POR CIMA. Até 08/10/2026 cada total abria um modal de tela cheia.
+// Saiu por pedido do cliente: sobreposição esconde o que ficou atrás e obriga
+// a fechar para comparar dois números.
+//
+// A LATERAL FICA À ESQUERDA porque aqui ela é CONTROLE — você escolhe o que
+// ver. No Financeiro a coluna da direita é consequência (saldos, categorias),
+// e por isso lá ela vem depois da lista.
+//
+// AS ROTAS SÃO PASTILHAS QUE LIGAM E DESLIGAM, e desligar refaz a consulta.
+// É o jeito mais curto de comparar rotas sem gerar o relatório de novo. Cada
+// pastilha carrega o próprio cobrado, para dar o peso antes de tirar.
 //
 // NÃO HÁ GRÁFICO DE COBRADO CONTRA EMPRESTADO. São fluxos diferentes, e
 // barras lado a lado convidam a uma comparação que não significa nada.
@@ -25,18 +42,23 @@
 // ali significam o que o vendedor entende.
 //
 // Nenhuma conta acontece aqui: tudo vem de `fn_liquidacoes_periodo`, inclusive
-// o que NÃO somar. Ver sql/2026-10-01_fn_liquidacoes_periodo.sql.
+// o que NÃO somar. Ver sql/2026-10-01_fn_liquidacoes_periodo.sql e os scripts
+// de 2026-10-07 e 2026-10-08.
 
-import { ArrowLeft, ChevronDown, ChevronRight, Download, Globe, Loader2 } from 'lucide-react';
+import {
+  ArrowDownToLine, ArrowLeft, ArrowRightLeft, ArrowUpFromLine, Calendar,
+  ChevronDown, Download, Globe, Loader2, MapPin, Shield, TrendingUp,
+} from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import PainelCobranca from '@/components/relatorios/PainelCobranca';
-import PainelVendas from '@/components/relatorios/PainelVendas';
-import PainelMovimentacoes from '@/components/relatorios/PainelMovimentacoes';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
+import PainelCobranca from '@/components/relatorios/PainelCobranca';
+import PainelLucro from '@/components/relatorios/PainelLucro';
+import PainelMovimentacoes from '@/components/relatorios/PainelMovimentacoes';
+import PainelVendas from '@/components/relatorios/PainelVendas';
 import SeletorPeriodo from '@/components/relatorios/SeletorPeriodo';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
-import type { EstruturaVisivel, LiquidacoesPeriodo, RotaNo } from '@/types/relatorios';
+import type { EstruturaVisivel, LiquidacoesPeriodo, RotaNo, RotaPeriodo } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
 const fmt = (n: number | null | undefined) =>
@@ -81,38 +103,69 @@ const achatar = (e: EstruturaVisivel | null): RotaNo[] =>
     )
   );
 
+/** Cor da barra de atingido, na mesma escala da tela de Liquidação Diária. */
+const corPct = (p: number) =>
+  p >= 100 ? 'bg-emerald-500' : p >= 70 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500';
+
+type Aba = 'dia' | 'cobranca' | 'venda' | 'lucro' | 'micro' | 'mov';
+
+/** Um indicador da faixa do topo: rótulo miúdo em cima, valor embaixo. */
+function Indicador({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
+  return (
+    <div className="flex-1 min-w-0 basis-[140px] px-3.5 py-2 border-r border-gray-100 last:border-r-0">
+      <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-400 truncate">
+        {rotulo}
+      </span>
+      <span className="block text-[14.5px] font-semibold tabular-nums">{children}</span>
+    </div>
+  );
+}
+
 /**
- * Uma grandeza da faixa de movimentações: sinal, valor e nome, clicável.
- *
- * É botão por grandeza, e não uma faixa clicável inteira, porque cada uma abre
- * o painel já filtrada no seu tipo — quem clica em "transferências" quer as
- * transferências, não a lista toda para filtrar de novo.
+ * Um totalizador da lateral. É a manchete do período e ao mesmo tempo o
+ * controle do palco — por isso o valor fica grande mesmo numa coluna estreita.
  */
-function Grandeza({
-  sinal, nome, valor, cor, onClick,
+function Totalizador({
+  icone: Icone, selo, nome, valor, par, sub, ativo, corValor, onClick,
 }: {
-  sinal: string;
+  icone: React.ElementType;
+  selo: string;
   nome: string;
-  valor: number;
-  cor: string;
+  valor?: string;
+  par?: [string, string];
+  sub: string;
+  ativo: boolean;
+  corValor?: string;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      className="group/g flex items-baseline gap-1.5 px-2 py-1 -my-1 rounded hover:bg-gray-100 text-left"
-      title={`Ver ${nome} do período`}
+      aria-pressed={ativo}
+      className={`w-full grid grid-cols-[28px_1fr] gap-x-2 items-center px-3 py-2 text-left border-b border-gray-100 last:border-b-0 ${
+        ativo ? 'bg-blue-50 shadow-[inset_3px_0_0_#2563eb]' : 'hover:bg-gray-50'
+      }`}
     >
-      <span className="text-[12.5px] text-gray-400">{sinal}</span>
-      <b className={`${cor} tabular-nums text-[15px]`}>{fmt(valor)}</b>
-      <span className="text-[11.5px] text-gray-400 group-hover/g:text-gray-600">{nome}</span>
+      <span className={`w-7 h-7 rounded-md flex items-center justify-center ${selo}`}>
+        <Icone className="w-3.5 h-3.5" />
+      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 truncate">
+        {nome}
+      </span>
+      {par ? (
+        <span className="col-start-2 flex gap-2.5 items-baseline">
+          <b className="text-[14px] font-bold text-emerald-700 tabular-nums">{par[0]}</b>
+          <b className="text-[14px] font-bold text-amber-700 tabular-nums">{par[1]}</b>
+        </span>
+      ) : (
+        <span className={`col-start-2 text-[17px] font-bold tabular-nums leading-tight ${corValor ?? 'text-gray-900'}`}>
+          {valor}
+        </span>
+      )}
+      <span className="col-start-2 text-[10.5px] text-gray-400 truncate">{sub}</span>
     </button>
   );
 }
-
-/** Cor da barra de atingido, na mesma escala da tela de Liquidação Diária. */
-const corPct = (p: number) =>
-  p >= 100 ? 'bg-emerald-500' : p >= 70 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500';
 
 export default function LiquidacaoPeriodoPage() {
   const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
@@ -123,31 +176,29 @@ export default function LiquidacaoPeriodoPage() {
   const [dados, setDados] = useState<LiquidacoesPeriodo | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [painel, setPainel] = useState<'cobranca' | 'venda' | 'movimentacao' | null>(null);
-  /**
-   * O tipo com que o painel de movimentações abre. Vai como `key` no painel,
-   * para ele remontar com o filtro já posto em vez de sincronizar por efeito —
-   * sincronizar custaria uma busca jogada fora a cada abertura.
-   */
-  const [movTipo, setMovTipo] = useState('');
-  /**
-   * Qual conta o painel abre: a da rota ou a do microseguro. São duas contas
-   * de verdade — a Barcelona tem `Conta Rota Barcelona` e
-   * `Conta Microseguro Barcelona`, com saldos próprios — e por isso cada uma
-   * tem card e listagem próprios.
-   */
-  const [movConta, setMovConta] = useState<'ROTA' | 'MICROSEGURO'>('ROTA');
-  const abrirMov = (tipo: string, conta: 'ROTA' | 'MICROSEGURO' = 'ROTA') => {
-    setMovTipo(tipo);
-    setMovConta(conta);
-    setPainel('movimentacao');
-  };
+  const [aba, setAba] = useState<Aba>('dia');
   const [escopoAberto, setEscopoAberto] = useState(false);
   const caixaEscopo = useRef<HTMLDivElement>(null);
 
   // O recorte usado na última geração, não o marcado agora. Sem isso, mexer na
-  // árvore trocaria o conteúdo do painel sem o relatório ter sido refeito.
+  // árvore trocaria o conteúdo da lista sem o relatório ter sido refeito.
   const [escopoGerado, setEscopoGerado] = useState<{ rotas: string[]; de: string; ate: string } | null>(null);
+
+  /**
+   * As rotas que estão ENTRANDO NA CONTA agora — subconjunto do que foi
+   * gerado. Desligar uma pastilha tira da conta sem tirar do escopo, para a
+   * lista de comparação ficar estável enquanto se compara.
+   */
+  const [rotasAtivas, setRotasAtivas] = useState<Set<string>>(new Set());
+
+  /**
+   * Os números POR ROTA da geração cheia, guardados.
+   *
+   * É o que permite a pastilha desligada continuar mostrando o seu cobrado: a
+   * consulta do subconjunto só devolve as rotas ativas, e sem esta cópia a
+   * pastilha desligada ficaria sem número justamente quando se quer comparar.
+   */
+  const [porRotaBase, setPorRotaBase] = useState<RotaPeriodo[]>([]);
 
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
@@ -191,43 +242,122 @@ export default function LiquidacaoPeriodoPage() {
     return paisCheio ? paisCheio.pais : `${selecionadas.size} rotas`;
   }, [selecionadas, todasAsRotas, estrutura]);
 
-  // As rotas do recorte, com o vendedor. Sai do que foi GERADO, não do que
-  // está marcado agora — o cabeçalho descreve o relatório na tela.
-  const rotasDoResumo = useMemo(() => {
+  /** As rotas do recorte gerado, com nome e o cobrado de cada uma. */
+  const rotasDoEscopo = useMemo(() => {
     if (!escopoGerado) return [];
-    const mapa = new Map(todasAsRotas.map((r) => [r.rota_id, r]));
+    const nomes = new Map(todasAsRotas.map((r) => [r.rota_id, r]));
+    const valores = new Map(porRotaBase.map((r) => [r.rota_id, r]));
     return escopoGerado.rotas
-      .map((id) => mapa.get(id))
-      .filter((r): r is RotaNo => !!r)
-      .sort((a, b) => a.nome.localeCompare(b.nome));
-  }, [escopoGerado, todasAsRotas]);
+      .map((id) => ({
+        id,
+        nome: nomes.get(id)?.nome ?? valores.get(id)?.rota_nome ?? 'Rota',
+        vendedor: nomes.get(id)?.vendedor_nome ?? null,
+        cobrado: valores.get(id)?.recebido ?? 0,
+      }))
+      .sort((a, b) => b.cobrado - a.cobrado || a.nome.localeCompare(b.nome));
+  }, [escopoGerado, todasAsRotas, porRotaBase]);
+
+  /**
+   * O array de rotas ativas, com referência estável.
+   *
+   * As listagens recebem isto em `rotaIds` e refazem a consulta quando ele
+   * muda. Um array novo a cada render faria cada listagem consultar em laço —
+   * por isso a chave de texto no meio.
+   */
+  const chaveAtivas = useMemo(
+    () => Array.from(rotasAtivas).sort().join(','),
+    [rotasAtivas]
+  );
+  const rotasAtivasArr = useMemo(
+    () => (chaveAtivas ? chaveAtivas.split(',') : []),
+    [chaveAtivas]
+  );
 
   const podeGerar = selecionadas.size > 0 && !!de && !!ate && ate >= de && !carregando;
 
-  const gerar = useCallback(async () => {
-    if (selecionadas.size === 0) return;
+  /** Consulta o consolidado para um conjunto de rotas. */
+  const consultar = useCallback(async (rotas: string[], dd: string, aa: string) => {
     setCarregando(true);
     setErro(null);
-    const rotas = Array.from(selecionadas);
     try {
-      const r = await relatoriosService.buscarLiquidacoesPeriodo(rotas, de, ate);
+      const r = await relatoriosService.buscarLiquidacoesPeriodo(rotas, dd, aa);
       if (!r || !r.sucesso) {
         setErro(r?.mensagem || 'Não foi possível gerar o relatório.');
         setDados(null);
-        setEscopoGerado(null);
-      } else {
-        setDados(r);
-        setEscopoGerado({ rotas, de, ate });
+        return null;
       }
+      setDados(r);
+      return r;
     } finally {
       setCarregando(false);
     }
-  }, [selecionadas, de, ate]);
+  }, []);
+
+  const gerar = useCallback(async () => {
+    if (selecionadas.size === 0) return;
+    const rotas = Array.from(selecionadas);
+    const r = await consultar(rotas, de, ate);
+    if (!r) {
+      setEscopoGerado(null);
+      setPorRotaBase([]);
+      setRotasAtivas(new Set());
+      return;
+    }
+    setEscopoGerado({ rotas, de, ate });
+    setRotasAtivas(new Set(rotas));
+    // Guarda o por-rota da geração CHEIA: é a referência das pastilhas, e não
+    // pode encolher quando o usuário desliga uma rota.
+    setPorRotaBase(r.por_rota);
+  }, [selecionadas, de, ate, consultar]);
+
+  /** Liga ou desliga uma rota e refaz a conta. */
+  const alternarRota = useCallback(async (id: string) => {
+    if (!escopoGerado) return;
+    const proximas = new Set(rotasAtivas);
+    if (proximas.has(id)) proximas.delete(id); else proximas.add(id);
+    setRotasAtivas(proximas);
+    if (proximas.size === 0) { setDados(null); return; }
+    await consultar(Array.from(proximas), escopoGerado.de, escopoGerado.ate);
+  }, [escopoGerado, rotasAtivas, consultar]);
+
+  const marcarTodas = useCallback(async (todas: boolean) => {
+    if (!escopoGerado) return;
+    const proximas = todas ? new Set(escopoGerado.rotas) : new Set<string>();
+    setRotasAtivas(proximas);
+    if (!todas) { setDados(null); return; }
+    await consultar(escopoGerado.rotas, escopoGerado.de, escopoGerado.ate);
+  }, [escopoGerado, consultar]);
+
+  const c = dados?.consolidado ?? null;
+  const margem = c && c.recebido > 0 ? (c.ganancia / c.recebido) * 100 : 0;
+
+  /**
+   * Transferência, ajuste, aporte e microseguro são raros: a maioria dos
+   * períodos não tem nenhum. Coluna de zeros ocupa largura que as outras
+   * precisam e some do olhar, por isso só aparecem quando há. No CSV vão
+   * sempre — planilha com cabeçalho variável quebra quem empilha dois
+   * períodos.
+   */
+  const temTransferencia = (dados?.por_dia ?? []).some((d) => d.transferencias !== 0);
+  const temAjuste = (dados?.por_dia ?? []).some((d) => d.ajustes !== 0);
+  const temAporte = (c?.aportes ?? 0) !== 0;
+  const temMicro = (c?.microseguro_vendas ?? 0) !== 0 || (c?.microseguro_retiradas ?? 0) !== 0;
+
+  /**
+   * Dias com dinheiro e sem liquidação. Entram na tabela do dia a dia como
+   * linha marcada, mas fora de `por_dia` — logo não contaminam
+   * `dias_trabalhados` nem a média diária, que significam "dia em que a rota
+   * trabalhou".
+   */
+  const semLiq = dados?.dias_sem_liquidacao ?? [];
+
+  /** Colunas do dia a dia que só existem quando houve liquidação. */
+  const COLUNAS_DA_LIQUIDACAO = 11;
 
   const exportarDias = () => {
     if (!dados) return;
     baixarCsv(
-      `liquidacao_${de}_a_${ate}`,
+      `liquidacao_${escopoGerado?.de ?? de}_a_${escopoGerado?.ate ?? ate}`,
       [
         { cabecalho: 'Data', valor: (d) => d.data },
         { cabecalho: 'Rotas', valor: (d) => d.rotas },
@@ -245,8 +375,6 @@ export default function LiquidacaoPeriodoPage() {
         { cabecalho: 'Carteira final', valor: (d) => numCsv(d.carteira) },
         { cabecalho: 'Entradas', valor: (d) => numCsv(d.entradas) },
         { cabecalho: 'Saídas', valor: (d) => numCsv(d.saidas) },
-        // No CSV vão sempre, mesmo zeradas: planilha com cabeçalho variável
-        // quebra quem empilha dois períodos.
         { cabecalho: 'Transferências', valor: (d) => numCsv(d.transferencias) },
         { cabecalho: 'Ajustes', valor: (d) => numCsv(d.ajustes) },
         { cabecalho: 'Microseguro vendas', valor: (d) => numCsv(d.microseguro_vendas) },
@@ -257,641 +385,491 @@ export default function LiquidacaoPeriodoPage() {
     );
   };
 
-  const c = dados?.consolidado ?? null;
-  const margem = c && c.recebido > 0 ? (c.ganancia / c.recebido) * 100 : 0;
-
-  /**
-   * Transferência e ajuste são raros: a maioria dos períodos não tem nenhum.
-   * Coluna de zeros ocupa largura que as outras precisam e some do olhar, por
-   * isso só aparecem quando há. No CSV vão sempre — planilha com cabeçalho
-   * variável quebra quem empilha dois períodos.
-   */
-  const temTransferencia = (dados?.por_dia ?? []).some((d) => d.transferencias !== 0);
-  const temAjuste = (dados?.por_dia ?? []).some((d) => d.ajustes !== 0);
-  const temAporte = (c?.aportes ?? 0) !== 0;
-  const temMicro =
-    (c?.microseguro_vendas ?? 0) !== 0 || (c?.microseguro_retiradas ?? 0) !== 0;
-
-  /**
-   * Dias com dinheiro e sem liquidação. Entram na tabela do dia a dia como
-   * linha marcada, mas fora de `por_dia` — logo não contaminam
-   * `dias_trabalhados` nem a média diária, que significam "dia em que a rota
-   * trabalhou".
-   */
-  const semLiq = dados?.dias_sem_liquidacao ?? [];
-
-  /** Colunas do dia a dia que só existem quando houve liquidação. */
-  const COLUNAS_DA_LIQUIDACAO = 11;
-
   return (
-    <div className="space-y-5">
-      <div className="flex items-start gap-3">
-        <Link
-          href="/relatorios"
-          className="p-2 rounded-lg hover:bg-gray-100 text-gray-500 mt-0.5"
-          aria-label="Voltar"
-        >
-          <ArrowLeft className="w-5 h-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Liquidação por período</h1>
-          <p className="text-gray-500 mt-1">
-            Consolidado, dia a dia e por rota, para o recorte e o intervalo escolhidos.
-          </p>
-        </div>
-      </div>
+    <div className="flex flex-col h-[calc(100vh-7rem)] gap-2.5">
 
-      {/* ── Filtros, numa barra só ──
-          Antes eram dois cartões altos lado a lado. Filtro não é conteúdo:
-          devolver a altura para o dado é o ganho. O escopo virou um botão que
-          abre a árvore num popover; período e atalhos ficam na mesma linha. */}
-      <div className="bg-white rounded-lg border border-gray-200 p-2.5 flex flex-wrap items-center gap-2.5">
-        <div className="relative" ref={caixaEscopo}>
-          <button
-            onClick={() => setEscopoAberto((v) => !v)}
-            aria-expanded={escopoAberto}
-            className="inline-flex items-center gap-2 border border-gray-300 rounded-lg px-3 py-1.5 text-sm hover:bg-gray-50"
+      {/* ── CABEÇALHO ── */}
+      <div className="flex items-start justify-between gap-3 flex-wrap flex-shrink-0">
+        <div className="flex items-start gap-2.5">
+          <Link
+            href="/relatorios"
+            className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500 mt-1"
+            aria-label="Voltar"
           >
-            <Globe className="w-4 h-4 text-gray-400" />
-            <span className="font-semibold text-gray-900">{rotuloEscopo}</span>
-            {selecionadas.size > 0 && (
-              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 tabular-nums">
-                {selecionadas.size}
-              </span>
-            )}
-            <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
-          </button>
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <div>
+            <h1 className="text-[22px] font-bold text-gray-900 leading-tight">
+              Liquidação por período
+            </h1>
+            {/* "Exibindo:", como na tela do Financeiro. O popover da árvore
+                escolhe o escopo; as pastilhas abaixo ligam e desligam. */}
+            <div className="relative mt-0.5" ref={caixaEscopo}>
+              <button
+                onClick={() => setEscopoAberto((v) => !v)}
+                aria-expanded={escopoAberto}
+                className="flex items-center gap-1.5 text-[13.5px] font-medium text-blue-600 hover:text-blue-700 max-w-[320px]"
+              >
+                <Globe className="w-4 h-4 flex-shrink-0" />
+                <span className="text-gray-500">Exibindo:</span>
+                <span className="truncate">{rotuloEscopo}</span>
+                {selecionadas.size > 0 && (
+                  <span className="text-[11px] font-bold px-1.5 rounded-full bg-blue-50 tabular-nums">
+                    {selecionadas.size}
+                  </span>
+                )}
+                <ChevronDown className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              </button>
 
-          {escopoAberto && (
-            <div className="absolute z-30 mt-1 w-[380px] max-w-[90vw] bg-white rounded-lg border border-gray-200 shadow-lg p-3">
-              {!estrutura ? (
-                <div className="flex items-center gap-2 text-sm text-gray-400">
-                  <Loader2 className="w-4 h-4 animate-spin" /> Carregando estrutura…
+              {escopoAberto && (
+                <div className="absolute z-30 mt-1 w-[380px] max-w-[90vw] bg-white rounded-lg border border-gray-200 shadow-xl p-3">
+                  {!estrutura ? (
+                    <div className="flex items-center gap-2 text-sm text-gray-400">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Carregando estrutura…
+                    </div>
+                  ) : (
+                    <ArvoreEscopo
+                      estrutura={estrutura}
+                      selecionadas={selecionadas}
+                      onChange={setSelecionadas}
+                    />
+                  )}
                 </div>
-              ) : (
-                <ArvoreEscopo
-                  estrutura={estrutura}
-                  selecionadas={selecionadas}
-                  onChange={setSelecionadas}
-                />
               )}
             </div>
-          )}
+          </div>
         </div>
 
-        <SeletorPeriodo de={de} ate={ate} onChange={(d, a) => { setDe(d); setAte(a); }} compacto />
-
-        <button
-          onClick={gerar}
-          disabled={!podeGerar}
-          className="ml-auto inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 disabled:bg-blue-200 disabled:cursor-not-allowed"
-        >
-          {carregando && <Loader2 className="w-4 h-4 animate-spin" />}
-          {carregando ? 'Gerando…' : 'Gerar'}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <SeletorPeriodo de={de} ate={ate} onChange={(d, a) => { setDe(d); setAte(a); }} compacto />
+          <button
+            onClick={gerar}
+            disabled={!podeGerar}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 text-white text-[13.5px] font-medium hover:bg-blue-700 disabled:bg-blue-200 disabled:cursor-not-allowed"
+          >
+            {carregando && <Loader2 className="w-4 h-4 animate-spin" />}
+            {carregando ? 'Gerando…' : 'Gerar'}
+          </button>
+        </div>
       </div>
 
       {erro && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">{erro}</div>
-      )}
-
-      {dados && !c && (
-        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
-          Nenhuma liquidação encontrada nesse recorte e intervalo.
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 flex-shrink-0">
+          {erro}
         </div>
       )}
 
-      {dados && c && (
-        <>
-          {/* ── Resumo: um card só ── */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="px-4 py-2.5 border-b border-gray-100">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-gray-900">
-                Resumo do período
-              </p>
-              {/* O CENÁRIO: o universo em que o período aconteceu. */}
-              <p className="text-[11.5px] text-gray-400 mt-1 flex flex-wrap gap-x-2.5 gap-y-1">
-                <span>{diaCurto(dados.de)} a {diaCurto(dados.ate)}</span>
-                <span className="text-gray-300">·</span>
-                <span><b className="text-gray-500 tabular-nums">{c.dias_trabalhados}</b> dias trabalhados</span>
-                <span className="text-gray-300">·</span>
-                <span><b className="text-gray-500 tabular-nums">{dados.rotas_no_escopo}</b> rotas</span>
-                <span className="text-gray-300">·</span>
-                <span>
-                  <b className="text-gray-500 tabular-nums">{int(c.clientes_ativos)}</b> clientes ativos,{' '}
-                  <b className="text-gray-500 tabular-nums">{int(c.clientes_suspensos)}</b> suspensos
-                </span>
-                <span className="text-gray-300">·</span>
-                <span>
-                  caixa <b className="text-gray-500 tabular-nums">{fmt(c.caixa_inicial)}</b> →{' '}
-                  <b className="text-gray-500 tabular-nums">{fmt(c.caixa_final)}</b>
-                </span>
-                <span className="text-gray-300">·</span>
-                <span>
-                  carteira <b className="text-gray-500 tabular-nums">{fmt(c.carteira_inicial)}</b> →{' '}
-                  <b className="text-gray-500 tabular-nums">{fmt(c.carteira)}</b>
-                </span>
-              </p>
-
-              {/* As rotas do recorte, com quem as opera. Cortadas em seis: com
-                  48 marcadas a lista viraria um parágrafo e empurraria os
-                  números para baixo. O `title` carrega todas, para conferência
-                  sem sair da tela. */}
-              {rotasDoResumo.length > 0 && (
-                <p
-                  className="text-[11.5px] text-gray-400 mt-1"
-                  title={rotasDoResumo
-                    .map((r) => (r.vendedor_nome ? `${r.nome} (${r.vendedor_nome})` : r.nome))
-                    .join(' · ')}
-                >
-                  {rotasDoResumo.slice(0, 6).map((r, i) => (
-                    <span key={r.rota_id}>
-                      {i > 0 && <span className="text-gray-300"> · </span>}
-                      <span className="text-gray-500">{r.nome}</span>
-                      {r.vendedor_nome && <span> ({r.vendedor_nome})</span>}
-                    </span>
-                  ))}
-                  {rotasDoResumo.length > 6 && (
-                    <span className="text-gray-400"> e mais {rotasDoResumo.length - 6}</span>
-                  )}
-                </p>
-              )}
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1fr_0.8fr]">
-              {/* Operação 1 — o dinheiro que volta */}
-              <div className="p-4 border-b lg:border-b-0 lg:border-r border-gray-100">
-                <p className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
-                  Cobrança
-                </p>
-                <button
-                  onClick={() => setPainel('cobranca')}
-                  className="group inline-flex items-center gap-2 text-left"
-                >
-                  <span className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums border-b-2 border-transparent group-hover:border-current">
-                    {fmt(c.recebido)}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
-                </button>
-                <p className="text-[11.5px] text-gray-400 mt-0.5">
-                  {fmt(c.media_diaria)} por dia trabalhado
-                </p>
-                <div className="mt-3 pt-2 border-t border-gray-100 text-[12.5px] space-y-1">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-500">Clientes atendidos</span>
-                    <span className="font-semibold text-gray-900 tabular-nums">{int(c.clientes_pagos)}</span>
-                  </div>
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-500">Não pagos</span>
-                    <span className="font-semibold text-red-600 tabular-nums">{int(c.clientes_nao_pagos)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Operação 2 — o dinheiro que sai */}
-              <div className="p-4 border-b lg:border-b-0 lg:border-r border-gray-100">
-                <p className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">
-                  Venda
-                </p>
-                <button
-                  onClick={() => setPainel('venda')}
-                  className="group inline-flex items-center gap-2 text-left"
-                >
-                  <span className="text-[26px] leading-tight font-extrabold text-gray-900 tabular-nums border-b-2 border-transparent group-hover:border-current">
-                    {fmt(c.emprestado)}
-                  </span>
-                  <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-600" />
-                </button>
-                <p className="text-[11.5px] text-gray-400 mt-0.5">
-                  {c.qtd_emprestimos} empréstimos · {c.clientes_novos} novos, {c.clientes_renovados} renovações
-                </p>
-                <div className="mt-3 pt-2 border-t border-gray-100 text-[12.5px] space-y-1">
-                  <div className="flex justify-between gap-3">
-                    <span className="text-gray-500">Juro contratado</span>
-                    <span className="font-semibold text-gray-900 tabular-nums">{fmt(c.juros_vendidos)}</span>
-                  </div>
-                  {/* A carteira é o que a venda acumula — por isso mora aqui. */}
-                  <div className="flex justify-between gap-3 mt-1.5 pt-2 border-t border-dashed border-gray-200">
-                    <span className="text-violet-700 font-semibold">Carteira a receber</span>
-                    <span className="font-extrabold text-violet-700 tabular-nums">{fmt(c.carteira)}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* O resultado das duas */}
-              <div className="p-4 bg-emerald-50 flex flex-col justify-center">
-                <p className="text-[10.5px] font-bold uppercase tracking-wide text-emerald-700 mb-1.5">
-                  Lucro
-                </p>
-                <p className="text-[30px] leading-tight font-extrabold text-emerald-700 tabular-nums">
-                  {fmt(c.ganancia)}
-                </p>
-                <p className="text-[11.5px] text-emerald-700/85 mt-0.5">juro recebido no período</p>
-                <div className="mt-2.5 pt-2 border-t border-emerald-200 flex justify-between gap-2 text-[12px] text-emerald-700">
-                  <span>Margem sobre o cobrado</span>
-                  <b className="tabular-nums font-extrabold">
-                    {margem.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}%
-                  </b>
-                </div>
-              </div>
-            </div>
-
-            {/* MOVIMENTAÇÕES FINANCEIRAS — o dinheiro que não é cobrança nem
-                empréstimo. Fica abaixo das três zonas, numa faixa própria,
-                porque é de outra natureza: cobrança e venda são a OPERAÇÃO da
-                rota; despesa, aporte e retirada são o que atravessa o caixa
-                por fora dela. Juntar numa coluna convidaria a somar os cinco
-                números, e a soma não significa nada.
-
-                SÃO QUATRO GRANDEZAS, NÃO DUAS, e as duas últimas aparecem só
-                quando existem — na maioria dos períodos não há nenhuma, e zero
-                fixo na tela ensina a ignorar o campo.
-
-                Transferência fora de entrada e saída de propósito: o trigger
-                subtrai da origem e soma no destino, então somá-la nas duas
-                pontas inflaria as duas. Ajuste também à parte, e com sinal —
-                `AJUSTE_NEGATIVO` guarda o valor negativo. */}
-            <div className="w-full px-4 py-2.5 border-t border-gray-100 flex items-center gap-x-2 gap-y-1 flex-wrap">
-              <span className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mr-1">
-                Movimentações financeiras
-              </span>
-
-              <Grandeza
-                sinal="(+)"
-                nome="entradas"
-                valor={c.entradas}
-                cor="text-emerald-700"
-                onClick={() => abrirMov('RECEBER')}
-              />
-              <Grandeza
-                sinal="(−)"
-                nome="saídas"
-                valor={c.saidas}
-                cor="text-red-700"
-                onClick={() => abrirMov('PAGAR')}
-              />
-
-              {/* Transferências e ajustes: seção própria, só quando há. */}
-              {c.transferencias !== 0 && (
-                <>
-                  <span className="text-gray-200 mx-1">|</span>
-                  <Grandeza
-                    sinal="(⇄)"
-                    nome="transferências"
-                    valor={c.transferencias}
-                    cor="text-amber-700"
-                    onClick={() => abrirMov('TRANSFERENCIA')}
-                  />
-                </>
-              )}
-              {c.ajustes !== 0 && (
-                <>
-                  {c.transferencias === 0 && <span className="text-gray-200 mx-1">|</span>}
-                  <Grandeza
-                    sinal="(±)"
-                    nome="ajustes"
-                    valor={c.ajustes}
-                    cor="text-blue-700"
-                    onClick={() => abrirMov('AJUSTE')}
-                  />
-                </>
-              )}
-              {/* APORTE — lastro de implantação, não operação da rota.
-                  Em linha própria porque era o que fazia a Barcelona mostrar
-                  −117.219,77 de "ajustes" num caixa de 1.289,23. */}
-              {c.aportes !== 0 && (
-                <Grandeza
-                  sinal="(¤)"
-                  nome="aporte"
-                  valor={c.aportes}
-                  cor="text-violet-700"
-                  onClick={() => abrirMov('APORTE')}
-                />
-              )}
-
-              <button
-                onClick={() => abrirMov('')}
-                className="ml-auto flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-gray-700 px-2 py-1 -my-1 rounded hover:bg-gray-100"
-              >
-                ver tudo
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* MICROSEGURO — seção própria, só quando há movimento.
-
-                É OUTRA CONTA, não outro tipo de lançamento: a rota tem
-                `Conta Rota X` e `Conta Microseguro X`, cada uma com seu saldo.
-                A venda cai na conta do microseguro e a retirada sai dela para
-                a da rota — por isso a venda NÃO aparece em `(+) entradas` ali
-                acima, e não por uma regra que alguém precise lembrar de
-                manter.
-
-                A retirada aparece aqui como saída e, na faixa de cima, como
-                transferência recebida. Não é duplicação: o microseguro perdeu
-                o dinheiro e a conta da rota ganhou. */}
-            {temMicro && (
-              <div className="w-full px-4 py-2.5 border-t border-gray-100 flex items-center gap-x-2 gap-y-1 flex-wrap bg-sky-50/40">
-                <span className="text-[10.5px] font-bold uppercase tracking-wide text-sky-800 mr-1">
-                  Microseguro
-                </span>
-                <Grandeza
-                  sinal="(+)"
-                  nome="vendas"
-                  valor={c.microseguro_vendas}
-                  cor="text-emerald-700"
-                  onClick={() => abrirMov('RECEBER', 'MICROSEGURO')}
-                />
-                <Grandeza
-                  sinal="(−)"
-                  nome="retiradas"
-                  valor={c.microseguro_retiradas}
-                  cor="text-amber-800"
-                  onClick={() => abrirMov('', 'MICROSEGURO')}
-                />
-                <span className="text-[11.5px] text-gray-400">
-                  conta própria — a venda entra nela e a retirada vai para a conta da rota
-                </span>
-                <button
-                  onClick={() => abrirMov('', 'MICROSEGURO')}
-                  className="ml-auto flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-gray-700 px-2 py-1 -my-1 rounded hover:bg-gray-100"
-                >
-                  ver tudo
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            <div className="px-4 py-1.5 border-t border-gray-100 bg-gray-50 text-[10.5px] text-gray-400">
-              Clique no total para ver a listagem · carteira e caixa são do último dia de cada rota
-            </div>
-          </div>
-
-          {/* ── Dia a dia ── */}
-          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-            <div className="flex items-center justify-between p-3 border-b border-gray-100">
-              <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-900">
-                Dia a dia · {dados.por_dia.length} dias
-              </h2>
-              <button
-                onClick={exportarDias}
-                className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1.5 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200"
-              >
-                <Download className="w-3.5 h-3.5" /> CSV
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="text-left font-medium px-3 py-2">Data</th>
-                    <th className="text-right font-medium px-3 py-2">Cobrado</th>
-                    <th className="text-right font-medium px-3 py-2">Esperado</th>
-                    <th className="text-right font-medium px-3 py-2">Atingido</th>
-                    <th className="text-right font-medium px-3 py-2">Emprestado</th>
-                    <th className="text-right font-medium px-3 py-2">Lucro</th>
-                    <th className="text-right font-medium px-3 py-2">Pagos</th>
-                    <th className="text-right font-medium px-3 py-2">Não pagos</th>
-                    {/* Caixa e carteira nas duas pontas do dia. O cliente pediu
-                        em 07/10/2026: só o final estava aqui, e saldo sem o de
-                        onde partiu não diz se o dia subiu ou desceu. */}
-                    <th className="text-right font-medium px-3 py-2">Caixa inicial</th>
-                    <th className="text-right font-medium px-3 py-2">Caixa final</th>
-                    <th className="text-right font-medium px-3 py-2">Carteira inicial</th>
-                    <th className="text-right font-medium px-3 py-2">Carteira final</th>
-                    {/* Só quando o período tem alguma: coluna de zeros ocupa
-                        largura que as outras precisam e some do olhar. */}
-                    {temTransferencia && (
-                      <th className="text-right font-medium px-3 py-2">Transferências</th>
-                    )}
-                    {temAjuste && (
-                      <th className="text-right font-medium px-3 py-2">Ajustes</th>
-                    )}
-                    {temMicro && (
-                      <>
-                        <th className="text-right font-medium px-3 py-2">Micro. vendas</th>
-                        <th className="text-right font-medium px-3 py-2">Micro. retiradas</th>
-                      </>
-                    )}
-                    {temAporte && (
-                      <th className="text-right font-medium px-3 py-2">Aporte</th>
-                    )}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {dados.por_dia.map((d) => (
-                    <tr key={d.data} className="hover:bg-gray-50">
-                      {/* O dia da semana na frente do dia do mês: sem ele,
-                          ler uma queda de cobrança exige contar no calendário.
-                          Domingo em vermelho discreto — na maioria das rotas
-                          `trabalha_domingo` é falso, e o dia aparecer fraco já
-                          explica o número baixo sem precisar de nota. */}
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        {(() => {
-                          const s = diaSemana(d.data) === 0;
-                          return (
-                            <>
-                              <span className={`text-[11px] font-semibold mr-1.5 ${s ? 'text-rose-600' : 'text-gray-400'}`}>
-                                {SEMANA[diaSemana(d.data)]}
-                              </span>
-                              <span className={s ? 'text-rose-700' : 'text-gray-900'}>
-                                {diaCurto(d.data)}
-                              </span>
-                            </>
-                          );
-                        })()}
-                      </td>
-                      <td className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{fmt(d.recebido)}</td>
-                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.esperado)}</td>
-                      <td className="px-3 py-2 text-right">
-                        <span className="inline-flex items-center gap-2 justify-end">
-                          <span className="w-11 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                            <span
-                              className={`block h-full ${corPct(d.percentual_recebimento)}`}
-                              style={{ width: `${Math.min(100, d.percentual_recebimento)}%` }}
-                            />
-                          </span>
-                          <span className="tabular-nums text-gray-600">
-                            {Math.round(d.percentual_recebimento)}%
-                          </span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.emprestado)}</td>
-                      <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">{fmt(d.ganancia)}</td>
-                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{d.clientes_pagos}</td>
-                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{d.clientes_nao_pagos}</td>
-                      <td className="px-3 py-2 text-right text-gray-400 tabular-nums">{fmt(d.caixa_inicial)}</td>
-                      <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.caixa_final)}</td>
-                      <td className="px-3 py-2 text-right text-gray-400 tabular-nums">{fmt(d.carteira_inicial)}</td>
-                      <td className="px-3 py-2 text-right text-violet-700 tabular-nums">{fmt(d.carteira)}</td>
-                      {temTransferencia && (
-                        <td className="px-3 py-2 text-right text-amber-700 tabular-nums">
-                          {d.transferencias ? fmt(d.transferencias) : '—'}
-                        </td>
-                      )}
-                      {temAjuste && (
-                        <td className="px-3 py-2 text-right text-blue-700 tabular-nums">
-                          {d.ajustes ? fmt(d.ajustes) : '—'}
-                        </td>
-                      )}
-                      {temMicro && (
-                        <>
-                          <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">
-                            {d.microseguro_vendas ? fmt(d.microseguro_vendas) : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-amber-800 tabular-nums">
-                            {d.microseguro_retiradas ? fmt(d.microseguro_retiradas) : '—'}
-                          </td>
-                        </>
-                      )}
-                      {temAporte && (
-                        <td className="px-3 py-2 text-right text-violet-700 tabular-nums">
-                          {d.aportes ? fmt(d.aportes) : '—'}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-
-                  {/* DIAS COM DINHEIRO E SEM LIQUIDAÇÃO.
-
-                      Pedido de 08/10/2026, com a razão dele: *"o usuário vai
-                      esquecer, e vai questionar divergências que ele mesmo
-                      causou e não se lembra"*. Sem estas linhas, o total do
-                      período seria maior que a soma dos dias e nada na tela
-                      explicaria por quê.
-
-                      Ficam no fim e marcadas, não intercaladas: não são dia
-                      de trabalho da rota, e as colunas da liquidação não
-                      existem para elas — não houve cobrança, nem caixa, nem
-                      carteira. */}
-                  {semLiq.map((d) => (
-                    <tr key={`sl-${d.data}`} className="bg-amber-50/50">
-                      <td className="px-3 py-2 whitespace-nowrap">
-                        <span className="text-[11px] font-semibold mr-1.5 text-gray-400">
-                          {SEMANA[diaSemana(d.data)]}
-                        </span>
-                        <span className="text-gray-900">{diaCurto(d.data)}</span>
-                        <span className="block text-[10px] font-bold uppercase text-amber-700">
-                          sem liquidação
-                        </span>
-                      </td>
-                      <td colSpan={COLUNAS_DA_LIQUIDACAO} className="px-3 py-2 text-[11.5px] text-amber-800">
-                        Dinheiro lançado em dia sem liquidação aberta — não entra em
-                        nenhum dia fechado, e por isso o total do período não fecha
-                        com a soma dos dias acima.
-                        <span className="ml-1 tabular-nums text-gray-600">
-                          {d.entradas !== 0 && <> entradas <b>{fmt(d.entradas)}</b></>}
-                          {d.saidas !== 0 && <> · saídas <b>{fmt(d.saidas)}</b></>}
-                        </span>
-                      </td>
-                      {temTransferencia && (
-                        <td className="px-3 py-2 text-right text-amber-700 tabular-nums">
-                          {d.transferencias ? fmt(d.transferencias) : '—'}
-                        </td>
-                      )}
-                      {temAjuste && (
-                        <td className="px-3 py-2 text-right text-blue-700 tabular-nums">
-                          {d.ajustes ? fmt(d.ajustes) : '—'}
-                        </td>
-                      )}
-                      {temMicro && (
-                        <>
-                          <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">
-                            {d.microseguro_vendas ? fmt(d.microseguro_vendas) : '—'}
-                          </td>
-                          <td className="px-3 py-2 text-right text-amber-800 tabular-nums">
-                            {d.microseguro_retiradas ? fmt(d.microseguro_retiradas) : '—'}
-                          </td>
-                        </>
-                      )}
-                      {temAporte && (
-                        <td className="px-3 py-2 text-right text-violet-700 tabular-nums">
-                          {d.aportes ? fmt(d.aportes) : '—'}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Por rota só com mais de uma: com uma só, repetiria o consolidado. */}
-          {dados.por_rota.length > 1 && (
-            <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-              <div className="p-3 border-b border-gray-100">
-                <h2 className="text-[11px] font-bold uppercase tracking-wide text-gray-900">
-                  Por rota · {dados.por_rota.length}
-                </h2>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 text-gray-500">
-                    <tr>
-                      <th className="text-left font-medium px-3 py-2">Rota</th>
-                      <th className="text-right font-medium px-3 py-2">Dias</th>
-                      <th className="text-right font-medium px-3 py-2">Cobrado</th>
-                      <th className="text-right font-medium px-3 py-2">Emprestado</th>
-                      <th className="text-right font-medium px-3 py-2">Lucro</th>
-                      <th className="text-right font-medium px-3 py-2">Empréstimos</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {dados.por_rota.map((r) => (
-                      <tr key={r.rota_id} className="hover:bg-gray-50">
-                        <td className="px-3 py-2 text-gray-900">{r.rota_nome || '—'}</td>
-                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{r.dias}</td>
-                        <td className="px-3 py-2 text-right font-semibold text-gray-900 tabular-nums">{fmt(r.recebido)}</td>
-                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(r.emprestado)}</td>
-                        <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">{fmt(r.ganancia)}</td>
-                        <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{r.qtd_emprestimos}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </>
+      {!escopoGerado && !erro && (
+        <div className="flex-1 min-h-0 flex flex-col items-center justify-center text-center gap-2">
+          <Calendar className="w-10 h-10 text-gray-300" />
+          <p className="text-sm text-gray-500">
+            Escolha o escopo e o período, e clique em <b>Gerar</b>.
+          </p>
+        </div>
       )}
 
       {escopoGerado && (
         <>
-          <PainelCobranca
-            aberto={painel === 'cobranca'}
-            onFechar={() => setPainel(null)}
-            rotaIds={escopoGerado.rotas}
-            de={escopoGerado.de}
-            ate={escopoGerado.ate}
-            totalCard={c?.recebido ?? 0}
-          />
-          <PainelMovimentacoes
-            key={`mov-${movConta}-${movTipo}`}
-            aberto={painel === 'movimentacao'}
-            onFechar={() => setPainel(null)}
-            rotaIds={escopoGerado.rotas}
-            de={escopoGerado.de}
-            ate={escopoGerado.ate}
-            entradasCard={
-              movConta === 'MICROSEGURO' ? (c?.microseguro_vendas ?? 0) : (c?.entradas ?? 0)
-            }
-            saidasCard={
-              movConta === 'MICROSEGURO' ? (c?.microseguro_retiradas ?? 0) : (c?.saidas ?? 0)
-            }
-            transferenciasCard={movConta === 'MICROSEGURO' ? 0 : (c?.transferencias ?? 0)}
-            ajustesCard={movConta === 'MICROSEGURO' ? 0 : (c?.ajustes ?? 0)}
-            tipoInicial={movTipo}
-            tipoConta={movConta}
-          />
+          {/* ── ROTAS E INDICADORES ── */}
+          <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex-shrink-0">
+            {/* As pastilhas: escopo que liga e desliga. Desligada fica
+                tracejada e com o número riscado — não some, para a lista de
+                comparação ficar estável enquanto se compara. */}
+            {rotasDoEscopo.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 px-3 py-2">
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mr-0.5">
+                  Rotas
+                </span>
+                {rotasDoEscopo.map((r) => {
+                  const ligada = rotasAtivas.has(r.id);
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => alternarRota(r.id)}
+                      aria-pressed={ligada}
+                      title={
+                        (r.vendedor ? `${r.nome} (${r.vendedor})` : r.nome) +
+                        (ligada ? ' — clique para tirar do cálculo' : ' — clique para trazer de volta')
+                      }
+                      className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[12px] ${
+                        ligada
+                          ? 'bg-white border-gray-200 text-gray-900 hover:border-gray-400'
+                          : 'bg-gray-50 border-dashed border-gray-300 text-gray-400'
+                      }`}
+                    >
+                      <span className={`w-2 h-2 rounded-full flex-shrink-0 ${ligada ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                      <span className="truncate max-w-[180px]">{r.nome}</span>
+                      <b className={`tabular-nums ${ligada ? '' : 'line-through opacity-70'}`}>
+                        {fmt(r.cobrado)}
+                      </b>
+                    </button>
+                  );
+                })}
+                <span className="ml-auto flex gap-1.5">
+                  <button
+                    onClick={() => marcarTodas(true)}
+                    className="text-[11px] px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  >
+                    Todas
+                  </button>
+                  <button
+                    onClick={() => marcarTodas(false)}
+                    className="text-[11px] px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  >
+                    Nenhuma
+                  </button>
+                </span>
+              </div>
+            )}
 
-          <PainelVendas
-            aberto={painel === 'venda'}
-            onFechar={() => setPainel(null)}
-            rotaIds={escopoGerado.rotas}
-            de={escopoGerado.de}
-            ate={escopoGerado.ate}
-            totalCard={c?.emprestado ?? 0}
-          />
+            <div className={`flex flex-wrap ${rotasDoEscopo.length > 1 ? 'border-t border-gray-100' : ''}`}>
+              <Indicador rotulo="Período">
+                {diaCurto(escopoGerado.de)} <span className="text-gray-400">a</span> {diaCurto(escopoGerado.ate)}
+              </Indicador>
+              <Indicador rotulo="Dias trabalhados">{c ? c.dias_trabalhados : '—'}</Indicador>
+              <Indicador rotulo="Rotas">{c ? c.rotas_com_movimento : 0}</Indicador>
+              <Indicador rotulo="Clientes">
+                {c ? int(c.clientes_ativos) : 0}{' '}
+                <small className="text-[11px] font-medium text-gray-400">
+                  ativos · {c ? int(c.clientes_suspensos) : 0} susp.
+                </small>
+              </Indicador>
+              <Indicador rotulo="Caixa">
+                {fmt(c?.caixa_inicial)} <span className="text-gray-400">→</span> {fmt(c?.caixa_final)}
+              </Indicador>
+              <Indicador rotulo="Carteira">
+                <span className="text-violet-700">
+                  {fmt(c?.carteira_inicial)} <span className="text-gray-400">→</span> {fmt(c?.carteira)}
+                </span>
+              </Indicador>
+            </div>
+          </div>
+
+          {/* ── LATERAL DE CONTROLE + PALCO ── */}
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-[250px_1fr] gap-2.5">
+
+            <div className="min-h-0 overflow-y-auto">
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+                <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                  </span>
+                  <h2 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Totais</h2>
+                </div>
+
+                <Totalizador
+                  icone={Calendar} selo="bg-emerald-50 text-emerald-600"
+                  nome="Dia a dia"
+                  valor={`${c ? c.dias_trabalhados : 0} dias`}
+                  sub={`${rotasAtivas.size} rota(s) no cálculo`}
+                  ativo={aba === 'dia'} onClick={() => setAba('dia')}
+                />
+                <Totalizador
+                  icone={ArrowDownToLine} selo="bg-emerald-50 text-emerald-600"
+                  nome="Cobrança" valor={fmt(c?.recebido)}
+                  sub={`${int(c?.clientes_pagos)} atendidos · ${int(c?.clientes_nao_pagos)} não pagos`}
+                  ativo={aba === 'cobranca'} onClick={() => setAba('cobranca')}
+                />
+                <Totalizador
+                  icone={ArrowUpFromLine} selo="bg-blue-50 text-blue-600"
+                  nome="Venda" valor={fmt(c?.emprestado)}
+                  sub={`${int(c?.qtd_emprestimos)} empréstimos · ${int(c?.clientes_novos)} novos`}
+                  ativo={aba === 'venda'} onClick={() => setAba('venda')}
+                />
+                <Totalizador
+                  icone={TrendingUp} selo="bg-emerald-50 text-emerald-600"
+                  nome="Lucro" valor={fmt(c?.ganancia)} corValor="text-emerald-700"
+                  sub={`${margem.toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })}% do cobrado`}
+                  ativo={aba === 'lucro'} onClick={() => setAba('lucro')}
+                />
+                {/* Microseguro é CONTA SEPARADA da rota, não apêndice das
+                    movimentações: a venda cai nela e a retirada sai dela para a
+                    conta da rota. Por isso é totalizador par de Cobrança, e
+                    com as duas cifras na linha. */}
+                {temMicro && (
+                  <Totalizador
+                    icone={Shield} selo="bg-amber-50 text-amber-600"
+                    nome="Microseguro"
+                    par={[`+${fmt(c?.microseguro_vendas)}`, `−${fmt(c?.microseguro_retiradas)}`]}
+                    sub="conta própria · vendas e retiradas"
+                    ativo={aba === 'micro'} onClick={() => setAba('micro')}
+                  />
+                )}
+                <Totalizador
+                  icone={ArrowRightLeft} selo="bg-purple-50 text-purple-600"
+                  nome="Movimentações"
+                  valor={`${fmt((c?.entradas ?? 0) - (c?.saidas ?? 0))}`}
+                  corValor={(c?.entradas ?? 0) - (c?.saidas ?? 0) < 0 ? 'text-red-700' : 'text-emerald-700'}
+                  sub={
+                    [
+                      temTransferencia ? 'transferências' : null,
+                      temAjuste ? 'ajustes' : null,
+                      temAporte ? 'aporte' : null,
+                    ].filter(Boolean).join(', ') || 'despesas e entradas'
+                  }
+                  ativo={aba === 'mov'} onClick={() => setAba('mov')}
+                />
+              </div>
+            </div>
+
+            {/* O PALCO. Uma listagem de cada vez, em largura cheia. */}
+            <div className="min-h-0">
+              {rotasAtivas.size === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 h-full flex flex-col items-center justify-center text-center gap-2">
+                  <MapPin className="w-9 h-9 text-gray-300" />
+                  <p className="text-sm text-gray-500">Marque ao menos uma rota acima.</p>
+                </div>
+              ) : aba === 'dia' ? (
+                <div className="bg-white rounded-lg border border-gray-200 h-full min-h-0 flex flex-col overflow-hidden">
+                  <div className="flex items-center gap-2 flex-wrap px-3 py-2 border-b border-gray-100 flex-shrink-0">
+                    <span className="w-7 h-7 rounded-md bg-emerald-50 text-emerald-600 flex items-center justify-center">
+                      <Calendar className="w-3.5 h-3.5" />
+                    </span>
+                    <h2 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Dia a dia</h2>
+                    <span className="text-[11.5px] text-gray-400">
+                      {dados?.por_dia.length ?? 0} dias com liquidação
+                    </span>
+                    {carregando && <Loader2 className="w-3.5 h-3.5 animate-spin text-gray-400" />}
+                    <button
+                      onClick={exportarDias}
+                      disabled={!dados?.por_dia.length}
+                      className="ml-auto inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-40"
+                    >
+                      <Download className="w-3 h-3" /> CSV
+                    </button>
+                  </div>
+
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-400 sticky top-0 z-[1]">
+                        <tr>
+                          <th className="text-left font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Data</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Cobrado</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Esperado</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Atingido</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Emprestado</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Lucro</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Pagos</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Não pagos</th>
+                          {/* Caixa e carteira nas duas pontas do dia. O cliente
+                              pediu em 07/10/2026: só o final estava aqui, e
+                              saldo sem o de onde partiu não diz se o dia subiu
+                              ou desceu. */}
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Caixa ini.</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Caixa fim</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Carteira ini.</th>
+                          <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Carteira fim</th>
+                          {temTransferencia && (
+                            <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Transf.</th>
+                          )}
+                          {temAjuste && (
+                            <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Ajustes</th>
+                          )}
+                          {temMicro && (
+                            <>
+                              <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Micro. vendas</th>
+                              <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Micro. retir.</th>
+                            </>
+                          )}
+                          {temAporte && (
+                            <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Aporte</th>
+                          )}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-50">
+                        {(dados?.por_dia ?? []).map((d) => {
+                          const dom = diaSemana(d.data) === 0;
+                          return (
+                            <tr key={d.data} className="hover:bg-gray-50">
+                              {/* O dia da semana na frente do dia do mês: sem
+                                  ele, ler uma queda de cobrança exige contar no
+                                  calendário. Domingo em vermelho discreto — na
+                                  maioria das rotas `trabalha_domingo` é falso, e
+                                  o dia aparecer fraco já explica o número baixo
+                                  sem precisar de nota. */}
+                              <td className="px-3 py-1.5 whitespace-nowrap">
+                                <span className={`text-[11px] font-semibold mr-1.5 ${dom ? 'text-rose-600' : 'text-gray-400'}`}>
+                                  {SEMANA[diaSemana(d.data)]}
+                                </span>
+                                <span className={dom ? 'text-rose-700' : 'text-gray-900'}>
+                                  {diaCurto(d.data)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-semibold text-gray-900 tabular-nums">{fmt(d.recebido)}</td>
+                              <td className="px-3 py-1.5 text-right text-gray-400 tabular-nums">{fmt(d.esperado)}</td>
+                              <td className="px-3 py-1.5 text-right">
+                                <span className="inline-flex items-center gap-2 justify-end">
+                                  <span className="w-10 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                    <span
+                                      className={`block h-full ${corPct(d.percentual_recebimento)}`}
+                                      style={{ width: `${Math.min(100, d.percentual_recebimento)}%` }}
+                                    />
+                                  </span>
+                                  <span className="tabular-nums text-gray-500 text-[12px] w-12 text-right">
+                                    {d.esperado > 0 ? `${d.percentual_recebimento.toFixed(0)}%` : '—'}
+                                  </span>
+                                </span>
+                              </td>
+                              <td className="px-3 py-1.5 text-right text-gray-900 tabular-nums">{fmt(d.emprestado)}</td>
+                              <td className="px-3 py-1.5 text-right text-emerald-700 tabular-nums">{fmt(d.ganancia)}</td>
+                              <td className="px-3 py-1.5 text-right text-gray-500 tabular-nums">{int(d.clientes_pagos)}</td>
+                              <td className={`px-3 py-1.5 text-right tabular-nums ${d.clientes_nao_pagos ? 'text-red-600' : 'text-gray-300'}`}>
+                                {int(d.clientes_nao_pagos)}
+                              </td>
+                              <td className="px-3 py-1.5 text-right text-gray-400 tabular-nums">{fmt(d.caixa_inicial)}</td>
+                              <td className="px-3 py-1.5 text-right text-gray-500 tabular-nums">{fmt(d.caixa_final)}</td>
+                              <td className="px-3 py-1.5 text-right text-gray-400 tabular-nums">{fmt(d.carteira_inicial)}</td>
+                              <td className="px-3 py-1.5 text-right text-violet-700 tabular-nums">{fmt(d.carteira)}</td>
+                              {temTransferencia && (
+                                <td className="px-3 py-1.5 text-right text-amber-700 tabular-nums">
+                                  {d.transferencias ? fmt(d.transferencias) : '—'}
+                                </td>
+                              )}
+                              {temAjuste && (
+                                <td className="px-3 py-1.5 text-right text-blue-700 tabular-nums">
+                                  {d.ajustes ? fmt(d.ajustes) : '—'}
+                                </td>
+                              )}
+                              {temMicro && (
+                                <>
+                                  <td className="px-3 py-1.5 text-right text-emerald-700 tabular-nums">
+                                    {d.microseguro_vendas ? fmt(d.microseguro_vendas) : '—'}
+                                  </td>
+                                  <td className="px-3 py-1.5 text-right text-amber-800 tabular-nums">
+                                    {d.microseguro_retiradas ? fmt(d.microseguro_retiradas) : '—'}
+                                  </td>
+                                </>
+                              )}
+                              {temAporte && (
+                                <td className="px-3 py-1.5 text-right text-violet-700 tabular-nums">
+                                  {d.aportes ? fmt(d.aportes) : '—'}
+                                </td>
+                              )}
+                            </tr>
+                          );
+                        })}
+
+                        {/* DIAS COM DINHEIRO E SEM LIQUIDAÇÃO.
+
+                            Pedido de 08/10/2026, com a razão dele: "o usuário
+                            vai esquecer, e vai questionar divergências que ele
+                            mesmo causou e não se lembra". Sem estas linhas, o
+                            total do período seria maior que a soma dos dias e
+                            nada na tela explicaria por quê.
+
+                            Ficam no fim e marcadas, não intercaladas: não são
+                            dia de trabalho da rota, e as colunas da liquidação
+                            não existem para elas — não houve cobrança, nem
+                            caixa, nem carteira. */}
+                        {semLiq.map((d) => (
+                          <tr key={`sl-${d.data}`} className="bg-amber-50/60">
+                            <td className="px-3 py-1.5 whitespace-nowrap">
+                              <span className="text-[11px] font-semibold mr-1.5 text-gray-400">
+                                {SEMANA[diaSemana(d.data)]}
+                              </span>
+                              <span className="text-gray-900">{diaCurto(d.data)}</span>
+                              <span className="block text-[10px] font-bold uppercase text-amber-700">
+                                sem liquidação
+                              </span>
+                            </td>
+                            <td colSpan={COLUNAS_DA_LIQUIDACAO} className="px-3 py-1.5 text-[11.5px] text-amber-800">
+                              Dinheiro lançado em dia sem liquidação aberta — não entra em nenhum
+                              dia fechado, e por isso o total do período não fecha com a soma dos
+                              dias acima.
+                              <span className="ml-1 tabular-nums text-gray-600">
+                                {d.entradas !== 0 && <> entradas <b>{fmt(d.entradas)}</b></>}
+                                {d.saidas !== 0 && <> · saídas <b>{fmt(d.saidas)}</b></>}
+                              </span>
+                            </td>
+                            {temTransferencia && (
+                              <td className="px-3 py-1.5 text-right text-amber-700 tabular-nums">
+                                {d.transferencias ? fmt(d.transferencias) : '—'}
+                              </td>
+                            )}
+                            {temAjuste && (
+                              <td className="px-3 py-1.5 text-right text-blue-700 tabular-nums">
+                                {d.ajustes ? fmt(d.ajustes) : '—'}
+                              </td>
+                            )}
+                            {temMicro && (
+                              <>
+                                <td className="px-3 py-1.5 text-right text-emerald-700 tabular-nums">
+                                  {d.microseguro_vendas ? fmt(d.microseguro_vendas) : '—'}
+                                </td>
+                                <td className="px-3 py-1.5 text-right text-amber-800 tabular-nums">
+                                  {d.microseguro_retiradas ? fmt(d.microseguro_retiradas) : '—'}
+                                </td>
+                              </>
+                            )}
+                            {temAporte && (
+                              <td className="px-3 py-1.5 text-right text-violet-700 tabular-nums">
+                                {d.aportes ? fmt(d.aportes) : '—'}
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-t border-gray-200 bg-gray-50 text-[11.5px] text-gray-600 flex-shrink-0">
+                    <span>{dados?.por_dia.length ?? 0} dia(s) com liquidação</span>
+                    <span className="ml-auto flex items-center gap-3.5">
+                      <span className="text-emerald-700 font-semibold tabular-nums">
+                        cobrado {fmt(c?.recebido)}
+                      </span>
+                      <span className="text-red-600 font-semibold tabular-nums">
+                        não pagos {int(c?.clientes_nao_pagos)}
+                      </span>
+                      <span className="text-gray-500 tabular-nums">
+                        média {fmt(c?.media_diaria)} por dia trabalhado
+                      </span>
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <PainelCobranca
+                    aberto={aba === 'cobranca'}
+                    rotaIds={rotasAtivasArr}
+                    de={escopoGerado.de}
+                    ate={escopoGerado.ate}
+                  />
+                  <PainelVendas
+                    aberto={aba === 'venda'}
+                    rotaIds={rotasAtivasArr}
+                    de={escopoGerado.de}
+                    ate={escopoGerado.ate}
+                  />
+                  <PainelLucro
+                    aberto={aba === 'lucro'}
+                    rotaIds={rotasAtivasArr}
+                    de={escopoGerado.de}
+                    ate={escopoGerado.ate}
+                  />
+                  {/* A mesma listagem serve as duas contas: a única diferença
+                      entre elas é de qual conta o dinheiro saiu ou entrou. A
+                      `key` separa os estados de filtro e página. */}
+                  <PainelMovimentacoes
+                    key="mov-rota"
+                    aberto={aba === 'mov'}
+                    rotaIds={rotasAtivasArr}
+                    de={escopoGerado.de}
+                    ate={escopoGerado.ate}
+                    tipoConta="ROTA"
+                  />
+                  <PainelMovimentacoes
+                    key="mov-micro"
+                    aberto={aba === 'micro'}
+                    rotaIds={rotasAtivasArr}
+                    de={escopoGerado.de}
+                    ate={escopoGerado.ate}
+                    tipoConta="MICROSEGURO"
+                  />
+                </>
+              )}
+            </div>
+          </div>
         </>
       )}
     </div>

@@ -1,12 +1,13 @@
 'use client';
 
 // =====================================================================
-// PAINEL DA COBRANÇA
+// LISTAGEM DA COBRANÇA
 // =====================================================================
 //
-// O detalhe atrás do total cobrado — a aba "Pagos" do sistema legado, aberta
-// clicando no próprio número. O total não é um número ao lado de uma lista:
-// ele É a lista somada.
+// O detalhe atrás do total cobrado — a aba "Pagos" do sistema legado. O total
+// não é um número ao lado de uma lista: ele É a lista somada. Clicar no
+// totalizador da lateral traz esta listagem ao palco; até 08/10/2026 ela
+// abria por cima da tela, num modal.
 //
 // TRÊS COLUNAS QUE O LEGADO NÃO TEM
 //
@@ -21,19 +22,19 @@
 // Os NÃO PAGOS vêm na mesma lista, zerados em todo valor. São parte da
 // cobrança do dia — separá-los esconderia exatamente o que não entrou.
 
+import { ArrowDownToLine } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import Painel, { Paginacao } from '@/components/relatorios/Painel';
+import ListaRelatorio, { Paginacao } from '@/components/relatorios/ListaRelatorio';
 import { relatoriosService } from '@/services/relatorios';
 import type { CobrancaPeriodo, LinhaCobranca } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
 interface Props {
+  /** A listagem só consulta quando está no palco. */
   aberto: boolean;
-  onFechar: () => void;
   rotaIds: string[];
   de: string;
   ate: string;
-  totalCard: number;
 }
 
 const POR_PAGINA = 100;
@@ -68,9 +69,7 @@ const TIPOS: Record<string, { rotulo: string; classe: string }> = {
 const campo =
   'border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-export default function PainelCobranca({
-  aberto, onFechar, rotaIds, de, ate, totalCard,
-}: Props) {
+export default function PainelCobranca({ aberto, rotaIds, de, ate }: Props) {
   const [dados, setDados] = useState<CobrancaPeriodo | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [busca, setBusca] = useState('');
@@ -126,14 +125,14 @@ export default function PainelCobranca({
     );
   };
 
+  if (!aberto) return null;
+
   return (
-    <Painel
-      aberto={aberto}
-      onFechar={onFechar}
+    <ListaRelatorio
+      icone={ArrowDownToLine}
+      cor="verde"
       titulo="Cobrança"
-      subtitulo={`${diaCurto(de)} a ${diaCurto(ate)} · ${rotaIds.length} rota(s)${t ? ` · ${t.registros} lançamentos` : ''}`}
-      totalRotulo="Total cobrado"
-      totalValor={fmt(totalCard)}
+      subtitulo={`${diaCurto(de)} a ${diaCurto(ate)} · ${rotaIds.length} rota(s)`}
       carregando={carregando}
       onExportar={exportar}
       podeExportar={linhas.length > 0}
@@ -162,25 +161,24 @@ export default function PainelCobranca({
           </select>
         </>
       }
-      rodape={
-        <>
-          {t && (
-            <span className="tabular-nums">
-              <b className="text-gray-900">{fmt(t.dinheiro)}</b> em dinheiro ·{' '}
-              <b className="text-violet-700">{fmt(t.credito)}</b> em crédito ·{' '}
-              <b className="text-emerald-700">{fmt(t.lucro)}</b> de lucro ·{' '}
-              {t.nao_pagos} não pagos
-            </span>
-          )}
-          <span className="ml-auto">
-            <Paginacao
-              pagina={pagina}
-              porPagina={POR_PAGINA}
-              total={dados?.total_registros ?? 0}
-              onIr={setPagina}
-            />
+      contagem={<span>{dados?.total_registros ?? 0} registro(s)</span>}
+      totais={
+        t && (
+          <span className="tabular-nums">
+            <b className="text-gray-900">{fmt(t.dinheiro)}</b> em dinheiro ·{' '}
+            <b className="text-violet-700">{fmt(t.credito)}</b> em crédito ·{' '}
+            <b className="text-emerald-700">{fmt(t.lucro)}</b> de lucro ·{' '}
+            {t.nao_pagos} não pagos
           </span>
-        </>
+        )
+      }
+      paginacao={
+        <Paginacao
+          pagina={pagina}
+          porPagina={POR_PAGINA}
+          total={dados?.total_registros ?? 0}
+          onIr={setPagina}
+        />
       }
     >
       {!carregando && linhas.length === 0 ? (
@@ -256,6 +254,6 @@ export default function PainelCobranca({
           </tbody>
         </table>
       )}
-    </Painel>
+    </ListaRelatorio>
   );
 }

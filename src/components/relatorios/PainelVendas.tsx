@@ -1,14 +1,14 @@
 'use client';
 
 // =====================================================================
-// PAINEL DAS VENDAS
+// LISTAGEM DAS VENDAS
 // =====================================================================
 //
 // O detalhe atrás do total emprestado — a aba "Ventas por Periodos" do
 // sistema legado.
 //
-// A CLASSIFICAÇÃO DA RENOVAÇÃO é a razão de este painel valer mais que uma
-// listagem: cada renovação vem marcada como MAIOR, IGUAL ou MENOR contra o
+// A CLASSIFICAÇÃO DA RENOVAÇÃO é a razão de esta listagem valer mais que uma
+// lista crua: cada renovação vem marcada como MAIOR, IGUAL ou MENOR contra o
 // empréstimo anterior do cliente. Lido no rodapé, isso responde de uma vez se
 // a carteira está crescendo, parada ou encolhendo — pergunta que hoje ninguém
 // consegue fazer ao sistema.
@@ -16,19 +16,19 @@
 // A comparação é sobre o PRINCIPAL, não sobre o total: o total embute o juro,
 // e uma mudança de taxa faria uma renovação de mesmo valor parecer maior.
 
+import { ArrowUpFromLine } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
-import Painel, { Paginacao } from '@/components/relatorios/Painel';
+import ListaRelatorio, { Paginacao } from '@/components/relatorios/ListaRelatorio';
 import { relatoriosService } from '@/services/relatorios';
 import type { LinhaVenda, VendasPeriodo } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
 interface Props {
+  /** A listagem só consulta quando está no palco. */
   aberto: boolean;
-  onFechar: () => void;
   rotaIds: string[];
   de: string;
   ate: string;
-  totalCard: number;
 }
 
 const POR_PAGINA = 100;
@@ -59,9 +59,7 @@ const FREQ: Record<string, string> = {
 const campo =
   'border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
-export default function PainelVendas({
-  aberto, onFechar, rotaIds, de, ate, totalCard,
-}: Props) {
+export default function PainelVendas({ aberto, rotaIds, de, ate }: Props) {
   const [dados, setDados] = useState<VendasPeriodo | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [busca, setBusca] = useState('');
@@ -115,14 +113,14 @@ export default function PainelVendas({
     );
   };
 
+  if (!aberto) return null;
+
   return (
-    <Painel
-      aberto={aberto}
-      onFechar={onFechar}
+    <ListaRelatorio
+      icone={ArrowUpFromLine}
+      cor="azul"
       titulo="Venda"
-      subtitulo={`${diaCurto(de)} a ${diaCurto(ate)} · ${rotaIds.length} rota(s)${t ? ` · ${t.registros} empréstimos` : ''}`}
-      totalRotulo="Total emprestado"
-      totalValor={fmt(totalCard)}
+      subtitulo={`${diaCurto(de)} a ${diaCurto(ate)} · ${rotaIds.length} rota(s)`}
       carregando={carregando}
       onExportar={exportar}
       podeExportar={linhas.length > 0}
@@ -151,31 +149,30 @@ export default function PainelVendas({
           </select>
         </>
       }
-      rodape={
-        <>
-          {t && (
-            <span className="tabular-nums">
-              <b className="text-gray-900">{fmt(t.principal)}</b> emprestado ·{' '}
-              <b className="text-gray-900">{fmt(t.juros)}</b> de juro contratado
-              {/* A leitura que a classificação permite: a carteira cresceu,
-                  ficou parada ou encolheu neste período. */}
-              <span className="ml-2 text-gray-500">
-                · <b className="text-emerald-700">{t.maior}</b> maior ·{' '}
-                <b className="text-blue-700">{t.igual}</b> igual ·{' '}
-                <b className="text-amber-700">{t.menor}</b> menor ·{' '}
-                <b className="text-gray-700">{t.primeiro}</b> primeiro
-              </span>
+      contagem={<span>{dados?.total_registros ?? 0} empréstimo(s)</span>}
+      totais={
+        t && (
+          <span className="tabular-nums">
+            <b className="text-gray-900">{fmt(t.principal)}</b> emprestado ·{' '}
+            <b className="text-gray-900">{fmt(t.juros)}</b> de juro
+            {/* A leitura que a classificação permite: a carteira cresceu,
+                ficou parada ou encolheu neste período. */}
+            <span className="ml-2 text-gray-500">
+              · <b className="text-emerald-700">{t.maior}</b> maior ·{' '}
+              <b className="text-blue-700">{t.igual}</b> igual ·{' '}
+              <b className="text-amber-700">{t.menor}</b> menor ·{' '}
+              <b className="text-gray-700">{t.primeiro}</b> primeiro
             </span>
-          )}
-          <span className="ml-auto">
-            <Paginacao
-              pagina={pagina}
-              porPagina={POR_PAGINA}
-              total={dados?.total_registros ?? 0}
-              onIr={setPagina}
-            />
           </span>
-        </>
+        )
+      }
+      paginacao={
+        <Paginacao
+          pagina={pagina}
+          porPagina={POR_PAGINA}
+          total={dados?.total_registros ?? 0}
+          onIr={setPagina}
+        />
       }
     >
       {!carregando && linhas.length === 0 ? (
@@ -245,6 +242,6 @@ export default function PainelVendas({
           </tbody>
         </table>
       )}
-    </Painel>
+    </ListaRelatorio>
   );
 }

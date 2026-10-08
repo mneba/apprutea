@@ -29,23 +29,19 @@
 // nomes aqui seria garantir que a tela mente no dia em que ele criar uma
 // categoria nova — e ele cria.
 
-import { useCallback, useEffect, useState } from 'react';
-import Painel, { Paginacao } from '@/components/relatorios/Painel';
+import { ArrowRightLeft, ChevronDown, Shield, Tag, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import ListaRelatorio, { Paginacao } from '@/components/relatorios/ListaRelatorio';
 import { relatoriosService } from '@/services/relatorios';
 import type { LinhaMovimentacao, MovimentacoesPeriodo } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
 interface Props {
+  /** A listagem só consulta quando está no palco. */
   aberto: boolean;
-  onFechar: () => void;
   rotaIds: string[];
   de: string;
   ate: string;
-  /** Os totais do card, repetidos: quem chegou clicando precisa reconhecê-los. */
-  entradasCard: number;
-  saidasCard: number;
-  transferenciasCard: number;
-  ajustesCard: number;
   /**
    * O tipo em que o painel abre, quando se chegou clicando numa grandeza
    * específica da faixa. A página remonta o painel por `key` ao trocar, de
@@ -96,6 +92,7 @@ const TIPOS: Record<string, { rotulo: string; classe: string; cor: string }> = {
 const VOCAB = {
   ROTA: {
     titulo: 'Movimentações financeiras',
+    subtitulo: 'fora empréstimo e cobrança',
     arquivo: 'movimentacoes',
     entrada: 'de entrada',
     saida: 'de saída',
@@ -103,6 +100,7 @@ const VOCAB = {
   },
   MICROSEGURO: {
     titulo: 'Microseguro',
+    subtitulo: 'conta própria da rota · vendas e retiradas',
     arquivo: 'microseguro',
     entrada: 'em vendas',
     saida: 'em pagamentos',
@@ -114,9 +112,7 @@ const campo =
   'border border-gray-300 rounded-lg px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
 export default function PainelMovimentacoes({
-  aberto, onFechar, rotaIds, de, ate,
-  entradasCard, saidasCard, transferenciasCard, ajustesCard, tipoInicial,
-  tipoConta = 'ROTA',
+  aberto, rotaIds, de, ate, tipoInicial, tipoConta = 'ROTA',
 }: Props) {
   const voc = VOCAB[tipoConta];
   const [dados, setDados] = useState<MovimentacoesPeriodo | null>(null);
@@ -125,6 +121,24 @@ export default function PainelMovimentacoes({
   const [tipo, setTipo] = useState(tipoInicial ?? '');
   const [categoria, setCategoria] = useState('');
   const [pagina, setPagina] = useState(0);
+  const [menuCat, setMenuCat] = useState(false);
+  const caixaCat = useRef<HTMLDivElement>(null);
+
+  // O dropdown fecha ao clicar fora ou com Esc. Sem isso ele fica preso
+  // aberto sobre a tabela, e com onze categorias ele é alto.
+  useEffect(() => {
+    if (!menuCat) return;
+    const fora = (ev: MouseEvent) => {
+      if (caixaCat.current && !caixaCat.current.contains(ev.target as Node)) setMenuCat(false);
+    };
+    const esc = (ev: KeyboardEvent) => { if (ev.key === 'Escape') setMenuCat(false); };
+    document.addEventListener('mousedown', fora);
+    document.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('mousedown', fora);
+      document.removeEventListener('keydown', esc);
+    };
+  }, [menuCat]);
 
   const carregar = useCallback(async () => {
     if (!aberto || rotaIds.length === 0) return;
@@ -149,21 +163,23 @@ export default function PainelMovimentacoes({
   const t = dados?.totais ?? null;
   const linhas = dados?.linhas ?? [];
 
-  // As categorias do próprio período alimentam o filtro. Lista fixa aqui
-  // envelheceria junto com o cadastro do cliente.
-  const categorias = Array.from(
-    new Set((dados?.por_categoria ?? []).map((c) => c.categoria))
-  ).sort();
-
-  // As grandezas do card, repetidas no cabeçalho: quem chegou clicando num
-  // número precisa reconhecê-lo aqui. As que não existem no período não
-  // aparecem — zero fixo na tela ensina a ignorar o campo.
-  const cabecalho = [
-    `(+) ${fmt(entradasCard)}`,
-    `(−) ${fmt(saidasCard)}`,
-    ...(transferenciasCard ? [`(⇄) ${fmt(transferenciasCard)}`] : []),
-    ...(ajustesCard ? [`(±) ${fmt(ajustesCard)}`] : []),
-  ].join('  ·  ');
+  // As categorias do próprio período alimentam o filtro, com quantidade e
+  // total. Lista fixa aqui envelheceria junto com o cadastro do cliente — e
+  // mudar o escopo de rotas muda as categorias que existem.
+  //
+  // Quando a mesma categoria aparece em mais de um tipo (uma despesa e um
+  // ajuste de mesmo nome), as duas linhas se somam numa: quem filtra quer a
+  // categoria, não o par tipo-categoria.
+  const categorias = Object.values(
+    (dados?.por_categoria ?? []).reduce<Record<string, { nome: string; qtd: number; total: number }>>(
+      (acc, c) => {
+        const e = acc[c.categoria] ?? { nome: c.categoria, qtd: 0, total: 0 };
+        e.qtd += c.qtd;
+        e.total += c.total;
+        acc[c.categoria] = e;
+        return acc;
+      }, {})
+  ).sort((a, b) => Math.abs(b.total) - Math.abs(a.total));
 
   const exportar = () => {
     if (!linhas.length) return;
@@ -188,14 +204,14 @@ export default function PainelMovimentacoes({
     );
   };
 
+  if (!aberto) return null;
+
   return (
-    <Painel
-      aberto={aberto}
-      onFechar={onFechar}
+    <ListaRelatorio
+      icone={tipoConta === 'MICROSEGURO' ? Shield : ArrowRightLeft}
+      cor={tipoConta === 'MICROSEGURO' ? 'ambar' : 'roxo'}
       titulo={voc.titulo}
-      subtitulo={`${diaCurto(de)} a ${diaCurto(ate)} · ${rotaIds.length} rota(s)${t ? ` · ${t.registros} lançamentos` : ''}`}
-      totalRotulo="Movimentações do período"
-      totalValor={cabecalho}
+      subtitulo={voc.subtitulo}
       carregando={carregando}
       onExportar={exportar}
       podeExportar={linhas.length > 0}
@@ -207,7 +223,7 @@ export default function PainelMovimentacoes({
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Descrição, cliente ou categoria"
-            className={`${campo} min-w-[220px]`}
+            className={`${campo} w-[210px]`}
           />
           <select id="mov-tipo" value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Tipo" className={campo}>
             <option value="">Todo tipo</option>
@@ -215,26 +231,114 @@ export default function PainelMovimentacoes({
               <option key={k} value={k}>{v.rotulo}</option>
             ))}
           </select>
-          <select
-            id="mov-categoria"
-            value={categoria}
-            onChange={(e) => setCategoria(e.target.value)}
-            aria-label="Categoria"
-            className={campo}
-          >
-            <option value="">Toda categoria</option>
-            {categorias.map((c) => (
-              <option key={c} value={c}>{c}</option>
-            ))}
-          </select>
+
+          {/* CATEGORIA EM DROPDOWN, não em coluna fixa nem em fila de
+              pastílhas. Onze categorias ocupando largura permanente para algo
+              que se usa de vez em quando foi recusado pelo cliente em
+              08/10/2026; e a fila de pílulas lia-se como caminho de
+              navegação, que não é o que são.
+
+              Aqui cada uma traz quantidade e total — que é a informação que
+              justificava a fila — sem gastar a tela quando está fechado. */}
+          <div className="relative" ref={caixaCat}>
+            <button
+              onClick={() => setMenuCat((v) => !v)}
+              aria-expanded={menuCat}
+              className={`inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border max-w-[230px] ${
+                categoria
+                  ? 'bg-purple-50 border-transparent text-purple-700'
+                  : 'border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+              }`}
+            >
+              <Tag className="w-3 h-3 flex-shrink-0" />
+              <span className="truncate">{categoria || 'Toda categoria'}</span>
+              <span className="text-[10px] font-bold tabular-nums px-1.5 rounded-full bg-white/70 border border-current/20">
+                {categoria ? (dados?.total_registros ?? 0) : categorias.length}
+              </span>
+              <ChevronDown className="w-3 h-3 flex-shrink-0 opacity-60" />
+            </button>
+
+            {menuCat && (
+              <div className="absolute right-0 mt-1 z-30 w-[330px] max-w-[86vw] bg-white rounded-lg border border-gray-200 shadow-xl overflow-hidden">
+                <div className="flex items-center gap-2 px-2.5 py-2 border-b border-gray-100">
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-gray-400">
+                    Por categoria
+                  </span>
+                  {categoria && (
+                    <button
+                      onClick={() => { setCategoria(''); setMenuCat(false); }}
+                      className="ml-auto inline-flex items-center gap-0.5 text-[10.5px] text-blue-600 hover:text-blue-700"
+                    >
+                      <X className="w-3 h-3" /> limpar
+                    </button>
+                  )}
+                </div>
+
+                <div className="max-h-[46vh] overflow-y-auto">
+                  {categorias.length === 0 ? (
+                    <p className="px-3 py-6 text-xs text-gray-400 text-center">
+                      Nenhum lançamento no período
+                    </p>
+                  ) : (
+                    categorias.map((c) => (
+                      <button
+                        key={c.nome}
+                        onClick={() => { setCategoria(categoria === c.nome ? '' : c.nome); setMenuCat(false); }}
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 text-left border-b border-gray-50 ${
+                          categoria === c.nome ? 'bg-purple-50' : 'hover:bg-gray-50'
+                        }`}
+                      >
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 bg-gray-300" />
+                        <span className="flex-1 min-w-0">
+                          <span className={`block text-[12.5px] truncate ${categoria === c.nome ? 'text-purple-700 font-medium' : 'text-gray-700'}`}>
+                            {c.nome}
+                          </span>
+                          <span className="block text-[10.5px] text-gray-400">
+                            {c.qtd} lançamento{c.qtd > 1 ? 's' : ''}
+                          </span>
+                        </span>
+                        <span className={`text-[12.5px] font-semibold tabular-nums ${categoria === c.nome ? 'text-purple-700' : 'text-gray-900'}`}>
+                          {fmt(c.total)}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+
+                <div className="flex justify-between gap-2 px-2.5 py-1.5 border-t border-gray-100 bg-gray-50 text-[10.5px] text-gray-400">
+                  <span>
+                    {categorias.length} categoria(s) ·{' '}
+                    {categorias.reduce((a, c) => a + c.qtd, 0)} lançamentos
+                  </span>
+                  <span className="tabular-nums">
+                    {fmt(categorias.reduce((a, c) => a + c.total, 0))}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
         </>
       }
-      rodape={
-        <>
-          {t && (
-            <span className="tabular-nums">
-              <b className="text-emerald-700">{fmt(t.entradas)}</b> {voc.entrada} ·{' '}
-              <b className="text-red-700">{fmt(t.saidas)}</b> {voc.saida}
+      contagem={
+        <span>
+          {dados?.total_registros ?? 0} registro(s)
+          {/* O PEDIDO DE 08/10/2026, literal: "o usuário vai esquecer, e vai
+              questionar divergências que ele mesmo causou e não se lembra".
+              Estes não passaram por liquidação nenhuma, então não estão em
+              nenhum dia fechado — e é por isso que o total do período não
+              fecha com a soma dos dias. Dito, não deduzido. */}
+          {(t?.sem_liquidacao ?? 0) > 0 && (
+            <span className="ml-1.5 text-amber-700">
+              · {t!.sem_liquidacao} fora de dia de liquidação (<b className="tabular-nums">{fmt(t!.sem_liquidacao_valor)}</b>)
+            </span>
+          )}
+        </span>
+      }
+      totais={
+        t && (
+          <span className="tabular-nums">
+            <b className="text-emerald-700">{fmt(t.entradas)}</b> {voc.entrada} ·{' '}
+            <b className="text-red-700">{fmt(t.saidas)}</b> {voc.saida}
               {/* As duas pontas, não o líquido: o líquido some quando a
                   transferência foi interna, e aqui o usuário quer ver que
                   houve movimento. */}
@@ -267,29 +371,16 @@ export default function PainelMovimentacoes({
                   {fmt(t.entradas - t.saidas + t.ajustes)}
                 </b>
               </span>
-              {/* O PEDIDO DE 08/10/2026, literal: "o usuário vai esquecer, e
-                  vai questionar divergências que ele mesmo causou e não se
-                  lembra". Estes não passaram por liquidação nenhuma, então
-                  não estão em nenhum dia fechado — e é por isso que o total
-                  do período não fecha com a soma dos dias. Dito, não
-                  deduzido. */}
-              {t.sem_liquidacao > 0 && (
-                <span className="ml-2 text-amber-700">
-                  · {t.sem_liquidacao} fora de dia de liquidação{' '}
-                  (<b>{fmt(t.sem_liquidacao_valor)}</b>)
-                </span>
-              )}
-            </span>
-          )}
-          <span className="ml-auto">
-            <Paginacao
-              pagina={pagina}
-              porPagina={POR_PAGINA}
-              total={dados?.total_registros ?? 0}
-              onIr={setPagina}
-            />
           </span>
-        </>
+        )
+      }
+      paginacao={
+        <Paginacao
+          pagina={pagina}
+          porPagina={POR_PAGINA}
+          total={dados?.total_registros ?? 0}
+          onIr={setPagina}
+        />
       }
     >
       {!carregando && linhas.length === 0 ? (
@@ -394,6 +485,6 @@ export default function PainelMovimentacoes({
           </table>
         </>
       )}
-    </Painel>
+    </ListaRelatorio>
   );
 }
