@@ -84,7 +84,41 @@ export interface ConsolidadoPeriodo {
   /** Primeiro e último dia DE CADA ROTA, somados. Nunca soma entre dias. */
   caixa_inicial: number;
   caixa_final: number;
+  carteira_inicial: number;
   carteira: number;
+  /**
+   * Movimentação que NÃO é empréstimo nem cobrança de parcela — despesa,
+   * aporte, retirada, microseguro. Esses dois têm linha própria no relatório;
+   * contá-los aqui mostraria o mesmo dinheiro duas vezes.
+   */
+  entradas: number;
+  saidas: number;
+  /**
+   * Fora de `entradas` e `saidas` de propósito. Transferência é dinheiro
+   * trocando de bolso — o trigger subtrai da origem e soma no destino — e
+   * somar nas duas pontas inflaria as duas. Ajuste traz o próprio sinal.
+   */
+  transferencias: number;
+  ajustes: number;
+  /**
+   * A conta do microseguro é outra conta, com card próprio. A venda cai nela
+   * e a retirada sai dela para a conta da rota — então a venda fica fora de
+   * `entradas` por construção, não por regra escrita à mão.
+   */
+  microseguro_vendas: number;
+  microseguro_retiradas: number;
+  /**
+   * Lastro de implantação: ~100.000,00 injetados para importar os
+   * empréstimos de uma rota nova e depois retirados. Positivo entrou,
+   * negativo voltou — o sinal diz a direção.
+   *
+   * Fora de `entradas` e de `ajustes` porque não é operação da rota, e era
+   * o que fazia a Barcelona mostrar −117.219,77 de "ajustes" num caixa de
+   * 1.289,23. A classificação acontece numa linha só, dentro da RPC: a CTE
+   * marca a categoria `APORTE_FINANCEIRO` como grupo próprio na leitura, e
+   * toda soma que filtra por tipo deixa de contá-la sem ser tocada.
+   */
+  aportes: number;
 }
 
 export interface DiaPeriodo {
@@ -103,8 +137,38 @@ export interface DiaPeriodo {
   qtd_emprestimos: number;
   clientes_pagos: number;
   clientes_nao_pagos: number;
+  caixa_inicial: number;
   caixa_final: number;
+  carteira_inicial: number;
   carteira: number;
+  entradas: number;
+  saidas: number;
+  transferencias: number;
+  ajustes: number;
+  microseguro_vendas: number;
+  microseguro_retiradas: number;
+  aportes: number;
+}
+
+/**
+ * Dia com dinheiro e SEM liquidação.
+ *
+ * Vem separado de `por_dia` de propósito: entrar lá dentro mudaria
+ * `dias_trabalhados` e a média diária, que significam "dia em que a rota
+ * trabalhou". Separado, a linha aparece na tela com a marca e a diferença
+ * entre o total e a soma dos dias fica escrita em vez de deduzida — que foi o
+ * pedido: o usuário esquece, e depois questiona divergência que ele mesmo
+ * causou.
+ */
+export interface DiaSemLiquidacao {
+  data: string;
+  entradas: number;
+  saidas: number;
+  transferencias: number;
+  ajustes: number;
+  microseguro_vendas: number;
+  microseguro_retiradas: number;
+  aportes: number;
 }
 
 export interface RotaPeriodo {
@@ -140,6 +204,7 @@ export interface LiquidacoesPeriodo {
   rotas_no_escopo: number;
   consolidado: ConsolidadoPeriodo | null;
   por_dia: DiaPeriodo[];
+  dias_sem_liquidacao: DiaSemLiquidacao[];
   por_rota: RotaPeriodo[];
   /** Só vem preenchido quando a chamada pede detalhe. */
   por_emprestimo: EmprestimoGanancia[];
@@ -267,15 +332,23 @@ export interface FiltrosVendas {
   offset?: number;
 }
 
-// ─── Entradas e saídas ─────────────────────────────────────────────────────
+// ─── Movimentações ──────────────────────────────────────────────
 //
-// O relatório de fluxo de caixa. Pedido do cliente em 07/10/2026: além de
-// cobrado e emprestado, ver despesas, caixas, carteira, aportes, retiradas e
-// "qualquer movimentação de dinheiro".
+// Todo dinheiro que entrou ou saiu e que NÃO é empréstimo nem cobrança de
+// parcela — despesa, aporte, retirada, microseguro, o que houver. Esses dois
+// têm painel próprio no mesmo relatório; contá-los aqui mostraria o mesmo
+// dinheiro duas vezes na mesma tela.
 //
-// É esse "qualquer" que explica `por_categoria` ser uma lista aberta em vez de
-// campos fixos: a RPC agrupa pelo que existir em `financeiro`, então categoria
-// criada amanhã aparece sozinha.
+// `por_categoria` é lista aberta: a RPC agrupa pelo que existir em
+// `financeiro`, sem nomes fixos. Categoria criada amanhã aparece sozinha.
+//
+// O RECORTE É "O QUE MOVE O SALDO DA CONTA", e quem decide isso é o trigger
+// `atualizar_saldo_contas`, não uma lista daqui. Consequências:
+// `TRANSFERENCIA` e `AJUSTE` entram com QUALQUER status, porque o trigger
+// mexe no saldo sem exigir `PAGO`; e `AJUSTE_ABERTURA` fica fora, porque tem
+// `RETURN NEW` explicito antes do UPDATE — é conciliação do caixa declarado
+// na abertura, não movimento. Ver
+// sql/2026-10-08_transferencias_e_ajustes_nas_movimentacoes.sql.
 
 export interface MovimentoCategoria {
   tipo: 'RECEBER' | 'PAGAR' | 'AJUSTE' | string;
@@ -284,103 +357,73 @@ export interface MovimentoCategoria {
   total: number;
 }
 
-export interface DiaEntradaSaida {
-  data: string;
-  caixa_inicial: number;
-  caixa_final: number;
-  carteira_final: number;
-  entradas: number;
-  saidas: number;
-  cobrado: number;
-  emprestado: number;
-  despesas: number;
+export interface LinhaMovimentacao {
+  financeiro_id: string;
+  /** Da liquidação quando há; senão `data_lancamento`, a única que existe. */
+  data_operacional: string;
+  data_lancamento: string | null;
+  /** Falso é o caso que o usuário não lembra de ter feito. */
+  tem_liquidacao: boolean;
+  quando: string;
+  rota_nome: string;
+  conta_nome: string;
+  /** A outra ponta da transferência. Nulo nos outros tipos. */
+  contraparte: string | null;
+  /**
+   * Os quatro de `financeiro.tipo`, e a transferência desdobrada em
+   * `TRANSF_SAIU` e `TRANSF_ENTROU` — uma linha por ponta que está no escopo,
+   * porque as duas contas realmente se moveram.
+   */
+  tipo: string;
+  categoria: string;
+  descricao: string | null;
+  cliente_nome: string | null;
+  forma_pagamento: string | null;
+  /**
+   * Vem para a tela porque `TRANSFERENCIA` e `AJUSTE` movem saldo com
+   * qualquer status — quem confere precisa ver um não-`PAGO` que mexeu no
+   * caixa.
+   */
+  status: string;
+  /** `AJUSTE` guarda o sinal; os outros são positivos e o tipo diz a direção. */
+  valor: number;
 }
 
-export interface ConsolidadoEntradaSaida {
-  dias: number;
-  /** Caixa e carteira são SALDO: vêm das pontas do período, não somados. */
-  caixa_inicial: number;
-  caixa_final: number;
-  carteira_inicial: number;
-  carteira_final: number;
+export interface TotaisMovimentacoes {
   entradas: number;
   saidas: number;
+  /** Líquido: entrou menos saiu. Zero quando a transferência foi interna. */
+  transferencias: number;
+  transf_entrou: number;
+  transf_saiu: number;
   ajustes: number;
-  cobrado: number;
-  emprestado: number;
-  /** Saída que não é empréstimo — o dinheiro emprestado virou carteira. */
-  despesas: number;
-  resultado: number;
+  aportes: number;
+  registros: number;
+  /** Lançamento que não passou por liquidação nenhuma. */
+  sem_liquidacao: number;
+  sem_liquidacao_valor: number;
 }
 
-export interface EntradasSaidasPeriodo {
+export interface MovimentacoesPeriodo {
   sucesso: boolean;
   mensagem?: string;
   de: string;
   ate: string;
-  rotas: number;
-  consolidado: ConsolidadoEntradaSaida | null;
-  por_categoria: MovimentoCategoria[];
-  por_dia: DiaEntradaSaida[];
-}
-
-// ─── Atrasos ───────────────────────────────────────────────────────────────
-//
-// FOTO numa data, não período: atraso é estado, não fluxo.
-//
-// `dias_atraso` vem em DIAS DE COBRANÇA — domingo sem expediente e feriado da
-// rota não contam. É a mesma regra de diasCobranca.ts no app, implementada uma
-// segunda vez no Postgres porque relatório de servidor não chama código do
-// aparelho. Se uma mudar, a outra muda junto.
-
-export interface LinhaAtraso {
-  emprestimo_id: string;
-  cliente_nome: string;
-  cliente_documento: string | null;
-  telefone: string | null;
-  rota_nome: string;
-  frequencia: string;
-  tipo_emprestimo: string;
-  data_emprestimo: string | null;
-  vencimento_antigo: string;
-  dias_atraso: number;
-  parcelas_vencidas: number;
-  valor_vencido: number;
-  saldo: number;
-  ultimo_pagamento: string | null;
-}
-
-export interface FaixaAtraso {
-  faixa: string;
-  clientes: number;
-  valor: number;
-}
-
-export interface TotaisAtrasos {
-  clientes: number;
-  emprestimos: number;
-  valor_vencido: number;
-  saldo_total: number;
-  parcelas_vencidas: number;
-  media_dias: number;
-  pior_caso: number;
-}
-
-export interface AtrasosRelatorio {
-  sucesso: boolean;
-  mensagem?: string;
-  data: string;
+  tipo_conta?: 'ROTA' | 'MICROSEGURO';
   total_registros: number;
   limite: number;
   offset: number;
-  totais: TotaisAtrasos | null;
-  faixas: FaixaAtraso[];
-  linhas: LinhaAtraso[];
+  totais: TotaisMovimentacoes | null;
+  por_categoria: MovimentoCategoria[];
+  linhas: LinhaMovimentacao[];
 }
 
-export interface FiltrosAtrasos {
-  minDias?: number;
+export interface FiltrosMovimentacoes {
   busca?: string;
+  tipo?: string;
+  categoria?: string;
   limite?: number;
   offset?: number;
+  /** `ROTA` para o card de movimentações, `MICROSEGURO` para o do microseguro. */
+  tipoConta?: 'ROTA' | 'MICROSEGURO';
 }

@@ -94,12 +94,43 @@ export function MenuNotificacoes() {
     }
   }, [isOpen, user]);
 
-  // Polling a cada 30 segundos
+  /**
+   * A enquete do sino — só enquanto a aba estiver visível.
+   *
+   * Antes era `setInterval` de 30 s sem condição nenhuma: um painel esquecido
+   * aberto numa aba em segundo plano consultava o banco duas vezes por minuto
+   * a noite inteira. Medido em 07/10/2026, a listagem de solicitações somava
+   * **13.696 chamadas** — sete vezes mais que qualquer outra consulta do
+   * sistema, o equivalente a umas 114 horas de painel aberto.
+   *
+   * Duas mudanças, as duas baratas:
+   *
+   *   • a aba oculta não consulta. É de onde vem quase toda a economia: aba em
+   *     segundo plano é o estado normal de um painel aberto o dia todo.
+   *   • 60 s em vez de 30. O sino não precisa de meio minuto de precisão, e
+   *     quem abre o dropdown dispara uma leitura na hora de qualquer forma.
+   *
+   * E ao voltar para a aba, consulta imediatamente: sem isso o admin olharia
+   * um sino de até um minuto atrás justamente no momento em que voltou para
+   * conferi-lo.
+   */
   useEffect(() => {
     if (!user) return;
-    carregarDados();
-    const interval = setInterval(carregarDados, 30000);
-    return () => clearInterval(interval);
+
+    const visivel = () => typeof document === 'undefined' || !document.hidden;
+
+    const talvezCarregar = () => { if (visivel()) carregarDados(); };
+
+    talvezCarregar();
+    const interval = setInterval(talvezCarregar, 60000);
+
+    const aoVoltar = () => { if (visivel()) carregarDados(); };
+    document.addEventListener('visibilitychange', aoVoltar);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', aoVoltar);
+    };
   }, [user]);
 
   // Marcar mensagem como lida

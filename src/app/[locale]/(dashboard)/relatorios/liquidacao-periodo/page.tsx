@@ -31,6 +31,7 @@ import { ArrowLeft, ChevronDown, ChevronRight, Download, Globe, Loader2 } from '
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PainelCobranca from '@/components/relatorios/PainelCobranca';
 import PainelVendas from '@/components/relatorios/PainelVendas';
+import PainelMovimentacoes from '@/components/relatorios/PainelMovimentacoes';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
 import SeletorPeriodo from '@/components/relatorios/SeletorPeriodo';
 import { Link } from '@/i18n/routing';
@@ -80,6 +81,35 @@ const achatar = (e: EstruturaVisivel | null): RotaNo[] =>
     )
   );
 
+/**
+ * Uma grandeza da faixa de movimentações: sinal, valor e nome, clicável.
+ *
+ * É botão por grandeza, e não uma faixa clicável inteira, porque cada uma abre
+ * o painel já filtrada no seu tipo — quem clica em "transferências" quer as
+ * transferências, não a lista toda para filtrar de novo.
+ */
+function Grandeza({
+  sinal, nome, valor, cor, onClick,
+}: {
+  sinal: string;
+  nome: string;
+  valor: number;
+  cor: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="group/g flex items-baseline gap-1.5 px-2 py-1 -my-1 rounded hover:bg-gray-100 text-left"
+      title={`Ver ${nome} do período`}
+    >
+      <span className="text-[12.5px] text-gray-400">{sinal}</span>
+      <b className={`${cor} tabular-nums text-[15px]`}>{fmt(valor)}</b>
+      <span className="text-[11.5px] text-gray-400 group-hover/g:text-gray-600">{nome}</span>
+    </button>
+  );
+}
+
 /** Cor da barra de atingido, na mesma escala da tela de Liquidação Diária. */
 const corPct = (p: number) =>
   p >= 100 ? 'bg-emerald-500' : p >= 70 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500';
@@ -93,7 +123,25 @@ export default function LiquidacaoPeriodoPage() {
   const [dados, setDados] = useState<LiquidacoesPeriodo | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [painel, setPainel] = useState<'cobranca' | 'venda' | null>(null);
+  const [painel, setPainel] = useState<'cobranca' | 'venda' | 'movimentacao' | null>(null);
+  /**
+   * O tipo com que o painel de movimentações abre. Vai como `key` no painel,
+   * para ele remontar com o filtro já posto em vez de sincronizar por efeito —
+   * sincronizar custaria uma busca jogada fora a cada abertura.
+   */
+  const [movTipo, setMovTipo] = useState('');
+  /**
+   * Qual conta o painel abre: a da rota ou a do microseguro. São duas contas
+   * de verdade — a Barcelona tem `Conta Rota Barcelona` e
+   * `Conta Microseguro Barcelona`, com saldos próprios — e por isso cada uma
+   * tem card e listagem próprios.
+   */
+  const [movConta, setMovConta] = useState<'ROTA' | 'MICROSEGURO'>('ROTA');
+  const abrirMov = (tipo: string, conta: 'ROTA' | 'MICROSEGURO' = 'ROTA') => {
+    setMovTipo(tipo);
+    setMovConta(conta);
+    setPainel('movimentacao');
+  };
   const [escopoAberto, setEscopoAberto] = useState(false);
   const caixaEscopo = useRef<HTMLDivElement>(null);
 
@@ -191,8 +239,19 @@ export default function LiquidacaoPeriodoPage() {
         { cabecalho: 'Empréstimos', valor: (d) => d.qtd_emprestimos },
         { cabecalho: 'Pagos', valor: (d) => d.clientes_pagos },
         { cabecalho: 'Não pagos', valor: (d) => d.clientes_nao_pagos },
+        { cabecalho: 'Caixa inicial', valor: (d) => numCsv(d.caixa_inicial) },
         { cabecalho: 'Caixa final', valor: (d) => numCsv(d.caixa_final) },
-        { cabecalho: 'Carteira', valor: (d) => numCsv(d.carteira) },
+        { cabecalho: 'Carteira inicial', valor: (d) => numCsv(d.carteira_inicial) },
+        { cabecalho: 'Carteira final', valor: (d) => numCsv(d.carteira) },
+        { cabecalho: 'Entradas', valor: (d) => numCsv(d.entradas) },
+        { cabecalho: 'Saídas', valor: (d) => numCsv(d.saidas) },
+        // No CSV vão sempre, mesmo zeradas: planilha com cabeçalho variável
+        // quebra quem empilha dois períodos.
+        { cabecalho: 'Transferências', valor: (d) => numCsv(d.transferencias) },
+        { cabecalho: 'Ajustes', valor: (d) => numCsv(d.ajustes) },
+        { cabecalho: 'Microseguro vendas', valor: (d) => numCsv(d.microseguro_vendas) },
+        { cabecalho: 'Microseguro retiradas', valor: (d) => numCsv(d.microseguro_retiradas) },
+        { cabecalho: 'Aporte', valor: (d) => numCsv(d.aportes) },
       ],
       dados.por_dia
     );
@@ -200,6 +259,29 @@ export default function LiquidacaoPeriodoPage() {
 
   const c = dados?.consolidado ?? null;
   const margem = c && c.recebido > 0 ? (c.ganancia / c.recebido) * 100 : 0;
+
+  /**
+   * Transferência e ajuste são raros: a maioria dos períodos não tem nenhum.
+   * Coluna de zeros ocupa largura que as outras precisam e some do olhar, por
+   * isso só aparecem quando há. No CSV vão sempre — planilha com cabeçalho
+   * variável quebra quem empilha dois períodos.
+   */
+  const temTransferencia = (dados?.por_dia ?? []).some((d) => d.transferencias !== 0);
+  const temAjuste = (dados?.por_dia ?? []).some((d) => d.ajustes !== 0);
+  const temAporte = (c?.aportes ?? 0) !== 0;
+  const temMicro =
+    (c?.microseguro_vendas ?? 0) !== 0 || (c?.microseguro_retiradas ?? 0) !== 0;
+
+  /**
+   * Dias com dinheiro e sem liquidação. Entram na tabela do dia a dia como
+   * linha marcada, mas fora de `por_dia` — logo não contaminam
+   * `dias_trabalhados` nem a média diária, que significam "dia em que a rota
+   * trabalhou".
+   */
+  const semLiq = dados?.dias_sem_liquidacao ?? [];
+
+  /** Colunas do dia a dia que só existem quando houve liquidação. */
+  const COLUNAS_DA_LIQUIDACAO = 11;
 
   return (
     <div className="space-y-5">
@@ -303,6 +385,11 @@ export default function LiquidacaoPeriodoPage() {
                 <span>
                   caixa <b className="text-gray-500 tabular-nums">{fmt(c.caixa_inicial)}</b> →{' '}
                   <b className="text-gray-500 tabular-nums">{fmt(c.caixa_final)}</b>
+                </span>
+                <span className="text-gray-300">·</span>
+                <span>
+                  carteira <b className="text-gray-500 tabular-nums">{fmt(c.carteira_inicial)}</b> →{' '}
+                  <b className="text-gray-500 tabular-nums">{fmt(c.carteira)}</b>
                 </span>
               </p>
 
@@ -409,6 +496,132 @@ export default function LiquidacaoPeriodoPage() {
               </div>
             </div>
 
+            {/* MOVIMENTAÇÕES FINANCEIRAS — o dinheiro que não é cobrança nem
+                empréstimo. Fica abaixo das três zonas, numa faixa própria,
+                porque é de outra natureza: cobrança e venda são a OPERAÇÃO da
+                rota; despesa, aporte e retirada são o que atravessa o caixa
+                por fora dela. Juntar numa coluna convidaria a somar os cinco
+                números, e a soma não significa nada.
+
+                SÃO QUATRO GRANDEZAS, NÃO DUAS, e as duas últimas aparecem só
+                quando existem — na maioria dos períodos não há nenhuma, e zero
+                fixo na tela ensina a ignorar o campo.
+
+                Transferência fora de entrada e saída de propósito: o trigger
+                subtrai da origem e soma no destino, então somá-la nas duas
+                pontas inflaria as duas. Ajuste também à parte, e com sinal —
+                `AJUSTE_NEGATIVO` guarda o valor negativo. */}
+            <div className="w-full px-4 py-2.5 border-t border-gray-100 flex items-center gap-x-2 gap-y-1 flex-wrap">
+              <span className="text-[10.5px] font-bold uppercase tracking-wide text-gray-500 mr-1">
+                Movimentações financeiras
+              </span>
+
+              <Grandeza
+                sinal="(+)"
+                nome="entradas"
+                valor={c.entradas}
+                cor="text-emerald-700"
+                onClick={() => abrirMov('RECEBER')}
+              />
+              <Grandeza
+                sinal="(−)"
+                nome="saídas"
+                valor={c.saidas}
+                cor="text-red-700"
+                onClick={() => abrirMov('PAGAR')}
+              />
+
+              {/* Transferências e ajustes: seção própria, só quando há. */}
+              {c.transferencias !== 0 && (
+                <>
+                  <span className="text-gray-200 mx-1">|</span>
+                  <Grandeza
+                    sinal="(⇄)"
+                    nome="transferências"
+                    valor={c.transferencias}
+                    cor="text-amber-700"
+                    onClick={() => abrirMov('TRANSFERENCIA')}
+                  />
+                </>
+              )}
+              {c.ajustes !== 0 && (
+                <>
+                  {c.transferencias === 0 && <span className="text-gray-200 mx-1">|</span>}
+                  <Grandeza
+                    sinal="(±)"
+                    nome="ajustes"
+                    valor={c.ajustes}
+                    cor="text-blue-700"
+                    onClick={() => abrirMov('AJUSTE')}
+                  />
+                </>
+              )}
+              {/* APORTE — lastro de implantação, não operação da rota.
+                  Em linha própria porque era o que fazia a Barcelona mostrar
+                  −117.219,77 de "ajustes" num caixa de 1.289,23. */}
+              {c.aportes !== 0 && (
+                <Grandeza
+                  sinal="(¤)"
+                  nome="aporte"
+                  valor={c.aportes}
+                  cor="text-violet-700"
+                  onClick={() => abrirMov('APORTE')}
+                />
+              )}
+
+              <button
+                onClick={() => abrirMov('')}
+                className="ml-auto flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-gray-700 px-2 py-1 -my-1 rounded hover:bg-gray-100"
+              >
+                ver tudo
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* MICROSEGURO — seção própria, só quando há movimento.
+
+                É OUTRA CONTA, não outro tipo de lançamento: a rota tem
+                `Conta Rota X` e `Conta Microseguro X`, cada uma com seu saldo.
+                A venda cai na conta do microseguro e a retirada sai dela para
+                a da rota — por isso a venda NÃO aparece em `(+) entradas` ali
+                acima, e não por uma regra que alguém precise lembrar de
+                manter.
+
+                A retirada aparece aqui como saída e, na faixa de cima, como
+                transferência recebida. Não é duplicação: o microseguro perdeu
+                o dinheiro e a conta da rota ganhou. */}
+            {temMicro && (
+              <div className="w-full px-4 py-2.5 border-t border-gray-100 flex items-center gap-x-2 gap-y-1 flex-wrap bg-sky-50/40">
+                <span className="text-[10.5px] font-bold uppercase tracking-wide text-sky-800 mr-1">
+                  Microseguro
+                </span>
+                <Grandeza
+                  sinal="(+)"
+                  nome="vendas"
+                  valor={c.microseguro_vendas}
+                  cor="text-emerald-700"
+                  onClick={() => abrirMov('RECEBER', 'MICROSEGURO')}
+                />
+                <Grandeza
+                  sinal="(−)"
+                  nome="retiradas"
+                  valor={c.microseguro_retiradas}
+                  cor="text-amber-800"
+                  onClick={() => abrirMov('', 'MICROSEGURO')}
+                />
+                <span className="text-[11.5px] text-gray-400">
+                  conta própria — a venda entra nela e a retirada vai para a conta da rota
+                </span>
+                <button
+                  onClick={() => abrirMov('', 'MICROSEGURO')}
+                  className="ml-auto flex items-center gap-1 text-[11.5px] text-gray-400 hover:text-gray-700 px-2 py-1 -my-1 rounded hover:bg-gray-100"
+                >
+                  ver tudo
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <div className="px-4 py-1.5 border-t border-gray-100 bg-gray-50 text-[10.5px] text-gray-400">
               Clique no total para ver a listagem · carteira e caixa são do último dia de cada rota
             </div>
@@ -439,7 +652,30 @@ export default function LiquidacaoPeriodoPage() {
                     <th className="text-right font-medium px-3 py-2">Lucro</th>
                     <th className="text-right font-medium px-3 py-2">Pagos</th>
                     <th className="text-right font-medium px-3 py-2">Não pagos</th>
+                    {/* Caixa e carteira nas duas pontas do dia. O cliente pediu
+                        em 07/10/2026: só o final estava aqui, e saldo sem o de
+                        onde partiu não diz se o dia subiu ou desceu. */}
+                    <th className="text-right font-medium px-3 py-2">Caixa inicial</th>
                     <th className="text-right font-medium px-3 py-2">Caixa final</th>
+                    <th className="text-right font-medium px-3 py-2">Carteira inicial</th>
+                    <th className="text-right font-medium px-3 py-2">Carteira final</th>
+                    {/* Só quando o período tem alguma: coluna de zeros ocupa
+                        largura que as outras precisam e some do olhar. */}
+                    {temTransferencia && (
+                      <th className="text-right font-medium px-3 py-2">Transferências</th>
+                    )}
+                    {temAjuste && (
+                      <th className="text-right font-medium px-3 py-2">Ajustes</th>
+                    )}
+                    {temMicro && (
+                      <>
+                        <th className="text-right font-medium px-3 py-2">Micro. vendas</th>
+                        <th className="text-right font-medium px-3 py-2">Micro. retiradas</th>
+                      </>
+                    )}
+                    {temAporte && (
+                      <th className="text-right font-medium px-3 py-2">Aporte</th>
+                    )}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -484,7 +720,95 @@ export default function LiquidacaoPeriodoPage() {
                       <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">{fmt(d.ganancia)}</td>
                       <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{d.clientes_pagos}</td>
                       <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{d.clientes_nao_pagos}</td>
+                      <td className="px-3 py-2 text-right text-gray-400 tabular-nums">{fmt(d.caixa_inicial)}</td>
                       <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(d.caixa_final)}</td>
+                      <td className="px-3 py-2 text-right text-gray-400 tabular-nums">{fmt(d.carteira_inicial)}</td>
+                      <td className="px-3 py-2 text-right text-violet-700 tabular-nums">{fmt(d.carteira)}</td>
+                      {temTransferencia && (
+                        <td className="px-3 py-2 text-right text-amber-700 tabular-nums">
+                          {d.transferencias ? fmt(d.transferencias) : '—'}
+                        </td>
+                      )}
+                      {temAjuste && (
+                        <td className="px-3 py-2 text-right text-blue-700 tabular-nums">
+                          {d.ajustes ? fmt(d.ajustes) : '—'}
+                        </td>
+                      )}
+                      {temMicro && (
+                        <>
+                          <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">
+                            {d.microseguro_vendas ? fmt(d.microseguro_vendas) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-amber-800 tabular-nums">
+                            {d.microseguro_retiradas ? fmt(d.microseguro_retiradas) : '—'}
+                          </td>
+                        </>
+                      )}
+                      {temAporte && (
+                        <td className="px-3 py-2 text-right text-violet-700 tabular-nums">
+                          {d.aportes ? fmt(d.aportes) : '—'}
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+
+                  {/* DIAS COM DINHEIRO E SEM LIQUIDAÇÃO.
+
+                      Pedido de 08/10/2026, com a razão dele: *"o usuário vai
+                      esquecer, e vai questionar divergências que ele mesmo
+                      causou e não se lembra"*. Sem estas linhas, o total do
+                      período seria maior que a soma dos dias e nada na tela
+                      explicaria por quê.
+
+                      Ficam no fim e marcadas, não intercaladas: não são dia
+                      de trabalho da rota, e as colunas da liquidação não
+                      existem para elas — não houve cobrança, nem caixa, nem
+                      carteira. */}
+                  {semLiq.map((d) => (
+                    <tr key={`sl-${d.data}`} className="bg-amber-50/50">
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className="text-[11px] font-semibold mr-1.5 text-gray-400">
+                          {SEMANA[diaSemana(d.data)]}
+                        </span>
+                        <span className="text-gray-900">{diaCurto(d.data)}</span>
+                        <span className="block text-[10px] font-bold uppercase text-amber-700">
+                          sem liquidação
+                        </span>
+                      </td>
+                      <td colSpan={COLUNAS_DA_LIQUIDACAO} className="px-3 py-2 text-[11.5px] text-amber-800">
+                        Dinheiro lançado em dia sem liquidação aberta — não entra em
+                        nenhum dia fechado, e por isso o total do período não fecha
+                        com a soma dos dias acima.
+                        <span className="ml-1 tabular-nums text-gray-600">
+                          {d.entradas !== 0 && <> entradas <b>{fmt(d.entradas)}</b></>}
+                          {d.saidas !== 0 && <> · saídas <b>{fmt(d.saidas)}</b></>}
+                        </span>
+                      </td>
+                      {temTransferencia && (
+                        <td className="px-3 py-2 text-right text-amber-700 tabular-nums">
+                          {d.transferencias ? fmt(d.transferencias) : '—'}
+                        </td>
+                      )}
+                      {temAjuste && (
+                        <td className="px-3 py-2 text-right text-blue-700 tabular-nums">
+                          {d.ajustes ? fmt(d.ajustes) : '—'}
+                        </td>
+                      )}
+                      {temMicro && (
+                        <>
+                          <td className="px-3 py-2 text-right text-emerald-700 tabular-nums">
+                            {d.microseguro_vendas ? fmt(d.microseguro_vendas) : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-right text-amber-800 tabular-nums">
+                            {d.microseguro_retiradas ? fmt(d.microseguro_retiradas) : '—'}
+                          </td>
+                        </>
+                      )}
+                      {temAporte && (
+                        <td className="px-3 py-2 text-right text-violet-700 tabular-nums">
+                          {d.aportes ? fmt(d.aportes) : '—'}
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -541,6 +865,25 @@ export default function LiquidacaoPeriodoPage() {
             ate={escopoGerado.ate}
             totalCard={c?.recebido ?? 0}
           />
+          <PainelMovimentacoes
+            key={`mov-${movConta}-${movTipo}`}
+            aberto={painel === 'movimentacao'}
+            onFechar={() => setPainel(null)}
+            rotaIds={escopoGerado.rotas}
+            de={escopoGerado.de}
+            ate={escopoGerado.ate}
+            entradasCard={
+              movConta === 'MICROSEGURO' ? (c?.microseguro_vendas ?? 0) : (c?.entradas ?? 0)
+            }
+            saidasCard={
+              movConta === 'MICROSEGURO' ? (c?.microseguro_retiradas ?? 0) : (c?.saidas ?? 0)
+            }
+            transferenciasCard={movConta === 'MICROSEGURO' ? 0 : (c?.transferencias ?? 0)}
+            ajustesCard={movConta === 'MICROSEGURO' ? 0 : (c?.ajustes ?? 0)}
+            tipoInicial={movTipo}
+            tipoConta={movConta}
+          />
+
           <PainelVendas
             aberto={painel === 'venda'}
             onFechar={() => setPainel(null)}
