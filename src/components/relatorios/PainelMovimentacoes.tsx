@@ -57,7 +57,9 @@ interface Props {
   tipoConta?: 'ROTA' | 'MICROSEGURO';
 }
 
-const POR_PAGINA = 100;
+// Cinquenta, não cem: com cem quase toda lista cabia numa página só e a
+// paginação parecia quebrada.
+const POR_PAGINA = 50;
 
 const fmt = (n: number | null | undefined) =>
   (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

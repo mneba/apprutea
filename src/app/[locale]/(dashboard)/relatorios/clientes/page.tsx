@@ -31,8 +31,8 @@
 
 import {
   AlertTriangle, ArrowLeft, Ban, CalendarClock, ChevronDown, Clock, Download,
-  Globe, HandCoins, History, Loader2, MapPin, Percent, TrendingUp, UserMinus,
-  UserX, Users,
+  Globe, HandCoins, History, Loader2, MapPin, MessageSquare, Percent, Printer,
+  TrendingUp, UserMinus, UserX, Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
@@ -44,7 +44,9 @@ import type {
 } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
-const POR_PAGINA = 100;
+// Cinquenta, não cem: com cem quase toda lista cabia numa página só e a
+// paginação parecia quebrada. Também é o que cabe numa folha impressa.
+const POR_PAGINA = 50;
 
 const fmt = (n: number | null | undefined) =>
   (n ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -173,6 +175,20 @@ const PRESETS: Preset[] = [
   },
 ];
 
+/**
+ * A frequência em rótulo curto. Vai ao lado do atraso, pedido de 09/10/2026:
+ * três dias de atraso num diário e num mensal são problemas de tamanhos
+ * diferentes, e ler isso exigia atravessar a tabela até a coluna do
+ * principal.
+ */
+const FREQ: Record<string, string> = {
+  DIARIO: 'Diário',
+  SEMANAL: 'Semanal',
+  QUINZENAL: 'Quinzenal',
+  MENSAL: 'Mensal',
+  FLEXIVEL: 'Flexível',
+};
+
 const campo =
   'border border-gray-200 rounded-md px-2 py-1 text-[11.5px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
@@ -189,6 +205,15 @@ export default function RelatorioClientesPage() {
   const [busca, setBusca] = useState('');
   const [escopoAberto, setEscopoAberto] = useState(false);
   const caixaEscopo = useRef<HTMLDivElement>(null);
+
+  /**
+   * Os clientes marcados. Serve à impressão: o admin marca quem interessa e
+   * manda só aqueles para o vendedor. Sem marcação, imprime a página inteira.
+   *
+   * É um `Set` de id e não um campo na linha porque a lista é refeita a cada
+   * consulta — guardar a marcação no dado a perderia a cada página.
+   */
+  const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
   /** Os prazos e valores dos presets. Editáveis: nada fica preso no código. */
   const [params, setParams] = useState<Params>({
@@ -301,6 +326,10 @@ export default function RelatorioClientesPage() {
 
   useEffect(() => { setPagina(0); }, [preset, busca, params]);
 
+  // Trocar de preset, página ou escopo esvazia a marcação. Marcação que
+  // sobrevive a uma lista diferente imprime gente que o usuário nem viu.
+  useEffect(() => { setMarcados(new Set()); }, [preset, pagina, chaveAtivas, busca]);
+
   const alternarRota = (id: string) => {
     const proximas = new Set(rotasAtivas);
     if (proximas.has(id)) proximas.delete(id); else proximas.add(id);
@@ -310,6 +339,23 @@ export default function RelatorioClientesPage() {
 
   const t = dados?.totais ?? null;
   const linhas = dados?.linhas ?? [];
+
+  /** Marcados, se houver marcação; senão a página inteira. */
+  const paraImprimir = marcados.size > 0
+    ? linhas.filter((l) => marcados.has(l.cliente_id))
+    : linhas;
+
+  const todosMarcados = linhas.length > 0 && linhas.every((l) => marcados.has(l.cliente_id));
+
+  const alternarMarca = (id: string) => {
+    const p = new Set(marcados);
+    if (p.has(id)) p.delete(id); else p.add(id);
+    setMarcados(p);
+  };
+
+  const alternarTodos = () => {
+    setMarcados(todosMarcados ? new Set() : new Set(linhas.map((l) => l.cliente_id)));
+  };
 
   const exportar = () => {
     if (!linhas.length) return;
@@ -601,6 +647,20 @@ export default function RelatorioClientesPage() {
                       placeholder="Nome, documento ou telefone"
                       className={`${campo} w-[200px]`}
                     />
+                    {/* IMPRIMIR É O CAMINHO ATÉ O VENDEDOR. O admin salva em
+                        PDF pelo diálogo do navegador e manda por WhatsApp —
+                        por isso a folha sai estreita, com quatro colunas. */}
+                    <button
+                      onClick={() => window.print()}
+                      disabled={!paraImprimir.length}
+                      className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50 disabled:opacity-40"
+                      title={marcados.size > 0
+                        ? `Imprimir os ${marcados.size} marcados`
+                        : 'Imprimir a página inteira'}
+                    >
+                      <Printer className="w-3 h-3" />
+                      Imprimir{marcados.size > 0 ? ` (${marcados.size})` : ''}
+                    </button>
                     <button
                       onClick={exportar}
                       disabled={!linhas.length}
@@ -623,8 +683,22 @@ export default function RelatorioClientesPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-gray-50 text-gray-400 sticky top-0 z-[1]">
                         <tr>
+                          <th className="w-8 px-3 py-1.5">
+                            <input
+                              type="checkbox"
+                              checked={todosMarcados}
+                              onChange={alternarTodos}
+                              aria-label="Marcar todos da página"
+                              className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600 align-middle"
+                            />
+                          </th>
                           <th className="text-left font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Cliente</th>
                           <th className="text-left font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Rota</th>
+                          {/* TIPO JUNTO DO ATRASO, pedido de 09/10/2026: três
+                              dias num diário e num mensal são problemas de
+                              tamanhos diferentes. Antes a frequência estava
+                              na outra ponta da tabela, sob o principal. */}
+                          <th className="text-left font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Tipo</th>
                           <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Atraso</th>
                           <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Vencido</th>
                           <th className="text-right font-semibold text-[10px] uppercase tracking-wide px-3 py-1.5">Saldo</th>
@@ -638,9 +712,33 @@ export default function RelatorioClientesPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {linhas.map((l) => (
-                          <tr key={l.cliente_id} className="hover:bg-gray-50 align-top">
+                          <tr
+                            key={l.cliente_id}
+                            className={`align-top ${marcados.has(l.cliente_id) ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}
+                          >
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={marcados.has(l.cliente_id)}
+                                onChange={() => alternarMarca(l.cliente_id)}
+                                aria-label={`Marcar ${l.cliente_nome}`}
+                                className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600"
+                              />
+                            </td>
                             <td className="px-3 py-2">
                               <span className="text-gray-900">{l.cliente_nome}</span>
+                              {/* O mesmo indicador da Liquidação Diária:
+                                  `MessageSquare` em âmbar com a contagem. Só
+                                  notas `ATIVA` — arquivada não é recado
+                                  pendente. */}
+                              {l.notas > 0 && (
+                                <span
+                                  className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 align-middle"
+                                  title={`${l.notas} nota${l.notas > 1 ? 's' : ''}`}
+                                >
+                                  <MessageSquare className="w-3 h-3" />({l.notas})
+                                </span>
+                              )}
                               {l.cliente_status === 'SUSPENSO' && (
                                 <span className="ml-1.5 text-[10px] font-bold uppercase px-1.5 rounded bg-red-50 text-red-700">
                                   suspenso
@@ -653,6 +751,9 @@ export default function RelatorioClientesPage() {
                               </span>
                             </td>
                             <td className="px-3 py-2 text-gray-500 whitespace-nowrap">{l.rota_nome || '—'}</td>
+                            <td className="px-3 py-2 text-gray-500 whitespace-nowrap">
+                              {l.frequencia ? (FREQ[l.frequencia] ?? l.frequencia) : '—'}
+                            </td>
                             <td className="px-3 py-2 text-right whitespace-nowrap">
                               <span className={`font-semibold tabular-nums ${corAtraso(l.dias_atraso)}`}>
                                 {l.dias_atraso || '—'}
@@ -695,7 +796,6 @@ export default function RelatorioClientesPage() {
                               <span className="tabular-nums text-gray-900">{fmt(l.principal_atual)}</span>
                               <span className="block text-[11px] text-gray-400 tabular-nums">
                                 {l.taxa_atual !== null ? `${fmt(l.taxa_atual)}%` : ''}
-                                {l.frequencia ? ` · ${l.frequencia.toLowerCase()}` : ''}
                               </span>
                             </td>
                             {presetAtual.parametro === 'periodo' && (
@@ -711,7 +811,14 @@ export default function RelatorioClientesPage() {
                 </div>
 
                 <div className="flex items-center gap-3 flex-wrap px-3 py-1.5 border-t border-gray-200 bg-gray-50 text-[11.5px] text-gray-600 flex-shrink-0">
-                  <span>{dados?.total_registros ?? 0} cliente(s)</span>
+                  <span>
+                    {dados?.total_registros ?? 0} cliente(s)
+                    {marcados.size > 0 && (
+                      <span className="ml-1.5 text-blue-700 font-semibold">
+                        · {marcados.size} marcado{marcados.size > 1 ? 's' : ''}
+                      </span>
+                    )}
+                  </span>
                   {t && (
                     <span className="ml-auto flex items-center gap-3.5 tabular-nums">
                       <span>saldo <b className="text-gray-900">{fmt(t.saldo)}</b></span>
@@ -737,6 +844,93 @@ export default function RelatorioClientesPage() {
           </div>
         </>
       )}
+
+      {/* ══════════════════════════════════════════════════════════════
+          A FOLHA, que só existe no papel.
+
+          Um bloco próprio em vez de tentar imprimir a tabela da tela: a
+          página é travada com altura fixa e rolagem interna, e imprimir um
+          contêiner que rola sai cortado na primeira folha. Aqui o conteúdo
+          é solto e o navegador quebra em páginas sozinho.
+
+          QUATRO COLUNAS, porque isto vai para o vendedor no WhatsApp e ele
+          lê no telefone: quem é, de que tipo, quanto atrasou, quanto deve.
+          Documento, rota, saldo, principal e taxa ficam na tela.
+          ══════════════════════════════════════════════════════════════ */}
+      <div id="folha" className="hidden print:block">
+        <h1 style={{ fontSize: '15pt', fontWeight: 700, margin: 0 }}>
+          {presetAtual.nome}
+        </h1>
+        <p style={{ fontSize: '9pt', color: '#555', margin: '2pt 0 8pt' }}>
+          {rotasDoEscopo.filter((r) => rotasAtivas.has(r.id)).map((r) => r.nome).join(' · ') || '—'}
+          {' · situação em '}{diaCurto(escopoGerado?.data ?? data)}
+          {' · '}{paraImprimir.length} cliente{paraImprimir.length === 1 ? '' : 's'}
+          {marcados.size > 0 ? ' (selecionados)' : ''}
+        </p>
+
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9.5pt' }}>
+          <thead>
+            <tr>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #000', padding: '3pt 0' }}>Cliente</th>
+              <th style={{ textAlign: 'left', borderBottom: '1px solid #000', padding: '3pt 4pt' }}>Tipo</th>
+              <th style={{ textAlign: 'right', borderBottom: '1px solid #000', padding: '3pt 4pt' }}>Atraso</th>
+              <th style={{ textAlign: 'right', borderBottom: '1px solid #000', padding: '3pt 0' }}>Deve</th>
+            </tr>
+          </thead>
+          <tbody>
+            {paraImprimir.map((l) => (
+              <tr key={l.cliente_id} style={{ pageBreakInside: 'avoid' }}>
+                <td style={{ padding: '3pt 0', borderBottom: '1px solid #ddd' }}>
+                  {l.cliente_nome}
+                  {l.telefone && (
+                    <span style={{ color: '#666', fontSize: '8pt' }}> · {l.telefone}</span>
+                  )}
+                  {l.notas > 0 && (
+                    <span style={{ color: '#92400e', fontSize: '8pt' }}> · {l.notas} nota{l.notas > 1 ? 's' : ''}</span>
+                  )}
+                </td>
+                <td style={{ padding: '3pt 4pt', borderBottom: '1px solid #ddd', color: '#444' }}>
+                  {l.frequencia ? (FREQ[l.frequencia] ?? l.frequencia) : '—'}
+                </td>
+                <td style={{ padding: '3pt 4pt', borderBottom: '1px solid #ddd', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {l.dias_atraso > 0 ? `${l.dias_atraso}d` : '—'}
+                  {l.parcelas_vencidas > 0 && (
+                    <span style={{ color: '#666', fontSize: '8pt' }}> ({l.parcelas_vencidas})</span>
+                  )}
+                </td>
+                <td style={{ padding: '3pt 0', borderBottom: '1px solid #ddd', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                  {fmt(l.valor_vencido > 0 ? l.valor_vencido : l.saldo)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colSpan={2} style={{ padding: '5pt 0', fontWeight: 700 }}>Total</td>
+              <td style={{ padding: '5pt 4pt', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                {paraImprimir.filter((l) => l.dias_atraso > 0).length} em atraso
+              </td>
+              <td style={{ padding: '5pt 0', textAlign: 'right', fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
+                {fmt(paraImprimir.reduce((a, l) => a + (l.valor_vencido > 0 ? l.valor_vencido : l.saldo), 0))}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {/* A regra de visibilidade: esconde a aplicação inteira e deixa só a
+          folha. É o caminho confiável para imprimir uma região sem depender
+          do layout do dashboard, que esta página não controla. */}
+      <style>{`
+        @media print {
+          @page { size: A4 portrait; margin: 12mm; }
+          body { background: #fff; }
+          body * { visibility: hidden; }
+          #folha, #folha * { visibility: visible; }
+          #folha { position: absolute; left: 0; top: 0; width: 100%; }
+          thead { display: table-header-group; }
+        }
+      `}</style>
     </div>
   );
 }

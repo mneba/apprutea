@@ -21,7 +21,9 @@
 // cresce além do pai e a rolagem vai para a página inteira, que é justamente
 // o que se quer evitar.
 
-import { ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react';
+import {
+  ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Download, Loader2,
+} from 'lucide-react';
 
 /** As cores dos selos, pelas mesmas famílias que a tela do Financeiro usa. */
 export type CorSelo = 'azul' | 'verde' | 'ambar' | 'roxo' | 'violeta';
@@ -103,9 +105,14 @@ export default function ListaRelatorio({
  * total noutro canto — o usuário via "567" e contava 100 na tela, sem saber o
  * que fazer a respeito.
  *
- * Ao contrário da versão anterior, ela aparece mesmo com uma página só: num
- * palco de altura fixa, o rodapé que some faz a tabela pular de tamanho a cada
- * filtro.
+ * Aparece mesmo com uma página só: num palco de altura fixa, o rodapé que
+ * some faz a tabela pular de tamanho a cada filtro.
+ *
+ * O CONTADOR `2 / 5` EXISTE POR UM MOTIVO CONCRETO. Com 100 por página quase
+ * toda lista cabia numa só, os botões ficavam desabilitados o tempo todo e o
+ * usuário concluiu, com razão, que a paginação não funcionava — reclamação
+ * de 09/10/2026. Nada estava quebrado; faltava a tela dizer que havia uma
+ * página só. A página também baixou para 50.
  */
 export function Paginacao({
   pagina, porPagina, total, onIr,
@@ -122,26 +129,28 @@ export function Paginacao({
   const bt =
     'w-6 h-6 rounded-md border border-gray-200 bg-white text-gray-600 flex items-center justify-center hover:bg-gray-100 disabled:opacity-35 disabled:hover:bg-white';
 
+  const naPrimeira = pagina === 0;
+  const naUltima = pagina + 1 >= paginas;
+
   return (
-    <span className="inline-flex items-center gap-2">
-      <span className="tabular-nums text-gray-500">
+    <span className="inline-flex items-center gap-1.5">
+      <span className="tabular-nums text-gray-500 mr-1">
         {primeiro}–{ultimo} de {total}
       </span>
-      <button
-        onClick={() => onIr(pagina - 1)}
-        disabled={pagina === 0}
-        className={bt}
-        aria-label="Página anterior"
-      >
+      <button onClick={() => onIr(0)} disabled={naPrimeira} className={bt} aria-label="Primeira página">
+        <ChevronsLeft className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={() => onIr(pagina - 1)} disabled={naPrimeira} className={bt} aria-label="Página anterior">
         <ChevronLeft className="w-3.5 h-3.5" />
       </button>
-      <button
-        onClick={() => onIr(pagina + 1)}
-        disabled={pagina + 1 >= paginas}
-        className={bt}
-        aria-label="Próxima página"
-      >
+      <span className="tabular-nums text-gray-600 px-0.5">
+        {pagina + 1} / {paginas}
+      </span>
+      <button onClick={() => onIr(pagina + 1)} disabled={naUltima} className={bt} aria-label="Próxima página">
         <ChevronRight className="w-3.5 h-3.5" />
+      </button>
+      <button onClick={() => onIr(paginas - 1)} disabled={naUltima} className={bt} aria-label="Última página">
+        <ChevronsRight className="w-3.5 h-3.5" />
       </button>
     </span>
   );

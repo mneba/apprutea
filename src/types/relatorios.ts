@@ -452,6 +452,8 @@ export interface LinhaCliente {
   telefone: string | null;
   cliente_status: string;
   rota_nome: string | null;
+  /** Notas `ATIVA` do cliente — a mesma contagem da Liquidação Diária. */
+  notas: number;
   emprestimos_abertos: number;
   emprestimos_total: number;
   /** Soma dos saldos em aberto. */
