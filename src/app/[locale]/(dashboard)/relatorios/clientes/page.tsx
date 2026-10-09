@@ -353,6 +353,19 @@ export default function RelatorioClientesPage() {
     setMarcados(p);
   };
 
+  /**
+   * A linha inteira marca e desmarca — o alvo de 14 pixels da caixa era
+   * trabalho demais para uma ação repetida.
+   *
+   * Mas não quando o usuário acabou de selecionar texto: copiar um telefone
+   * termina num `mouseup` dentro da linha, e sem esta guarda o gesto marcaria
+   * o cliente sem querer.
+   */
+  const clicarLinha = (id: string) => {
+    if ((window.getSelection()?.toString() ?? '').length > 0) return;
+    alternarMarca(id);
+  };
+
   const alternarTodos = () => {
     setMarcados(todosMarcados ? new Set() : new Set(linhas.map((l) => l.cliente_id)));
   };
@@ -714,15 +727,22 @@ export default function RelatorioClientesPage() {
                         {linhas.map((l) => (
                           <tr
                             key={l.cliente_id}
-                            className={`align-top ${marcados.has(l.cliente_id) ? 'bg-blue-50/60' : 'hover:bg-gray-50'}`}
+                            onClick={() => clicarLinha(l.cliente_id)}
+                            className={`align-top cursor-pointer ${
+                              marcados.has(l.cliente_id) ? 'bg-blue-50/60' : 'hover:bg-gray-50'
+                            }`}
                           >
-                            <td className="px-3 py-2">
+                            {/* A célula da caixa para o clique de subir: senão
+                                clicar na própria caixa dispararia o `onChange`
+                                dela E o `onClick` da linha, e a marcação
+                                alternaria duas vezes — nada aconteceria. */}
+                            <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                               <input
                                 type="checkbox"
                                 checked={marcados.has(l.cliente_id)}
                                 onChange={() => alternarMarca(l.cliente_id)}
                                 aria-label={`Marcar ${l.cliente_nome}`}
-                                className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600"
+                                className="w-3.5 h-3.5 rounded border-gray-300 accent-blue-600 cursor-pointer"
                               />
                             </td>
                             <td className="px-3 py-2">

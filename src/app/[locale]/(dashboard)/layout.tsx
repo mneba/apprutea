@@ -16,7 +16,8 @@ import {
   User,
   ShieldCheck,
   Tag,
-  BarChart3
+  BarChart3,
+  MapPin
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
@@ -214,8 +215,27 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   próprio recorte — de uma rota ao país inteiro — e o seletor
                   global não tem efeito nenhum sobre o que está na tela.
                   Deixá-lo ali faria o usuário mexer nele esperando filtrar o
-                  relatório, e não filtraria nada. */}
-              {!ehRelatorios && <SeletorLocalizacao />}
+                  relatório, e não filtraria nada.
+
+                  MAS A AUSÊNCIA INCOMODA. O usuário está acostumado a ver
+                  alguma coisa nesse canto, e o vazio parece defeito —
+                  reclamação de 09/10/2026. Então o lugar fica ocupado por um
+                  aviso esmaecido, que diz para onde o controle foi em vez de
+                  deixar o usuário procurando. */}
+              {ehRelatorios ? (
+                <div
+                  className="flex items-center gap-2 px-3 py-2 rounded-lg border border-dashed border-gray-200 bg-gray-50 text-gray-400 select-none cursor-default"
+                  title="Em Relatórios o recorte vem do próprio relatório — cada um escolhe de uma rota ao país inteiro, no botão Exibindo."
+                >
+                  <MapPin className="w-4 h-4 flex-shrink-0" />
+                  <span className="text-sm">
+                    Escopo{' '}
+                    <span className="hidden sm:inline">no próprio relatório</span>
+                  </span>
+                </div>
+              ) : (
+                <SeletorLocalizacao />
+              )}
             </div>
 
             {/* Right side */}
