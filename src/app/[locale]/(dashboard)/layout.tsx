@@ -17,7 +17,9 @@ import {
   ShieldCheck,
   Tag,
   BarChart3,
-  MapPin
+  MapPin,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
@@ -89,6 +91,41 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, profile, localizacao, temPermissao } = useUser();
   const temLocalizacao = !!localizacao.empresa_id;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  /**
+   * A barra recolhida: só os ícones, 64px em vez de 256.
+   *
+   * Pedido de 09/10/2026, para telas pequenas — e as telas deste sistema são
+   * largas por natureza: o dia a dia do relatório tem doze colunas e o extrato
+   * do financeiro divide a tela em duas. Os 192px que a barra devolve são
+   * duas colunas a mais.
+   *
+   * SÓ VALE DO `lg` PARA CIMA. No celular a barra já é gaveta: ou está
+   * fechada, ou está aberta por cima do conteúdo, e recolher não devolve
+   * espaço nenhum.
+   *
+   * Começa aberta e lê a preferência num efeito, não no estado inicial: ler
+   * `localStorage` na primeira renderização faria o servidor e o navegador
+   * produzirem HTML diferente, e o React reclama. O custo é um piscar para
+   * quem recolheu.
+   */
+  const [recolhida, setRecolhida] = useState(false);
+
+  useEffect(() => {
+    try {
+      setRecolhida(localStorage.getItem('apprutea:barra-recolhida') === '1');
+    } catch {
+      // Navegação anônima com armazenamento bloqueado: segue aberta.
+    }
+  }, []);
+
+  const alternarBarra = () => {
+    setRecolhida((v) => {
+      const proxima = !v;
+      try { localStorage.setItem('apprutea:barra-recolhida', proxima ? '1' : '0'); } catch { /* idem */ }
+      return proxima;
+    });
+  };
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [userEmail, setUserEmail] = useState('');
   const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
@@ -123,17 +160,22 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
       {/* Sidebar */}
       <aside className={`
-        fixed top-0 left-0 z-50 h-full w-64 bg-[#1e2a3b] text-white transform transition-transform duration-300 ease-in-out
+        fixed top-0 left-0 z-50 h-full w-64 bg-[#1e2a3b] text-white flex flex-col
+        transform transition-all duration-300 ease-in-out
         lg:translate-x-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        ${recolhida ? 'lg:w-16' : 'lg:w-64'}
       `}>
-        {/* Logo */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-white/10">
+        {/* Logo. Recolhida, sobra o distintivo — e ele continua do mesmo
+            tamanho, para a barra não parecer outra coisa. */}
+        <div className={`flex items-center h-16 border-b border-white/10 flex-shrink-0 ${
+          recolhida ? 'lg:justify-center lg:px-0 px-4 justify-between' : 'justify-between px-4'
+        }`}>
           <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center">
+            <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-sm">A</span>
             </div>
-            <span className="text-xl font-bold">Apprutea</span>
+            <span className={`text-xl font-bold ${recolhida ? 'lg:hidden' : ''}`}>Apprutea</span>
           </div>
           <button 
             className="lg:hidden p-1 hover:bg-white/10 rounded"
@@ -147,26 +189,37 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 overflow-y-auto py-4">
           {menuGroups.map((group) => (
             <div key={group.title} className="mb-6">
-              <div className="px-4 mb-2">
+              {/* Recolhida, o título do grupo não cabe — vira uma divisória,
+                  que preserva o agrupamento sem o texto. */}
+              <div className={`px-4 mb-2 ${recolhida ? 'lg:hidden' : ''}`}>
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
                   {group.title}
                 </span>
               </div>
+              <div className={`hidden mx-3 mb-2 border-t border-white/10 ${recolhida ? 'lg:block' : ''}`} />
               <ul className="space-y-1 px-2">
                 {group.items.filter(item => !item.roles || item.roles.includes(profile?.tipo_usuario || '')).map((item) => {
                   const habilitado = (temLocalizacao || item.sempreAtivo) &&
                     (!item.modulo || temPermissao(item.modulo));
                   const ativo = isActive(item.href);
 
+                  // Recolhida, o ícone é tudo o que resta — então o nome vai
+                  // para o `title`, senão quem não decora os símbolos fica sem
+                  // saber onde clicar.
+                  const caixa = `flex items-center gap-3 rounded-lg transition-colors ${
+                    recolhida ? 'lg:justify-center lg:px-0 px-3' : 'px-3'
+                  } py-2.5`;
+                  const rotulo = `font-medium ${recolhida ? 'lg:hidden' : ''}`;
+
                   if (!habilitado) {
                     return (
                       <li key={item.key}>
                         <div
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-500 cursor-not-allowed select-none opacity-40"
-                          title="Selecione uma empresa para acessar"
+                          className={`${caixa} text-gray-500 cursor-not-allowed select-none opacity-40`}
+                          title={recolhida ? `${item.label} — selecione uma empresa` : 'Selecione uma empresa para acessar'}
                         >
                           {item.icon}
-                          <span className="font-medium">{item.label}</span>
+                          <span className={rotulo}>{item.label}</span>
                         </div>
                       </li>
                     );
@@ -176,8 +229,9 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                     <li key={item.key}>
                       <Link
                         href={item.href}
+                        title={recolhida ? item.label : undefined}
                         className={`
-                          flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors
+                          ${caixa}
                           ${ativo
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-white/10 hover:text-white'}
@@ -185,7 +239,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                         onClick={() => setSidebarOpen(false)}
                       >
                         {item.icon}
-                        <span className="font-medium">{item.label}</span>
+                        <span className={rotulo}>{item.label}</span>
                       </Link>
                     </li>
                   );
@@ -194,10 +248,27 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             </div>
           ))}
         </nav>
+
+        {/* O botão fica no rodapé e não no cabeçalho: recolhida, a barra tem
+            64px e o cabeçalho já é do distintivo. Aqui ele sempre cabe, e
+            sempre no mesmo lugar. */}
+        <button
+          onClick={alternarBarra}
+          aria-label={recolhida ? 'Expandir a barra' : 'Recolher a barra'}
+          title={recolhida ? 'Expandir' : 'Recolher'}
+          className={`hidden lg:flex items-center gap-3 py-3 border-t border-white/10 text-gray-400 hover:text-white hover:bg-white/5 transition-colors flex-shrink-0 ${
+            recolhida ? 'justify-center px-0' : 'px-5'
+          }`}
+        >
+          {recolhida
+            ? <PanelLeftOpen className="w-5 h-5" />
+            : <PanelLeftClose className="w-5 h-5" />}
+          {!recolhida && <span className="text-sm">Recolher</span>}
+        </button>
       </aside>
 
       {/* Main Content Area */}
-      <div className="lg:pl-64 flex flex-col h-full">
+      <div className={`flex flex-col h-full transition-all duration-300 ${recolhida ? 'lg:pl-16' : 'lg:pl-64'}`}>
         {/* Header - Fixed */}
         <header className="flex-shrink-0 bg-white border-b border-gray-200 z-30">
           <div className="flex items-center justify-between h-16 px-4 lg:px-6">
