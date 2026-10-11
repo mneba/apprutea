@@ -113,48 +113,47 @@ type Aba = 'dia' | 'cobranca' | 'venda' | 'lucro' | 'micro' | 'mov';
 /**
  * A ajuda deste relatório.
  *
- * Não explica botão: explica o que o número significa, o que ele NÃO
- * significa, e as armadilhas que já custaram tempo. Quem souber isto lê o
- * relatório sozinho.
+ * Os totalizadores se ilustram com o próprio selo e o próprio nome — ler
+ * "o totalizador Microseguro" obrigaria a procurar na tela qual é.
  */
 const AJUDA: SecaoAjuda[] = [
   {
-    titulo: 'O que este relatório responde',
     itens: [
-      'Consolida as liquidações diárias de um intervalo, de uma rota ao país inteiro. Substitui as abas Liquidacion e Resumen do sistema antigo, que mostravam o mesmo dado em granularidades diferentes.',
-      '**Quanto a rota cobrou, emprestou e lucrou** no período, com o caixa e a carteira nas duas pontas.',
+      { icone: Calendar, selo: 'bg-emerald-50 text-emerald-600', nome: 'Dia a dia',
+        texto: 'Cada dia do período, com caixa e carteira nas duas pontas.' },
+      { icone: ArrowDownToLine, selo: 'bg-emerald-50 text-emerald-600', nome: 'Cobrança',
+        texto: 'O que voltou. Só parcela — aporte não entra.' },
+      { icone: ArrowUpFromLine, selo: 'bg-blue-50 text-blue-600', nome: 'Venda',
+        texto: 'O que saiu em empréstimo, com a carteira que ela acumula.' },
+      { icone: TrendingUp, selo: 'bg-emerald-50 text-emerald-600', nome: 'Lucro',
+        texto: 'Juro recebido. NÃO é cobrado menos emprestado.' },
+      { icone: Shield, selo: 'bg-amber-50 text-amber-600', nome: 'Microseguro',
+        texto: 'Conta separada: a venda entra nela, a retirada vai para a rota.' },
+      { icone: ArrowRightLeft, selo: 'bg-purple-50 text-purple-600', nome: 'Movimentações',
+        texto: 'Despesa, aporte, transferência e ajuste — fora cobrança e empréstimo.' },
     ],
   },
   {
-    titulo: 'Como ler',
+    titulo: 'Onde engana',
     itens: [
-      '**Cobrança e venda não se comparam.** São fluxos diferentes: um é dinheiro que volta, o outro é dinheiro que sai. Cobrar mais que emprestar não é bom nem ruim por si — depende do tamanho da carteira.',
-      '**Lucro é juro RECEBIDO, não a diferença entre os dois.** É a parte de juro dentro do que foi efetivamente abatido no período. Por isso a margem é sobre o cobrado.',
-      '**Caixa e carteira são do último dia de cada rota, somados entre rotas.** Nunca somam entre dias — somar o caixa de segunda com o de terça daria um número que nunca existiu.',
-      '**Clientes ativos é a BASE, clientes pagos é o MOVIMENTO.** O primeiro conta pessoas nas rotas; o segundo conta atendimentos, e soma entre dias — o mesmo cliente pago em dez dias conta dez.',
-    ],
-  },
-  {
-    titulo: 'Onde ele engana',
-    itens: [
-      '**Não existe percentual atingido no período, de propósito.** Somar o esperado ao longo de semanas mistura coisas que não se comparam: a parcela que vencia no dia 3 e foi paga no dia 10 entra nos dois lados. Numa rota real deu 107%, com dias de 231% e 419%. No dia a dia o percentual fica, porque ali significa o que o vendedor entende.',
-      '**Aporte não é cobrança.** O capital que entra para a rota começar aparece em linha própria, nunca no cobrado. Até 09/10/2026 entrava — a Rosy chegou a mostrar 10.324,00 cobrados num dia em que cobrou 324,00.',
-      '**Transferência não entra no resultado.** Ela sai de uma conta e entra em outra: o resultado do período é o mesmo com ou sem ela.',
-      '**Dia com dinheiro e sem liquidação aparece marcado no fim do dia a dia.** Ele não conta como dia trabalhado, e é por isso que o total do período pode não fechar com a soma das linhas. Está escrito na tela justamente para não virar dúvida.',
-      '**Microseguro é conta separada da rota.** A venda cai na conta dele e por isso não aparece em entradas; a retirada sai dela para a conta da rota.',
+      '**Cobrança e venda não se comparam.** Uma é dinheiro que volta, a outra é dinheiro que sai.',
+      '**Não há percentual no período, de propósito.** Somar o esperado de semanas mistura a parcela que vencia no dia 3 e foi paga no dia 10 — numa rota real deu 107%, com dias de 231%. No dia a dia ele fica, porque ali significa a meta daquele dia.',
+      '**Caixa e carteira são do último dia de cada rota.** Somam entre rotas, nunca entre dias.',
+      '**Clientes ativos é a base; clientes pagos é o movimento.** O segundo soma entre dias: o mesmo cliente pago em dez dias conta dez.',
+      '**Transferência e aporte não entram no resultado.** Trocam de bolso ou são capital, não operação.',
+      '**Dia com dinheiro e sem liquidação aparece marcado no fim da lista.** Não conta como dia trabalhado — por isso o total pode não fechar com a soma das linhas.',
     ],
   },
   {
     titulo: 'Boas práticas',
     itens: [
       '**Compare meses fechados.** Mês corrente contra mês cheio sempre parece queda.',
-      '**Desmarque rotas para isolar.** As pastilhas no topo tiram e devolvem rotas do cálculo sem gerar de novo — é o jeito mais curto de achar qual rota puxou o resultado.',
-      '**O CSV traz colunas que a tela esconde.** Transferências, ajustes e microseguro vão sempre no arquivo, mesmo zerados, para empilhar dois períodos numa planilha sem o cabeçalho mudar.',
-      '**Clique nos totalizadores.** Cada número É a lista somada — e a lista explica o número.',
+      '**Desligue rotas para isolar.** É o jeito mais curto de achar qual puxou o resultado.',
+      '**Clique no totalizador.** O número É a lista somada, e a lista o explica.',
+      '**O CSV traz colunas que a tela esconde**, sempre as mesmas, para empilhar períodos numa planilha.',
     ],
   },
 ];
-
 
 /** Um indicador da faixa do topo: rótulo miúdo em cima, valor embaixo. */
 function Indicador({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {

@@ -101,6 +101,8 @@ type Parametro = 'dias_sem_contato' | 'dias_por_vencer' | 'periodo' | 'principal
 
 interface Preset {
   id: string;
+  /** Uma linha, na janela de ajuda. O botão se ilustra sozinho. */
+  ajuda: string;
   nome: string;
   sub: string;
   icone: React.ElementType;
@@ -121,57 +123,68 @@ interface Params {
 
 const PRESETS: Preset[] = [
   {
-    id: 'ativos', nome: 'Ativos', sub: 'com empréstimo em aberto',
+    id: 'ativos',
+    ajuda: 'Tem empréstimo em aberto. É a base da rota.', nome: 'Ativos', sub: 'com empréstimo em aberto',
     icone: Users, selo: 'bg-emerald-50 text-emerald-600', parametro: null,
     filtros: () => ({ situacao: 'COM_ABERTO' }),
   },
   {
-    id: 'atrasados', nome: 'Atrasados', sub: 'em dias de cobrança',
+    id: 'atrasados',
+    ajuda: 'Deve hoje. As faixas no topo mostram a gravidade.', nome: 'Atrasados', sub: 'em dias de cobrança',
     icone: AlertTriangle, selo: 'bg-red-50 text-red-600', parametro: null,
     filtros: () => ({ situacao: 'COM_ABERTO', atrasoMin: 1 }),
   },
   {
-    id: 'vencidos', nome: 'Vencidos', sub: 'passou do fim e ainda deve',
+    id: 'vencidos',
+    ajuda: 'Passou do fim do contrato e ainda deve. É cobrança.', nome: 'Vencidos', sub: 'passou do fim e ainda deve',
     icone: Clock, selo: 'bg-red-50 text-red-600', parametro: null,
     filtros: () => ({ situacao: 'COM_ABERTO', venceAteDias: -1 }),
   },
   {
-    id: 'porVencer', nome: 'Por vencer', sub: 'a fila de renovação',
+    id: 'porVencer',
+    ajuda: 'Está terminando. É a lista que gera venda — rode toda semana.', nome: 'Por vencer', sub: 'a fila de renovação',
     icone: CalendarClock, selo: 'bg-blue-50 text-blue-600', parametro: 'dias_por_vencer',
     filtros: (p) => ({ situacao: 'COM_ABERTO', venceDeDias: 0, venceAteDias: p.diasPorVencer }),
   },
   {
-    id: 'inativos', nome: 'Inativos', sub: 'sem nada em aberto',
+    id: 'inativos',
+    ajuda: 'Não tem nada em aberto.', nome: 'Inativos', sub: 'sem nada em aberto',
     icone: UserX, selo: 'bg-gray-100 text-gray-500', parametro: null,
     filtros: () => ({ situacao: 'SEM_ABERTO', ordenar: 'PAGAMENTO' }),
   },
   {
-    id: 'semRenovar', nome: 'Sem renovar', sub: 'parou de voltar',
+    id: 'semRenovar',
+    ajuda: 'Inativo que não paga há N dias. Quem quitou ontem não entra.', nome: 'Sem renovar', sub: 'parou de voltar',
     icone: UserMinus, selo: 'bg-amber-50 text-amber-600', parametro: 'dias_sem_contato',
     filtros: (p) => ({ situacao: 'SEM_ABERTO', semContatoDias: p.diasSemContato, ordenar: 'PAGAMENTO' }),
   },
   {
-    id: 'pagaram', nome: 'Que pagaram', sub: 'no intervalo, parcial inclusive',
+    id: 'pagaram',
+    ajuda: 'Pagou no intervalo. Parcial conta.', nome: 'Que pagaram', sub: 'no intervalo, parcial inclusive',
     icone: HandCoins, selo: 'bg-emerald-50 text-emerald-600', parametro: 'periodo',
     filtros: (p) => ({ situacao: 'TODOS', pagouDe: p.de, pagouAte: p.ate, ordenar: 'SALDO' }),
   },
   {
-    id: 'credito', nome: 'Crédito acima de', sub: 'pelo principal contratado',
+    id: 'credito',
+    ajuda: 'Principal a partir do valor. Combine com Atrasados.', nome: 'Crédito acima de', sub: 'pelo principal contratado',
     icone: TrendingUp, selo: 'bg-violet-50 text-violet-600', parametro: 'principal',
     filtros: (p) => ({ situacao: 'COM_ABERTO', principalMin: p.principalMin, ordenar: 'SALDO' }),
   },
   {
-    id: 'juros', nome: 'Por interesse', sub: 'faixa de taxa',
+    id: 'juros',
+    ajuda: 'Faixa de taxa.', nome: 'Por interesse', sub: 'faixa de taxa',
     icone: Percent, selo: 'bg-violet-50 text-violet-600', parametro: 'taxa',
     filtros: (p) => ({ situacao: 'COM_ABERTO', taxaMin: p.taxaMin, taxaMax: p.taxaMax, ordenar: 'SALDO' }),
   },
   {
-    id: 'cancelados', nome: 'Cancelados', sub: 'tem empréstimo cancelado',
+    id: 'cancelados',
+    ajuda: 'Tem empréstimo cancelado.', nome: 'Cancelados', sub: 'tem empréstimo cancelado',
     icone: Ban, selo: 'bg-gray-100 text-gray-500', parametro: null,
     filtros: () => ({ situacao: 'CANCELADO', ordenar: 'NOME' }),
   },
   {
-    id: 'historico', nome: 'Histórico', sub: 'todos, em aberto ou não',
+    id: 'historico',
+    ajuda: 'Todos, sem filtro de situação.', nome: 'Histórico', sub: 'todos, em aberto ou não',
     icone: History, selo: 'bg-gray-100 text-gray-500', parametro: null,
     filtros: () => ({ situacao: 'TODOS', ordenar: 'SALDO' }),
   },
@@ -195,50 +208,36 @@ const FREQ: Record<string, string> = {
 /**
  * A ajuda deste relatório.
  *
- * Não explica botão: explica o que o número significa, o que ele NÃO
- * significa, e as armadilhas que já custaram tempo.
+ * O bloco dos presets é montado a partir do próprio `PRESETS`: a ilustração
+ * É o botão, e por isso não tem como divergir dele.
  */
 const AJUDA: SecaoAjuda[] = [
   {
-    titulo: 'O que este relatório responde',
-    itens: [
-      'Substitui os dez relatórios de clientes do sistema antigo. Eles diferiam só no predicado, então aqui são presets da mesma consulta — e, diferente de lá, dá para combinar: escolha Atrasados e digite um crédito mínimo, e você tem "atrasados com crédito acima de mil", que dez telas separadas nunca permitiriam.',
-      '**É uma foto numa data, não um período.** Por isso o cabeçalho tem uma data só. "Quantos atrasados houve em setembro" não tem resposta única: o mesmo cliente esteve atrasado em dias diferentes por valores diferentes. A pergunta que tem resposta é "quem está atrasado NESTE dia".',
-    ],
+    itens: PRESETS.map((p) => ({
+      icone: p.icone, selo: p.selo, nome: p.nome, texto: p.ajuda,
+    })),
   },
   {
-    titulo: 'Quando usar cada um',
+    titulo: 'Onde engana',
     itens: [
-      '**Ativos / Inativos** — quem tem e quem não tem empréstimo em aberto. É a base da rota.',
-      '**Atrasados** — quem está devendo hoje, ordenado pelo pior. As faixas no topo mostram a distribuição: muita gente com 1 a 3 dias é rotina; muita gente acima de 30 é carteira travando.',
-      '**Vencidos** — passou do fim do contrato e ainda deve. É cobrança, não venda.',
-      '**Por vencer** — está terminando. **É a única lista que gera venda**, e a que some se você olhar só os vencidos: como os vencidos dominam a ordem por atraso, quem está prestes a quitar nunca aparece primeiro. Rode toda segunda.',
-      '**Sem renovar** — quitou e não voltou. É um subconjunto dos inativos: só quem está sem pagar há N dias. Quem quitou ontem é inativo, não é problema.',
-      '**Que pagaram** — o único preset de período, e o único que mostra a coluna Pago. Pagamento parcial conta.',
-      '**Crédito acima de / Por interesse** — recortes de carteira, para achar concentração de risco ou de taxa.',
-      '**Cancelados / Histórico** — quem tem empréstimo cancelado, e todos sem filtro de situação.',
-    ],
-  },
-  {
-    titulo: 'Onde ele engana',
-    itens: [
-      '**Atraso é em DIAS DE COBRANÇA, não de calendário.** Domingo em rota que não trabalha domingo e feriado lançado na rota não contam — ninguém foi cobrar. É a mesma regra do aparelho do vendedor, de propósito: se os dois contassem diferente, você e ele discutiriam sobre quem está certo.',
-      '**O dia do próprio vencimento não é atraso.** Parcela que vence hoje está no prazo.',
-      '**Cliente com dois empréstimos mostra o PIOR atraso**, não a média. Quem deve em dois é cobrado pelo mais velho.',
-      '**Sem renovar mede o último PAGAMENTO**, não a data de quitação. Na prática é a mesma coisa, e pega também quem parou no meio sem quitar.',
-      '**Os prazos são campo, não regra fixa.** Os 30 dias do sem renovar e os 15 do por vencer são padrão; troque no cabeçalho da lista e a consulta refaz.',
+      '**Atraso conta dias de cobrança.** Domingo em rota que não trabalha domingo e feriado da rota não contam. É a mesma regra do aparelho do vendedor.',
+      '**O dia do vencimento não é atraso.** Parcela que vence hoje está no prazo.',
+      '**Dois empréstimos mostram o pior atraso**, não a média.',
+      '**É foto na data, não período.** Só "Que pagaram" usa intervalo.',
+      '**Os prazos são campo, não regra.** 30 e 15 dias são padrão; troque no cabeçalho da lista.',
     ],
   },
   {
     titulo: 'Boas práticas',
     itens: [
-      '**Marque e imprima.** A linha inteira marca; o botão Imprimir sai com quatro colunas — cliente, tipo, atraso e quanto deve — em formato que o vendedor lê no telefone. Sem marcação, imprime a página.',
-      '**Olhe o tipo junto do atraso.** Três dias num diário e num mensal são problemas de tamanhos diferentes.',
-      '**Use as pastilhas de rota para comparar.** Desligar rotas refaz os números sem gerar de novo.',
-      '**O ícone de nota abre o que o vendedor escreveu.** Ele costuma explicar o atraso melhor que qualquer coluna.',
+      '**Marque e imprima.** A linha inteira marca. A folha sai com quatro colunas, para o vendedor ler no telefone.',
+      '**Olhe o tipo junto do atraso.** Três dias num diário e num mensal não são a mesma coisa.',
+      '**Desligue rotas para comparar.** Refaz os números sem gerar de novo.',
+      '**Abra a nota.** O vendedor costuma explicar o atraso melhor que qualquer coluna.',
     ],
   },
 ];
+
 
 const campo =
   'border border-gray-200 rounded-md px-2 py-1 text-[11.5px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
@@ -637,8 +636,11 @@ export default function RelatorioClientesPage() {
                         <p.icone className="w-3.5 h-3.5" />
                       </span>
                       <span className="text-[12.5px] font-semibold text-gray-900 truncate">{p.nome}</span>
+                      {/* Sem contagem aqui: só o preset ativo teria uma, e
+                          um número solto numa coluna de onze parece defeito.
+                          A contagem vive na faixa do topo e no rodapé. */}
                       <span className="col-start-2 text-[10.5px] text-gray-400 truncate">
-                        {ativo && t ? `${int(t.clientes)} · ${p.sub}` : p.sub}
+                        {p.sub}
                       </span>
                     </button>
                   );
