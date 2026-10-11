@@ -50,6 +50,7 @@ import {
   ChevronDown, Download, Globe, Loader2, MapPin, Shield, TrendingUp,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AjudaRelatorio, { type SecaoAjuda } from '@/components/relatorios/AjudaRelatorio';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
 import PainelCobranca from '@/components/relatorios/PainelCobranca';
 import PainelLucro from '@/components/relatorios/PainelLucro';
@@ -108,6 +109,52 @@ const corPct = (p: number) =>
   p >= 100 ? 'bg-emerald-500' : p >= 70 ? 'bg-blue-500' : p >= 50 ? 'bg-amber-500' : 'bg-red-500';
 
 type Aba = 'dia' | 'cobranca' | 'venda' | 'lucro' | 'micro' | 'mov';
+
+/**
+ * A ajuda deste relatório.
+ *
+ * Não explica botão: explica o que o número significa, o que ele NÃO
+ * significa, e as armadilhas que já custaram tempo. Quem souber isto lê o
+ * relatório sozinho.
+ */
+const AJUDA: SecaoAjuda[] = [
+  {
+    titulo: 'O que este relatório responde',
+    itens: [
+      'Consolida as liquidações diárias de um intervalo, de uma rota ao país inteiro. Substitui as abas Liquidacion e Resumen do sistema antigo, que mostravam o mesmo dado em granularidades diferentes.',
+      '**Quanto a rota cobrou, emprestou e lucrou** no período, com o caixa e a carteira nas duas pontas.',
+    ],
+  },
+  {
+    titulo: 'Como ler',
+    itens: [
+      '**Cobrança e venda não se comparam.** São fluxos diferentes: um é dinheiro que volta, o outro é dinheiro que sai. Cobrar mais que emprestar não é bom nem ruim por si — depende do tamanho da carteira.',
+      '**Lucro é juro RECEBIDO, não a diferença entre os dois.** É a parte de juro dentro do que foi efetivamente abatido no período. Por isso a margem é sobre o cobrado.',
+      '**Caixa e carteira são do último dia de cada rota, somados entre rotas.** Nunca somam entre dias — somar o caixa de segunda com o de terça daria um número que nunca existiu.',
+      '**Clientes ativos é a BASE, clientes pagos é o MOVIMENTO.** O primeiro conta pessoas nas rotas; o segundo conta atendimentos, e soma entre dias — o mesmo cliente pago em dez dias conta dez.',
+    ],
+  },
+  {
+    titulo: 'Onde ele engana',
+    itens: [
+      '**Não existe percentual atingido no período, de propósito.** Somar o esperado ao longo de semanas mistura coisas que não se comparam: a parcela que vencia no dia 3 e foi paga no dia 10 entra nos dois lados. Numa rota real deu 107%, com dias de 231% e 419%. No dia a dia o percentual fica, porque ali significa o que o vendedor entende.',
+      '**Aporte não é cobrança.** O capital que entra para a rota começar aparece em linha própria, nunca no cobrado. Até 09/10/2026 entrava — a Rosy chegou a mostrar 10.324,00 cobrados num dia em que cobrou 324,00.',
+      '**Transferência não entra no resultado.** Ela sai de uma conta e entra em outra: o resultado do período é o mesmo com ou sem ela.',
+      '**Dia com dinheiro e sem liquidação aparece marcado no fim do dia a dia.** Ele não conta como dia trabalhado, e é por isso que o total do período pode não fechar com a soma das linhas. Está escrito na tela justamente para não virar dúvida.',
+      '**Microseguro é conta separada da rota.** A venda cai na conta dele e por isso não aparece em entradas; a retirada sai dela para a conta da rota.',
+    ],
+  },
+  {
+    titulo: 'Boas práticas',
+    itens: [
+      '**Compare meses fechados.** Mês corrente contra mês cheio sempre parece queda.',
+      '**Desmarque rotas para isolar.** As pastilhas no topo tiram e devolvem rotas do cálculo sem gerar de novo — é o jeito mais curto de achar qual rota puxou o resultado.',
+      '**O CSV traz colunas que a tela esconde.** Transferências, ajustes e microseguro vão sempre no arquivo, mesmo zerados, para empilhar dois períodos numa planilha sem o cabeçalho mudar.',
+      '**Clique nos totalizadores.** Cada número É a lista somada — e a lista explica o número.',
+    ],
+  },
+];
+
 
 /** Um indicador da faixa do topo: rótulo miúdo em cima, valor embaixo. */
 function Indicador({ rotulo, children }: { rotulo: string; children: React.ReactNode }) {
@@ -178,6 +225,7 @@ export default function LiquidacaoPeriodoPage() {
   const [erro, setErro] = useState<string | null>(null);
   const [aba, setAba] = useState<Aba>('dia');
   const [escopoAberto, setEscopoAberto] = useState(false);
+  const [ajudaAberta, setAjudaAberta] = useState(false);
   const caixaEscopo = useRef<HTMLDivElement>(null);
 
   // O recorte usado na última geração, não o marcado agora. Sem isso, mexer na
@@ -399,9 +447,18 @@ export default function LiquidacaoPeriodoPage() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-[22px] font-bold text-gray-900 leading-tight">
-              Liquidação por período
-            </h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-[22px] font-bold text-gray-900 leading-tight">
+                Liquidação por período
+              </h1>
+              <AjudaRelatorio
+                titulo="Liquidação por período"
+                secoes={AJUDA}
+                aberta={ajudaAberta}
+                onAbrir={() => setAjudaAberta(true)}
+                onFechar={() => setAjudaAberta(false)}
+              />
+            </div>
             {/* "Exibindo:", como na tela do Financeiro. O popover da árvore
                 escolhe o escopo; as pastilhas abaixo ligam e desligam. */}
             <div className="relative mt-0.5" ref={caixaEscopo}>

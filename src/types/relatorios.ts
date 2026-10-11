@@ -451,6 +451,7 @@ export interface LinhaCliente {
   cliente_documento: string | null;
   telefone: string | null;
   cliente_status: string;
+  rota_id: string;
   rota_nome: string | null;
   /** Notas `ATIVA` do cliente — a mesma contagem da Liquidação Diária. */
   notas: number;

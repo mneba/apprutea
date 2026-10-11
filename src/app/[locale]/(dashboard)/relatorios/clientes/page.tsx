@@ -35,7 +35,9 @@ import {
   TrendingUp, UserMinus, UserX, Users,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import AjudaRelatorio, { type SecaoAjuda } from '@/components/relatorios/AjudaRelatorio';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
+import ModalNotasRelatorio from '@/components/relatorios/ModalNotasRelatorio';
 import { Paginacao } from '@/components/relatorios/ListaRelatorio';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
@@ -189,6 +191,55 @@ const FREQ: Record<string, string> = {
   FLEXIVEL: 'Flexível',
 };
 
+
+/**
+ * A ajuda deste relatório.
+ *
+ * Não explica botão: explica o que o número significa, o que ele NÃO
+ * significa, e as armadilhas que já custaram tempo.
+ */
+const AJUDA: SecaoAjuda[] = [
+  {
+    titulo: 'O que este relatório responde',
+    itens: [
+      'Substitui os dez relatórios de clientes do sistema antigo. Eles diferiam só no predicado, então aqui são presets da mesma consulta — e, diferente de lá, dá para combinar: escolha Atrasados e digite um crédito mínimo, e você tem "atrasados com crédito acima de mil", que dez telas separadas nunca permitiriam.',
+      '**É uma foto numa data, não um período.** Por isso o cabeçalho tem uma data só. "Quantos atrasados houve em setembro" não tem resposta única: o mesmo cliente esteve atrasado em dias diferentes por valores diferentes. A pergunta que tem resposta é "quem está atrasado NESTE dia".',
+    ],
+  },
+  {
+    titulo: 'Quando usar cada um',
+    itens: [
+      '**Ativos / Inativos** — quem tem e quem não tem empréstimo em aberto. É a base da rota.',
+      '**Atrasados** — quem está devendo hoje, ordenado pelo pior. As faixas no topo mostram a distribuição: muita gente com 1 a 3 dias é rotina; muita gente acima de 30 é carteira travando.',
+      '**Vencidos** — passou do fim do contrato e ainda deve. É cobrança, não venda.',
+      '**Por vencer** — está terminando. **É a única lista que gera venda**, e a que some se você olhar só os vencidos: como os vencidos dominam a ordem por atraso, quem está prestes a quitar nunca aparece primeiro. Rode toda segunda.',
+      '**Sem renovar** — quitou e não voltou. É um subconjunto dos inativos: só quem está sem pagar há N dias. Quem quitou ontem é inativo, não é problema.',
+      '**Que pagaram** — o único preset de período, e o único que mostra a coluna Pago. Pagamento parcial conta.',
+      '**Crédito acima de / Por interesse** — recortes de carteira, para achar concentração de risco ou de taxa.',
+      '**Cancelados / Histórico** — quem tem empréstimo cancelado, e todos sem filtro de situação.',
+    ],
+  },
+  {
+    titulo: 'Onde ele engana',
+    itens: [
+      '**Atraso é em DIAS DE COBRANÇA, não de calendário.** Domingo em rota que não trabalha domingo e feriado lançado na rota não contam — ninguém foi cobrar. É a mesma regra do aparelho do vendedor, de propósito: se os dois contassem diferente, você e ele discutiriam sobre quem está certo.',
+      '**O dia do próprio vencimento não é atraso.** Parcela que vence hoje está no prazo.',
+      '**Cliente com dois empréstimos mostra o PIOR atraso**, não a média. Quem deve em dois é cobrado pelo mais velho.',
+      '**Sem renovar mede o último PAGAMENTO**, não a data de quitação. Na prática é a mesma coisa, e pega também quem parou no meio sem quitar.',
+      '**Os prazos são campo, não regra fixa.** Os 30 dias do sem renovar e os 15 do por vencer são padrão; troque no cabeçalho da lista e a consulta refaz.',
+    ],
+  },
+  {
+    titulo: 'Boas práticas',
+    itens: [
+      '**Marque e imprima.** A linha inteira marca; o botão Imprimir sai com quatro colunas — cliente, tipo, atraso e quanto deve — em formato que o vendedor lê no telefone. Sem marcação, imprime a página.',
+      '**Olhe o tipo junto do atraso.** Três dias num diário e num mensal são problemas de tamanhos diferentes.',
+      '**Use as pastilhas de rota para comparar.** Desligar rotas refaz os números sem gerar de novo.',
+      '**O ícone de nota abre o que o vendedor escreveu.** Ele costuma explicar o atraso melhor que qualquer coluna.',
+    ],
+  },
+];
+
 const campo =
   'border border-gray-200 rounded-md px-2 py-1 text-[11.5px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
@@ -204,6 +255,9 @@ export default function RelatorioClientesPage() {
   const [pagina, setPagina] = useState(0);
   const [busca, setBusca] = useState('');
   const [escopoAberto, setEscopoAberto] = useState(false);
+  const [ajudaAberta, setAjudaAberta] = useState(false);
+  /** O cliente cujas notas estão abertas. */
+  const [notasDe, setNotasDe] = useState<LinhaCliente | null>(null);
   const caixaEscopo = useRef<HTMLDivElement>(null);
 
   /**
@@ -417,7 +471,16 @@ export default function RelatorioClientesPage() {
             <ArrowLeft className="w-4 h-4" />
           </Link>
           <div>
-            <h1 className="text-[22px] font-bold text-gray-900 leading-tight">Clientes</h1>
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-[22px] font-bold text-gray-900 leading-tight">Clientes</h1>
+              <AjudaRelatorio
+                titulo="Relatório de clientes"
+                secoes={AJUDA}
+                aberta={ajudaAberta}
+                onAbrir={() => setAjudaAberta(true)}
+                onFechar={() => setAjudaAberta(false)}
+              />
+            </div>
             <div className="relative mt-0.5" ref={caixaEscopo}>
               <button
                 onClick={() => setEscopoAberto((v) => !v)}
@@ -752,12 +815,13 @@ export default function RelatorioClientesPage() {
                                   notas `ATIVA` — arquivada não é recado
                                   pendente. */}
                               {l.notas > 0 && (
-                                <span
-                                  className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 align-middle"
-                                  title={`${l.notas} nota${l.notas > 1 ? 's' : ''}`}
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setNotasDe(l); }}
+                                  className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 hover:text-amber-800 hover:underline align-middle print:hidden"
+                                  title={`Ver ${l.notas} nota${l.notas > 1 ? 's' : ''}`}
                                 >
                                   <MessageSquare className="w-3 h-3" />({l.notas})
-                                </span>
+                                </button>
                               )}
                               {l.cliente_status === 'SUSPENSO' && (
                                 <span className="ml-1.5 text-[10px] font-bold uppercase px-1.5 rounded bg-red-50 text-red-700">
@@ -863,6 +927,16 @@ export default function RelatorioClientesPage() {
             </div>
           </div>
         </>
+      )}
+
+      {notasDe && (
+        <ModalNotasRelatorio
+          aberto
+          onFechar={() => setNotasDe(null)}
+          clienteId={notasDe.cliente_id}
+          clienteNome={notasDe.cliente_nome}
+          rotaId={notasDe.rota_id}
+        />
       )}
 
       {/* ══════════════════════════════════════════════════════════════
