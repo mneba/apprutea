@@ -140,7 +140,63 @@ export function ModalNovaVenda({
   const [observacoesEmprestimo, setObservacoesEmprestimo] = useState('');
   
   // === Campos específicos por frequência ===
-  const [diaSemanaCobranca, setDiaSemanaCobranca] = useState<number>(1); // Segunda
+  // Conjunto de dias da semana (desde 11/10/2026 o semanal cobra em mais de
+  // um). O escalar enviado às RPCs é o primeiro dele — derivado, nunca um
+  // segundo estado.
+  const [diasSemanaCobranca, setDiasSemanaCobranca] = useState<number[]>([1]); // Segunda
+  const diaSemanaCobranca = diasSemanaCobranca.length > 0 ? diasSemanaCobranca[0] : 1;
+
+  const alternarDiaSemanaCobranca = (dia: number) => {
+    setDiasSemanaCobranca(prev => {
+      if (prev.includes(dia)) return prev.length === 1 ? prev : prev.filter(d => d !== dia);
+      return [...prev, dia].sort((a, b) => a - b);
+    });
+  };
+
+  // DOMINGO SÓ APARECE SE A ROTA RODA DOMINGO.
+  //
+  // Esta tela nunca teve a checagem — as outras três que escolhem dia da
+  // semana têm. Dava para vender um semanal no domingo numa rota que não
+  // trabalha domingo, e as parcelas caíam num dia sem cobrança.
+  //
+  // Com o conjunto de dias (11/10/2026) ficou pior: `fn_datas_parcelas`
+  // descarta o dia 0 nessas rotas, então {Domingo, Quarta} virava só quarta
+  // no banco — calado, com a tela afirmando que domingo estava incluído.
+  // Antes, com um dia só, pelo menos o empurrão para segunda era visível.
+  //
+  // `RotaSimples`, que chega por prop, não traz `trabalha_domingo`. Uma coluna
+  // por id é o mesmo caminho que a tela de liberações já usa.
+  const [trabalhaDomingo, setTrabalhaDomingo] = useState(true);
+
+  useEffect(() => {
+    if (!isOpen || !rotaId) return;
+    let cancelado = false;
+    (async () => {
+      const supabase = createClient();
+      const { data, error } = await supabase
+        .from('rotas')
+        .select('trabalha_domingo')
+        .eq('id', rotaId)
+        .maybeSingle();
+      if (cancelado || error) return;
+      // NULL em `trabalha_domingo` é FALSO no web e no Postgres (ver CLAUDE.md).
+      setTrabalhaDomingo(!!(data as any)?.trabalha_domingo);
+    })();
+    return () => { cancelado = true; };
+  }, [isOpen, rotaId]);
+
+  const diasSemanaDisponiveis = trabalhaDomingo
+    ? DIAS_SEMANA
+    : DIAS_SEMANA.filter(d => d.value !== 0);
+
+  // A rota pode mudar de configuração — ou o modal abrir já com domingo do
+  // default antigo. Sobrando nada, cai na segunda, como no app do vendedor.
+  useEffect(() => {
+    if (trabalhaDomingo) return;
+    if (!diasSemanaCobranca.includes(0)) return;
+    const resto = diasSemanaCobranca.filter(d => d !== 0);
+    setDiasSemanaCobranca(resto.length > 0 ? resto : [1]);
+  }, [trabalhaDomingo, diasSemanaCobranca]);
   const [diaMesCobranca, setDiaMesCobranca] = useState<number>(10);
   const [diasMesCobranca, setDiasMesCobranca] = useState<number[]>([]);
   const [iniciarProximoMes, setIniciarProximoMes] = useState(false);
@@ -213,7 +269,7 @@ export function ModalNovaVenda({
       setTaxaJuros('20');
       setFrequencia('DIARIO');
       setObservacoesEmprestimo('');
-      setDiaSemanaCobranca(1);
+      setDiasSemanaCobranca([1]);
       setDiaMesCobranca(10);
       setDiasMesCobranca([]);
       setIniciarProximoMes(false);
@@ -349,6 +405,7 @@ export function ModalNovaVenda({
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
           dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : undefined,
+          dias_semana_cobranca: frequencia === 'SEMANAL' ? diasSemanaCobranca : undefined,
           dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : undefined,
           dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : undefined,
           iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
@@ -375,6 +432,7 @@ export function ModalNovaVenda({
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
           dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : undefined,
+          dias_semana_cobranca: frequencia === 'SEMANAL' ? diasSemanaCobranca : undefined,
           dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : undefined,
           dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : undefined,
           iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
@@ -401,6 +459,7 @@ export function ModalNovaVenda({
           frequencia,
           data_primeiro_vencimento: dataPrimeiroVencimento,
           dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemanaCobranca : undefined,
+          dias_semana_cobranca: frequencia === 'SEMANAL' ? diasSemanaCobranca : undefined,
           dia_mes_cobranca: frequencia === 'MENSAL' ? diaMesCobranca : undefined,
           dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasMesCobranca : undefined,
           iniciar_proximo_mes: frequencia === 'FLEXIVEL' ? iniciarProximoMes : false,
@@ -890,12 +949,12 @@ export function ModalNovaVenda({
                     Dia da Semana para Cobrança
                   </label>
                   <div className="flex flex-wrap gap-2">
-                    {DIAS_SEMANA.map(dia => (
+                    {diasSemanaDisponiveis.map(dia => (
                       <button
                         key={dia.value}
-                        onClick={() => setDiaSemanaCobranca(dia.value)}
+                        onClick={() => alternarDiaSemanaCobranca(dia.value)}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                          diaSemanaCobranca === dia.value
+                          diasSemanaCobranca.includes(dia.value)
                             ? 'bg-blue-600 text-white'
                             : 'bg-white border border-blue-200 text-blue-700 hover:bg-blue-100'
                         }`}
@@ -1070,7 +1129,10 @@ export function ModalNovaVenda({
                     1º Vencimento: <strong>{new Date(dataPrimeiroVencimento + 'T12:00:00').toLocaleDateString('pt-BR')}</strong>
                   </p>
                   {frequencia === 'SEMANAL' && (
-                    <p className="text-blue-600">Dia: <strong>{DIAS_SEMANA.find(d => d.value === diaSemanaCobranca)?.label}</strong></p>
+                    <p className="text-blue-600">
+                      {diasSemanaCobranca.length === 1 ? 'Dia' : 'Dias'}:{' '}
+                      <strong>{diasSemanaCobranca.map(d => DIAS_SEMANA.find(x => x.value === d)?.label).join(', ')}</strong>
+                    </p>
                   )}
                   {frequencia === 'MENSAL' && (
                     <p className="text-blue-600">Dia do mês: <strong>{diaMesCobranca}</strong></p>

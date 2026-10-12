@@ -168,6 +168,8 @@ export interface NovaVendaInput {
   frequencia: FrequenciaPagamento;
   data_primeiro_vencimento: string;
   dia_semana_cobranca?: number;
+  /** Conjunto de dias da semana do SEMANAL; o escalar acima e o primeiro. */
+  dias_semana_cobranca?: number[];
   dia_mes_cobranca?: number;
   dias_mes_cobranca?: number[];
   iniciar_proximo_mes?: boolean;
@@ -192,6 +194,8 @@ export interface RenovacaoInput {
   frequencia: FrequenciaPagamento;
   data_primeiro_vencimento: string;
   dia_semana_cobranca?: number;
+  /** Conjunto de dias da semana do SEMANAL; o escalar acima e o primeiro. */
+  dias_semana_cobranca?: number[];
   dia_mes_cobranca?: number;
   dias_mes_cobranca?: number[];
   iniciar_proximo_mes?: boolean;
@@ -389,6 +393,8 @@ export interface LinhaExportacaoEmprestimo {
   valor_multa: number;
   frequencia_pagamento: string | null;
   dia_semana_cobranca: number | null;
+  /** Conjunto de dias da semana do SEMANAL; o escalar acima e o primeiro. */
+  dias_semana_cobranca: number[] | null;
   dia_mes_cobranca: number | null;
   dias_mes_cobranca: number[] | null;
   /** Data da LIQUIDAÇÃO do último pagamento, não o created_at do registro. */

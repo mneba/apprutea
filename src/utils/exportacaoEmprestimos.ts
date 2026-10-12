@@ -69,14 +69,27 @@ const fmtData = (d: string | null): string => {
  * "Diário", "Semanal (Sábado)", "Mensal (Dia 10)", "Flexível (Dias 1, 15)".
  * O legado escrevia "Semanal (     Sabado  )" — com o alinhamento por espaços
  * de um relatório de terminal. Aqui sai limpo.
+ *
+ * Desde 11/10/2026 o semanal cobra em mais de um dia, e aí sai
+ * "Semanal (Terça-feira, Sexta-feira)". Por extenso, ao contrário dos cards do
+ * app: numa planilha não há largura para estourar, e abreviar obrigaria quem
+ * lê o relatório a decifrar "Ter, Sex".
  */
 const fmtFrequencia = (l: LinhaExportacaoEmprestimo, i: Idioma): string => {
   const base = FREQ[i][l.frequencia_pagamento || ''] || l.frequencia_pagamento || '';
   const diaMes = i === 'es' ? 'Día' : 'Dia';
   const diasMes = i === 'es' ? 'Días' : 'Dias';
 
-  if (l.frequencia_pagamento === 'SEMANAL' && l.dia_semana_cobranca != null) {
-    return `${base} (${DIAS_SEMANA[i][l.dia_semana_cobranca] || l.dia_semana_cobranca})`;
+  if (l.frequencia_pagamento === 'SEMANAL') {
+    // O conjunto manda; o escalar é o caminho dos empréstimos anteriores à
+    // coluna nova, que não têm `dias_semana_cobranca`.
+    const dias = l.dias_semana_cobranca?.length
+      ? l.dias_semana_cobranca
+      : (l.dia_semana_cobranca != null ? [l.dia_semana_cobranca] : []);
+
+    if (dias.length > 0) {
+      return `${base} (${dias.map(d => DIAS_SEMANA[i][d] || d).join(', ')})`;
+    }
   }
   if (l.frequencia_pagamento === 'MENSAL' && l.dia_mes_cobranca != null) {
     return `${base} (${diaMes} ${l.dia_mes_cobranca})`;
@@ -153,7 +166,7 @@ export function linhaTotal(
     parcelas_restantes: null as unknown as number,
     valor_saldo: soma(l => l.valor_saldo),
     valor_multa: soma(l => l.valor_multa),
-    frequencia_pagamento: null, dia_semana_cobranca: null,
+    frequencia_pagamento: null, dia_semana_cobranca: null, dias_semana_cobranca: null,
     dia_mes_cobranca: null, dias_mes_cobranca: null,
     ultimo_pagamento: null, status: null,
   };

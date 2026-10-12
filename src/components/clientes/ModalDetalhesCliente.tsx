@@ -537,6 +537,7 @@ function CardEmprestimo({
                 taxa_juros: emprestimo.taxa_juros,
                 frequencia_pagamento: (emprestimo as any).frequencia_pagamento || 'DIARIO',
                 dia_semana_cobranca: (emprestimo as any).dia_semana_cobranca,
+                dias_semana_cobranca: (emprestimo as any).dias_semana_cobranca,
                 dia_mes_cobranca: (emprestimo as any).dia_mes_cobranca,
                 dias_mes_cobranca: (emprestimo as any).dias_mes_cobranca,
                 status: emprestimo.emprestimo_status,

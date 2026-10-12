@@ -33,6 +33,7 @@ interface EmprestimoParaEdicao {
   taxa_juros: number;
   frequencia_pagamento: FrequenciaPagamento;
   dia_semana_cobranca?: number | null;
+  dias_semana_cobranca?: number[] | null;
   dia_mes_cobranca?: number | null;
   dias_mes_cobranca?: number[] | null;
   status: string;
@@ -100,7 +101,61 @@ export function CardEdicaoEmprestimo({
   // Estados - Frequência
   const [editando, setEditando] = useState(false);
   const [frequencia, setFrequencia] = useState<FrequenciaPagamento>(emprestimo.frequencia_pagamento);
-  const [diaSemana, setDiaSemana] = useState<number | null>(emprestimo.dia_semana_cobranca ?? null);
+  // O CONJUNTO É O ESTADO; O ESCALAR É DERIVADO.
+  //
+  // Desde 11/10/2026 o semanal cobra em mais de um dia da semana. O Postgres
+  // guarda `dias_semana_cobranca` (conjunto, autoridade do cronograma) e
+  // `dia_semana_cobranca` (o primeiro do conjunto, para os leitores antigos).
+  // Dois estados aqui divergiriam na primeira ramificação que esquecesse um
+  // deles, e o sintoma seria cronograma num dia e rótulo em outro.
+  const diasDoEmprestimo = (): number[] => {
+    const conjunto = emprestimo.dias_semana_cobranca;
+    if (conjunto && conjunto.length > 0) return [...conjunto].sort((a, b) => a - b);
+    return emprestimo.dia_semana_cobranca != null ? [emprestimo.dia_semana_cobranca] : [];
+  };
+
+  const [diasSemana, setDiasSemana] = useState<number[]>(diasDoEmprestimo);
+
+  // O CONJUNTO VEM DA TABELA, NÃO DA VIEW.
+  //
+  // `ModalDetalhesCliente` monta este empréstimo a partir de
+  // `vw_historico_emprestimos_cliente`, que expõe o escalar e não o conjunto.
+  // Acrescentar coluna a uma view exige apendá-la no fim da lista — o
+  // `CREATE OR REPLACE VIEW` recusa inserir no meio — e achar onde termina a
+  // lista de colunas de uma view longa é adivinhação sobre `FROM` que pode
+  // estar dentro de subconsulta.
+  //
+  // Uma coluna por id é leitura sem regra de negócio no meio, o mesmo padrão
+  // do `diasSemanaEmprestimos.ts` do app do vendedor. Enquanto não chega, o
+  // card mostra o escalar — nunca fica vazio.
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from('emprestimos')
+        .select('dias_semana_cobranca')
+        .eq('id', emprestimo.id)
+        .maybeSingle();
+
+      const conjunto = (data as any)?.dias_semana_cobranca as number[] | null | undefined;
+      if (!vivo || !conjunto || conjunto.length === 0) return;
+      // Não atropela edição em curso: se o admin já mexeu, o que vale é a tela.
+      setDiasSemana(prev => (editando ? prev : [...conjunto].sort((a, b) => a - b)));
+    })();
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [emprestimo.id]);
+  const diaSemana = diasSemana.length > 0 ? diasSemana[0] : null;
+
+  /** Liga/desliga um dia. O último marcado não desliga: a validação do
+   *  Salvar já exige pelo menos um, e deixar zerar só adiantaria o erro. */
+  const alternarDiaSemana = (dia: number) => {
+    setDiasSemana(prev => {
+      if (prev.includes(dia)) return prev.length === 1 ? prev : prev.filter(d => d !== dia);
+      return [...prev, dia].sort((a, b) => a - b);
+    });
+  };
   const [diaMes, setDiaMes] = useState<number | null>(emprestimo.dia_mes_cobranca ?? null);
   const [diasFlexiveis, setDiasFlexiveis] = useState<number[]>(emprestimo.dias_mes_cobranca ?? []);
   const [dataPrimeiraParcela, setDataPrimeiraParcela] = useState<string>('');
@@ -227,7 +282,7 @@ export function CardEdicaoEmprestimo({
   // Resetar ao mudar empréstimo
   useEffect(() => {
     setFrequencia(emprestimo.frequencia_pagamento);
-    setDiaSemana(emprestimo.dia_semana_cobranca ?? null);
+    setDiasSemana(diasDoEmprestimo());
     setDiaMes(emprestimo.dia_mes_cobranca ?? null);
     setDiasFlexiveis(emprestimo.dias_mes_cobranca ?? []);
     setDataPrimeiraParcela('');
@@ -250,7 +305,7 @@ export function CardEdicaoEmprestimo({
   const houveMudanca = 
     mudouFrequencia ||
     mudouValores ||
-    diaSemana !== emprestimo.dia_semana_cobranca ||
+    JSON.stringify(diasSemana) !== JSON.stringify(diasDoEmprestimo()) ||
     diaMes !== emprestimo.dia_mes_cobranca ||
     JSON.stringify(diasFlexiveis) !== JSON.stringify(emprestimo.dias_mes_cobranca || []);
 
@@ -273,8 +328,8 @@ export function CardEdicaoEmprestimo({
     if (taxaAcimaDoLimite) return false;
     
     // Validar parâmetros específicos de frequência
-    if (frequencia === 'SEMANAL' && diaSemana === null) return false;
-    if (frequencia === 'SEMANAL' && diaSemana === 0 && !trabalhaDomingo) return false;
+    if (frequencia === 'SEMANAL' && diasSemana.length === 0) return false;
+    if (frequencia === 'SEMANAL' && diasSemana.includes(0) && !trabalhaDomingo) return false;
     if (frequencia === 'MENSAL' && diaMes === null) return false;
     if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0) return false;
     
@@ -335,13 +390,13 @@ export function CardEdicaoEmprestimo({
       return;
     }
     
-    if (frequencia === 'SEMANAL' && diaSemana === null) {
-      setErro('Selecione o dia da semana para cobrança.');
+    if (frequencia === 'SEMANAL' && diasSemana.length === 0) {
+      setErro('Selecione pelo menos um dia da semana para cobrança.');
       return;
     }
 
-    if (frequencia === 'SEMANAL' && diaSemana === 0 && !trabalhaDomingo) {
-      setErro('Esta rota não trabalha aos domingos. Selecione outro dia da semana.');
+    if (frequencia === 'SEMANAL' && diasSemana.includes(0) && !trabalhaDomingo) {
+      setErro('Esta rota não trabalha aos domingos. Desmarque o domingo.');
       return;
     }
     
@@ -374,6 +429,7 @@ export function CardEdicaoEmprestimo({
         p_numero_parcelas: mudouNumeroParcelas ? numeroParcelas : null,
         p_frequencia_pagamento: frequencia,
         p_dia_semana_cobranca: frequencia === 'SEMANAL' ? diaSemana : null,
+        p_dias_semana_cobranca: frequencia === 'SEMANAL' ? diasSemana : null,
         p_dia_mes_cobranca: frequencia === 'MENSAL' ? diaMes : null,
         p_dias_mes_cobranca: frequencia === 'FLEXIVEL' ? diasFlexiveis : null,
         p_data_primeira_parcela: (mudouFrequencia || mudouValores) ? dataPrimeiraParcela : null,
@@ -408,7 +464,7 @@ export function CardEdicaoEmprestimo({
   // Cancelar edição
   const handleCancelar = () => {
     setFrequencia(emprestimo.frequencia_pagamento);
-    setDiaSemana(emprestimo.dia_semana_cobranca ?? null);
+    setDiasSemana(diasDoEmprestimo());
     setDiaMes(emprestimo.dia_mes_cobranca ?? null);
     setDiasFlexiveis(emprestimo.dias_mes_cobranca ?? []);
     setDataPrimeiraParcela('');
@@ -500,9 +556,11 @@ export function CardEdicaoEmprestimo({
               {FREQUENCIAS.find(f => f.value === frequencia)?.icone}{' '}
               {FREQUENCIAS.find(f => f.value === frequencia)?.label}
             </span>
-            {frequencia === 'SEMANAL' && diaSemana !== null && (
+            {frequencia === 'SEMANAL' && diasSemana.length > 0 && (
               <span className="text-sm text-gray-500">
-                ({DIAS_SEMANA.find(d => d.value === diaSemana)?.completo})
+                ({diasSemana.length === 1
+                  ? DIAS_SEMANA.find(d => d.value === diasSemana[0])?.completo
+                  : diasSemana.map(d => DIAS_SEMANA.find(x => x.value === d)?.label).join(', ')})
               </span>
             )}
             {frequencia === 'MENSAL' && diaMes && (
@@ -644,7 +702,7 @@ export function CardEdicaoEmprestimo({
           {frequencia === 'SEMANAL' && (
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-2">
-                Dia da Semana <span className="text-red-500">*</span>
+                Dias da Semana <span className="text-red-500">*</span>
               </label>
               <div className="grid grid-cols-7 gap-1">
                 {DIAS_SEMANA.map((dia) => {
@@ -655,11 +713,11 @@ export function CardEdicaoEmprestimo({
                       type="button"
                       disabled={domingoBloqueado}
                       title={domingoBloqueado ? 'Esta rota não trabalha aos domingos' : dia.completo}
-                      onClick={() => !domingoBloqueado && setDiaSemana(dia.value)}
+                      onClick={() => !domingoBloqueado && alternarDiaSemana(dia.value)}
                       className={`p-2 rounded text-center transition-all text-xs ${
                         domingoBloqueado
                           ? 'bg-gray-100 border border-gray-200 text-gray-300 cursor-not-allowed line-through'
-                          : diaSemana === dia.value
+                          : diasSemana.includes(dia.value)
                           ? 'bg-blue-500 text-white font-medium'
                           : 'bg-white border border-gray-200 hover:border-gray-300 text-gray-700'
                       }`}
@@ -669,6 +727,11 @@ export function CardEdicaoEmprestimo({
                   );
                 })}
               </div>
+              {diasSemana.length > 1 && (
+                <p className="mt-1 text-[11px] text-blue-600">
+                  {diasSemana.length} dias por semana: o empréstimo termina mais cedo, com as mesmas parcelas.
+                </p>
+              )}
               {!trabalhaDomingo && (
                 <p className="mt-1 text-[11px] text-gray-500">Esta rota não trabalha aos domingos.</p>
               )}

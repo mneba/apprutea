@@ -301,22 +301,39 @@ function ModalDetalhesSolicitacao({
     carregarTrabalhaDomingo();
   }, [solicitacao.rota_id]);
 
-  // Se a rota não trabalha domingo e o dia de cobrança carregado é Domingo
-  // (ex.: dado antigo, ou pedido feito antes da rota mudar de configuração),
-  // limpa a seleção para forçar o admin a escolher um dia válido.
-  useEffect(() => {
-    if (trabalhaDomingo) return;
-    if (editVenda?.dia_semana_cobranca === 0) {
-      setEditVenda((prev: any) => (prev ? { ...prev, dia_semana_cobranca: null } : prev));
-    }
-  }, [trabalhaDomingo, editVenda?.dia_semana_cobranca]);
+  // Se a rota não trabalha domingo, domingo sai do conjunto carregado (dado
+  // antigo, ou pedido feito antes da rota mudar de configuração). Sobrando
+  // nada, a seleção fica vazia de propósito: o admin tem de escolher.
+  //
+  // O escalar acompanha o primeiro do conjunto porque `fn_resolver_*_pendente`
+  // grava os DOIS a partir do jsonb — deixá-los divergir aqui seria mandar
+  // para o banco um dia que a tela não mostra.
+  const semDomingo = (prev: any) => {
+    const dias: number[] = (prev?.dias_semana_cobranca ?? []).filter((d: number) => d !== 0);
+    return { ...prev, dias_semana_cobranca: dias, dia_semana_cobranca: dias.length > 0 ? dias[0] : null };
+  };
 
   useEffect(() => {
     if (trabalhaDomingo) return;
-    if (editRenovacao?.dia_semana_cobranca === 0) {
-      setEditRenovacao((prev: any) => (prev ? { ...prev, dia_semana_cobranca: null } : prev));
+    if ((editVenda?.dias_semana_cobranca ?? []).includes(0)) {
+      setEditVenda((prev: any) => (prev ? semDomingo(prev) : prev));
     }
-  }, [trabalhaDomingo, editRenovacao?.dia_semana_cobranca]);
+  }, [trabalhaDomingo, editVenda?.dias_semana_cobranca]);
+
+  useEffect(() => {
+    if (trabalhaDomingo) return;
+    if ((editRenovacao?.dias_semana_cobranca ?? []).includes(0)) {
+      setEditRenovacao((prev: any) => (prev ? semDomingo(prev) : prev));
+    }
+  }, [trabalhaDomingo, editRenovacao?.dias_semana_cobranca]);
+
+  /** Liga/desliga um dia. O último marcado não desliga: o Postgres recusa
+   *  semanal sem dia e o aviso só chegaria no aprovar. */
+  const alternarDiaPendente = (atual: number[] | null | undefined, dia: number): number[] => {
+    const base = atual ?? [];
+    if (base.includes(dia)) return base.length === 1 ? base : base.filter(d => d !== dia);
+    return [...base, dia].sort((a, b) => a - b);
+  };
 
   const DIAS_SEMANA_OPCOES = [
     { value: '0', label: 'Domingo' },
@@ -367,6 +384,7 @@ function ModalDetalhesSolicitacao({
             frequencia: vp.frequencia ?? 'DIARIO',
             data_primeiro_vencimento: vp.data_primeiro_vencimento ?? '',
             dia_semana_cobranca: vp.dia_semana_cobranca ?? null,
+            dias_semana_cobranca: vp.dias_semana_cobranca ?? (vp.dia_semana_cobranca != null ? [vp.dia_semana_cobranca] : []),
             dia_mes_cobranca: vp.dia_mes_cobranca ?? null,
             iniciar_proximo_mes: vp.iniciar_proximo_mes ?? false,
             observacoes_emprestimo: vp.observacoes_emprestimo ?? '',
@@ -411,6 +429,7 @@ function ModalDetalhesSolicitacao({
             frequencia: rp.frequencia ?? 'DIARIO',
             data_primeiro_vencimento: rp.data_primeiro_vencimento ?? '',
             dia_semana_cobranca: rp.dia_semana_cobranca ?? null,
+            dias_semana_cobranca: rp.dias_semana_cobranca ?? (rp.dia_semana_cobranca != null ? [rp.dia_semana_cobranca] : []),
             dia_mes_cobranca: rp.dia_mes_cobranca ?? null,
             iniciar_proximo_mes: rp.iniciar_proximo_mes ?? false,
             observacoes_emprestimo: rp.observacoes_emprestimo ?? '',
@@ -1199,18 +1218,36 @@ function ModalDetalhesSolicitacao({
                       </div>
                       {editVenda.frequencia === 'SEMANAL' && (
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Dia da semana</label>
-                          <select
-                            value={editVenda.dia_semana_cobranca ?? ''}
-                            onChange={(e) => setEditVenda({ ...editVenda, dia_semana_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
-                            disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
-                          >
-                            <option value="">Selecione...</option>
-                            {diasSemanaDisponiveis.map((d) => (
-                              <option key={d.value} value={d.value}>{d.label}</option>
-                            ))}
-                          </select>
+                          <label className="block text-xs text-gray-500 mb-1">Dias da semana</label>
+                          <div className="flex flex-wrap gap-1">
+                            {diasSemanaDisponiveis.map((d) => {
+                              const num = parseInt(d.value);
+                              const marcado = (editVenda.dias_semana_cobranca ?? []).includes(num);
+                              return (
+                                <button
+                                  key={d.value}
+                                  type="button"
+                                  disabled={solicitacao.status !== 'PENDENTE'}
+                                  onClick={() => {
+                                    const dias = alternarDiaPendente(editVenda.dias_semana_cobranca, num);
+                                    setEditVenda({ ...editVenda, dias_semana_cobranca: dias, dia_semana_cobranca: dias.length > 0 ? dias[0] : null });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg border text-xs transition-colors disabled:opacity-60 ${
+                                    marcado
+                                      ? 'bg-blue-600 border-blue-600 text-white font-medium'
+                                      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                                  }`}
+                                >
+                                  {d.label.slice(0, 3)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {(editVenda.dias_semana_cobranca ?? []).length > 1 && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              {editVenda.dias_semana_cobranca.length} dias por semana: termina mais cedo, com as mesmas parcelas.
+                            </p>
+                          )}
                           {!trabalhaDomingo && (
                             <p className="text-xs text-gray-400 mt-1">Esta rota não atende aos domingos.</p>
                           )}
@@ -1408,18 +1445,36 @@ function ModalDetalhesSolicitacao({
                       </div>
                       {editRenovacao.frequencia === 'SEMANAL' && (
                         <div>
-                          <label className="block text-xs text-gray-500 mb-1">Dia da semana</label>
-                          <select
-                            value={editRenovacao.dia_semana_cobranca ?? ''}
-                            onChange={(e) => setEditRenovacao({ ...editRenovacao, dia_semana_cobranca: e.target.value === '' ? null : parseInt(e.target.value) })}
-                            disabled={solicitacao.status !== 'PENDENTE'}
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 bg-white"
-                          >
-                            <option value="">Selecione...</option>
-                            {diasSemanaDisponiveis.map((d) => (
-                              <option key={d.value} value={d.value}>{d.label}</option>
-                            ))}
-                          </select>
+                          <label className="block text-xs text-gray-500 mb-1">Dias da semana</label>
+                          <div className="flex flex-wrap gap-1">
+                            {diasSemanaDisponiveis.map((d) => {
+                              const num = parseInt(d.value);
+                              const marcado = (editRenovacao.dias_semana_cobranca ?? []).includes(num);
+                              return (
+                                <button
+                                  key={d.value}
+                                  type="button"
+                                  disabled={solicitacao.status !== 'PENDENTE'}
+                                  onClick={() => {
+                                    const dias = alternarDiaPendente(editRenovacao.dias_semana_cobranca, num);
+                                    setEditRenovacao({ ...editRenovacao, dias_semana_cobranca: dias, dia_semana_cobranca: dias.length > 0 ? dias[0] : null });
+                                  }}
+                                  className={`px-3 py-1.5 rounded-lg border text-xs transition-colors disabled:opacity-60 ${
+                                    marcado
+                                      ? 'bg-blue-600 border-blue-600 text-white font-medium'
+                                      : 'bg-white border-gray-200 text-gray-700 hover:border-gray-300'
+                                  }`}
+                                >
+                                  {d.label.slice(0, 3)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {(editRenovacao.dias_semana_cobranca ?? []).length > 1 && (
+                            <p className="text-xs text-blue-600 mt-1">
+                              {editRenovacao.dias_semana_cobranca.length} dias por semana: termina mais cedo, com as mesmas parcelas.
+                            </p>
+                          )}
                           {!trabalhaDomingo && (
                             <p className="text-xs text-gray-400 mt-1">Esta rota não atende aos domingos.</p>
                           )}
