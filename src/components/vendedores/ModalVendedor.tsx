@@ -30,6 +30,12 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { vendedoresService } from '@/services/vendedores';
+import {
+  EditorModeloRecibo,
+  MODELO_RECIBO_PADRAO,
+  normalizarModelo,
+  type ModeloRecibo,
+} from './ModeloRecibo';
 import type { 
   Vendedor, 
   ConfiguracaoVendedor, 
@@ -113,6 +119,7 @@ const RECIBOS_PADRAO: Partial<ConfiguracaoRecibo> = {
   valor_pensao: 0,
   valor_saude: 0,
   ativo: true,
+  modelo_recibo: MODELO_RECIBO_PADRAO,
 };
 
 export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
@@ -121,6 +128,8 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   const [saving, setSaving] = useState(false);
   const [uploadingFoto, setUploadingFoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
 
   // === ABA DADOS PESSOAIS ===
   const [codigoVendedor, setCodigoVendedor] = useState('');
@@ -147,6 +156,14 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
 
   // === ABA RECIBOS ===
   const [recibos, setRecibos] = useState<Partial<ConfiguracaoRecibo>>(RECIBOS_PADRAO);
+
+  // O MODELO É ESTADO PRÓPRIO, E NÃO `recibos.modelo_recibo`.
+  //
+  // O que vem do banco é `jsonb` — pode ser nulo, pode estar sem uma chave que
+  // só passou a existir depois. `normalizarModelo` parte do padrão e
+  // sobrescreve o que veio, então a tela sempre edita um objeto completo. O
+  // valor volta para `recibos` ao salvar, que é o que o serviço grava.
+  const [modelo, setModelo] = useState<ModeloRecibo>(MODELO_RECIBO_PADRAO);
 
   const isEdicao = !!vendedor;
 
@@ -221,7 +238,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         }
       }
       
-      if (recibosData) setRecibos({ ...RECIBOS_PADRAO, ...recibosData });
+      if (recibosData) {
+        setRecibos({ ...RECIBOS_PADRAO, ...recibosData });
+        setModelo(normalizarModelo((recibosData as any).modelo_recibo));
+      }
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
     } finally {
@@ -270,6 +290,60 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       alert(`Erro ao fazer upload: ${err.message}`);
     } finally {
       setUploadingFoto(false);
+    }
+  };
+
+  // UPLOAD DA LOGO DO RECIBO.
+  //
+  // Era um campo de URL, que exigia do usuário hospedar a imagem em algum
+  // lugar e colar o endereço — ninguém tem onde. Agora sobe direto, para o
+  // mesmo bucket `fotos` das fotos de cliente e de vendedor, numa pasta
+  // própria.
+  //
+  // A coluna `logo_url` continua guardando uma URL pública, então o recibo e
+  // qualquer outro leitor não mudam: o que mudou foi quem produz a URL.
+  const handleUploadLogo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      alert('Selecione uma imagem válida (PNG ou JPG).');
+      return;
+    }
+
+    // 2MB, o mesmo teto da foto do vendedor. Logo de recibo é pequena por
+    // natureza, e arquivo grande só atrasa o carregamento no aparelho do
+    // vendedor na hora de gerar o comprovante.
+    if (file.size > 2 * 1024 * 1024) {
+      alert('A imagem deve ter no máximo 2MB.');
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const supabase = createClient();
+      const fileExt = file.name.split('.').pop();
+      const filePath = `logos/logo_${vendedor?.id || 'novo'}_${Date.now()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('fotos')
+        .upload(filePath, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('fotos')
+        .getPublicUrl(filePath);
+
+      updateRecibo('logo_url', publicUrl);
+    } catch (err: any) {
+      console.error('Erro ao subir a logo:', err);
+      alert(`Erro ao subir a logo: ${err.message}`);
+    } finally {
+      setUploadingLogo(false);
+      // Permite subir o MESMO arquivo de novo depois de remover: sem isto o
+      // `change` não dispara, porque o valor do input não mudou.
+      if (logoInputRef.current) logoInputRef.current.value = '';
     }
   };
 
@@ -420,7 +494,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
           ...restricoes,
           data_vencimento: dataVencimento || undefined,
         }),
-        vendedoresService.salvarRecibos(vendedorId, recibos),
+        // O modelo é editado à parte (estado tipado) e volta aqui na hora
+        // de gravar — é o que mantém `recibos` como a única coisa que o
+        // serviço precisa conhecer.
+        vendedoresService.salvarRecibos(vendedorId, { ...recibos, modelo_recibo: modelo }),
       ]);
 
       onSave();
@@ -439,22 +516,59 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
     { id: 'recibos' as TabType, label: 'Recibos', icon: Receipt },
   ];
 
-  // Lista de configurações (13 opções)
+  // CONFIGURAÇÕES OPERACIONAIS — treze existem, quatro são decisão.
+  //
+  // Em 12/10/2026 escondemos nove: ou são comportamento nativo do aparelho
+  // (GPS), ou tratam de funcionalidade que a operação não usa hoje. Elas
+  // continuam na lista, marcadas `oculto`, em vez de apagadas:
+  //
+  //   · a coluna continua em `vendedores` e o app continua lendo o valor que
+  //     está lá — esconder o botão NÃO desliga nada. Quem tinha GPS ligado
+  //     segue com GPS ligado, e é isso que se quer;
+  //   · trazer uma de volta é apagar uma palavra, e o rótulo e o ícone não
+  //     precisam ser reescritos de memória;
+  //   · a lista continua documentando o que existe no banco, que é a razão de
+  //     alguém abrir este arquivo.
+  //
+  // `salvarVendedor` grava o objeto inteiro de configurações, então os campos
+  // ocultos mantêm o valor carregado — não viram `false` por ausência.
   const configuracoesLista = [
-    { campo: 'ativar_gps', label: 'Ativar GPS', descricao: 'Rastreamento de localização no app', icon: MapPin },
+    { campo: 'ativar_gps', label: 'Ativar GPS', descricao: 'Rastreamento de localização no app', icon: MapPin, oculto: true },
     { campo: 'ativar_sem_pagamentos', label: 'Ativar Sem Pagamentos', descricao: 'Botão "Não Pagou" no app', icon: Ban },
-    { campo: 'ativar_adiar_parcelas', label: 'Ativar Adiar Parcelas', descricao: 'Permitir reagendamento de parcelas', icon: Calendar },
+    { campo: 'ativar_adiar_parcelas', label: 'Ativar Adiar Parcelas', descricao: 'Permitir reagendamento de parcelas', icon: Calendar, oculto: true },
     { campo: 'ativar_auditoria_movel', label: 'Ativar Auditoria Móvel', descricao: 'Log detalhado de ações no app', icon: FileText },
-    { campo: 'abertura_caixa_manual', label: 'Abertura Caixa Manual', descricao: 'Permitir abertura manual do caixa', icon: DollarSign },
-    { campo: 'validar_endereco', label: 'Validar Endereço', descricao: 'Endereço obrigatório nos cadastros', icon: MapPin },
-    { campo: 'carregar_imagens_wifi', label: 'Carregar Imagens WiFi', descricao: 'Upload apenas com conexão WiFi', icon: Wifi },
-    { campo: 'atualizar_movel_renovacao', label: 'Atualizar Móvel na Renovação', descricao: 'Sincronizar dados ao renovar', icon: RefreshCw },
-    { campo: 'informacao_resumida_movel', label: 'Informação Resumida', descricao: 'Mostrar dados resumidos no app', icon: Info },
+    { campo: 'abertura_caixa_manual', label: 'Abertura Caixa Manual', descricao: 'Permitir abertura manual do caixa', icon: DollarSign, oculto: true },
+    { campo: 'validar_endereco', label: 'Validar Endereço', descricao: 'Endereço obrigatório nos cadastros', icon: MapPin, oculto: true },
+    { campo: 'carregar_imagens_wifi', label: 'Carregar Imagens WiFi', descricao: 'Upload apenas com conexão WiFi', icon: Wifi, oculto: true },
+    { campo: 'atualizar_movel_renovacao', label: 'Atualizar Móvel na Renovação', descricao: 'Sincronizar dados ao renovar', icon: RefreshCw, oculto: true },
+    { campo: 'informacao_resumida_movel', label: 'Informação Resumida', descricao: 'Mostrar dados resumidos no app', icon: Info, oculto: true },
     { campo: 'imprimir_compartilhar_recibo', label: 'Imprimir Recibos', descricao: 'Compartilhar/imprimir recibos', icon: Printer },
     { campo: 'somente_frequencia_diaria', label: 'Só Frequência Diária', descricao: 'Apenas empréstimos diários', icon: Clock },
-    { campo: 'inativar_info_cliente_renovar', label: 'Inativar Info Cliente', descricao: 'Limpar dados ao renovar', icon: Ban },
-    { campo: 'permitir_exclusao_parcelas', label: 'Permitir Exclusão', descricao: 'Deletar parcelas no app', icon: Trash2 },
+    { campo: 'inativar_info_cliente_renovar', label: 'Inativar Info Cliente', descricao: 'Limpar dados ao renovar', icon: Ban, oculto: true },
+    { campo: 'permitir_exclusao_parcelas', label: 'Permitir Exclusão', descricao: 'Deletar parcelas no app', icon: Trash2, oculto: true },
   ];
+
+  const configuracoesVisiveis = configuracoesLista.filter(c => !c.oculto);
+
+  // "OUTRAS CONFIGURAÇÕES" DA ABA RESTRIÇÕES — OCULTA EM 12/10/2026.
+  //
+  // Mesma lógica das configurações operacionais: a tela não mostra, o banco
+  // guarda, e o que está configurado continua valendo. `salvarRestricoes`
+  // grava o objeto inteiro, então os campos escondidos mantêm o valor
+  // carregado em vez de virarem `false` por ausência.
+  //
+  // DUAS COISAS IMPORTANTES FICAM AQUI DENTRO, e por isso a seção some em
+  // bloco em vez de ser apagada:
+  //
+  //   `validar_valor_max_renovacoes`  é o que decide se renovação acima do
+  //                                   último empréstimo precisa de autorização
+  //                                   do ADMIN — o fluxo inteiro de renovação
+  //                                   pendente depende dele;
+  //   `numero_whatsapp_aprovacoes`    é para onde vão os avisos de aprovação.
+  //
+  // Precisando mexer num dos dois sem a tela, é UPDATE em `restricoes_vendedor`.
+  // Trazer a seção de volta é trocar esta constante para `true`.
+  const MOSTRAR_OUTRAS_CONFIGURACOES = false;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -725,12 +839,12 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                   <div className="flex items-center gap-2 mb-4">
                     <Settings className="w-5 h-5 text-gray-500" />
                     <h3 className="text-lg font-medium text-gray-900">
-                      Configurações Operacionais ({configuracoesLista.length} opções)
+                      Configurações Operacionais ({configuracoesVisiveis.length} opções)
                     </h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {configuracoesLista.map((config) => {
+                    {configuracoesVisiveis.map((config) => {
                       const Icon = config.icon;
                       const isAtivo = configuracoes[config.campo as keyof typeof configuracoes] as boolean;
                       
@@ -1002,7 +1116,9 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                     </div>
                   </div>
 
-                  {/* Seção: Outras Configurações */}
+                  {/* Seção: Outras Configurações — oculta; ver a constante
+                      MOSTRAR_OUTRAS_CONFIGURACOES e o porquê lá em cima. */}
+                  {MOSTRAR_OUTRAS_CONFIGURACOES && (
                   <div>
                     <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
                       <Settings className="w-4 h-4" />
@@ -1067,6 +1183,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       </div>
                     </div>
                   </div>
+                  )}
                 </div>
               )}
 
@@ -1081,34 +1198,59 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+                    {/* Logo do recibo — por upload, não por URL.
+                        "Período de Pagamento" saiu daqui em 12/10/2026: a
+                        frequência é do empréstimo, não do vendedor, e o campo
+                        não era lido por nada. A coluna `periodo_pago` fica no
+                        banco e é regravada intacta ao salvar. */}
+                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white md:col-span-2">
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Logo Personalizado (URL)
+                        Logo do recibo
                       </label>
-                      <input
-                        type="url"
-                        value={recibos.logo_url || ''}
-                        onChange={(e) => updateRecibo('logo_url', e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
-                        placeholder="https://exemplo.com/logo.png"
-                      />
-                    </div>
 
-                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Período de Pagamento
-                      </label>
-                      <select
-                        value={recibos.periodo_pago || ''}
-                        onChange={(e) => updateRecibo('periodo_pago', e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Selecione</option>
-                        <option value="DIARIO">Diário</option>
-                        <option value="SEMANAL">Semanal</option>
-                        <option value="QUINZENAL">Quinzenal</option>
-                        <option value="MENSAL">Mensal</option>
-                      </select>
+                      <div className="flex items-center gap-4">
+                        <div className="w-28 h-28 rounded-lg border-2 border-dashed border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden shrink-0">
+                          {recibos.logo_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={recibos.logo_url} alt="Logo do recibo" className="max-w-full max-h-full object-contain" />
+                          ) : (
+                            <Receipt className="w-8 h-8 text-gray-300" />
+                          )}
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                          <input
+                            ref={logoInputRef}
+                            type="file"
+                            accept="image/*"
+                            onChange={handleUploadLogo}
+                            className="hidden"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => logoInputRef.current?.click()}
+                            disabled={uploadingLogo}
+                            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 disabled:opacity-60"
+                          >
+                            {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                            {uploadingLogo ? 'Enviando...' : recibos.logo_url ? 'Trocar logo' : 'Escolher imagem'}
+                          </button>
+
+                          {recibos.logo_url && (
+                            <button
+                              type="button"
+                              onClick={() => updateRecibo('logo_url', '')}
+                              disabled={uploadingLogo}
+                              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-200 text-gray-600 text-sm hover:bg-gray-50 disabled:opacity-60"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Remover
+                            </button>
+                          )}
+
+                          <p className="text-xs text-gray-500">PNG ou JPG, até 2MB. Aparece no topo do recibo.</p>
+                        </div>
+                      </div>
                     </div>
 
                     <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
@@ -1177,18 +1319,20 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       />
                     </div>
 
-                    <div className="p-4 rounded-xl border-2 border-gray-200 bg-white col-span-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Mensagem Personalizada (Recibo)
-                      </label>
-                      <textarea
-                        value={recibos.mensagem_personalizada || ''}
-                        onChange={(e) => updateRecibo('mensagem_personalizada', e.target.value)}
-                        className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 resize-none"
-                        placeholder="Mensagem que aparecerá nos recibos..."
-                        rows={3}
-                      />
-                    </div>
+                    {/* "Mensagem Personalizada (Recibo)" saiu da tela em
+                        12/10/2026. O modelo abaixo tem rodapé e mensagem do
+                        WhatsApp, e dois campos para a mesma coisa deixariam a
+                        pergunta "qual deles vence?" sem resposta na tela.
+                        `mensagem_personalizada` fica no banco, regravada
+                        intacta, porque é do recibo antigo. */}
+                  </div>
+
+                  <div className="border-t border-gray-200 pt-6 mt-2">
+                    <EditorModeloRecibo
+                      modelo={modelo}
+                      onChange={setModelo}
+                      logoUrl={recibos.logo_url || undefined}
+                    />
                   </div>
                 </div>
               )}

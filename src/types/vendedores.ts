@@ -113,7 +113,14 @@ export interface ConfiguracaoRecibo {
   logo_url?: string;
   mensagem_personalizada?: string;
   aplicar_todos_vendedores: boolean;
-  periodo_pago?: string; // DIARIO, SEMANAL, QUINZENAL, MENSAL
+  periodo_pago?: string; // DIARIO, SEMANAL, QUINZENAL, MENSAL — fora da tela desde 12/10/2026
+  /**
+   * Modelo do recibo de pagamento (jsonb). O formato esta em
+   * `components/vendedores/ModeloRecibo.tsx` e o contrato dos marcadores
+   * no COMMENT da coluna, que e o que mantem web e app de acordo.
+   * Nulo = o app usa o modelo padrao embutido.
+   */
+  modelo_recibo?: unknown;
   percentual_recaudo: number;
   percentual_vendas: number;
   valor_pensao: number;
