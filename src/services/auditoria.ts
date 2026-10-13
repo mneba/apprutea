@@ -17,10 +17,18 @@ import { createClient } from '@/lib/supabase/client';
 const supabase = createClient();
 
 export interface EventoAuditoria {
+  /** Quando a operação aconteceu — o relógio. */
   momento: string;
+  /**
+   * O DIA A QUE a operação pertence, que neste domínio é a régua do tempo
+   * (ver CLAUDE.md). Diferente de `momento` quando houve correção retroativa:
+   * estorno feito em outubro sobre pagamento de setembro.
+   */
+  data_liquidacao: string | null;
   tipo: string;
   usuario: string | null;
   rota: string | null;
+  cliente: string | null;
   descricao: string | null;
   valor: number | null;
   /** NULO é "não derivável", nunca zero. Ver o COMMENT da função. */
@@ -36,6 +44,8 @@ export interface FiltrosAuditoria {
   rotaId?: string | null;
   tipo?: string | null;
   usuario?: string | null;
+  /** Nome ou código. Quem investiga tem um dos dois, nunca o uuid. */
+  cliente?: string | null;
   limite?: number;
   offset?: number;
 }
@@ -62,6 +72,7 @@ export const auditoriaService = {
       p_rota_id: f.rotaId || null,
       p_tipo: f.tipo || null,
       p_usuario: f.usuario?.trim() || null,
+      p_cliente: f.cliente?.trim() || null,
       p_limite: f.limite ?? 200,
       p_offset: f.offset ?? 0,
     });

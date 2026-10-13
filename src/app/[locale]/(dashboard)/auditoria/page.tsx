@@ -35,8 +35,10 @@ import {
   Loader2,
   Search,
   ShieldAlert,
+  User,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { ComboBuscavel } from '@/components/auditoria/ComboBuscavel';
 import { relatoriosService } from '@/services/relatorios';
 import { auditoriaService, TIPOS_AUDITORIA, type EventoAuditoria } from '@/services/auditoria';
 import type { EstruturaVisivel } from '@/types/relatorios';
@@ -65,6 +67,17 @@ const fmtMoeda = (v: number | null) =>
 const fmtDia = (iso: string) =>
   new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+/**
+ * `data_liquidacao` é DATE puro, sem fuso. Montá-la com `new Date('2026-09-18')`
+ * a trataria como meia-noite UTC e, no Brasil, mostraria 17/09 — o erro de um
+ * dia que o CLAUDE.md descreve. Por isso é fatiada como texto.
+ */
+const fmtDataLiq = (d: string | null) => {
+  if (!d) return null;
+  const [a, m, dia] = d.substring(0, 10).split('-');
+  return `${dia}/${m}/${a}`;
+};
+
 const fmtHora = (iso: string) =>
   new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
@@ -84,6 +97,46 @@ const CORES: Record<string, string> = {
 const rotulo = (tipo: string) =>
   TIPOS_AUDITORIA.find((t) => t.valor === tipo)?.rotulo ?? tipo;
 
+/**
+ * Tipos em que a diferença entre os dois dias É notícia.
+ *
+ * MEDIDO EM 13/10/2026: 226 de 1000 eventos de 60 dias têm dia do relógio
+ * diferente do dia da liquidação — 22,6%. Isso NÃO é anomalia: o vendedor
+ * recupera dias atrasados abrindo liquidações retroativas, e é a operação
+ * normal deste negócio (ver CLAUDE.md, "A liquidação é a régua do tempo").
+ *
+ * Destacar todos os 226 mataria o destaque: sinal que aparece em um quinto
+ * das linhas deixa de ser sinal, e o olho para de vê-lo. O realce fica para
+ * os tipos que são CORREÇÃO — aí a diferença de datas diz que alguém mexeu
+ * num dia que já tinha passado, que é a pergunta da auditoria.
+ *
+ * Pagamento e empréstimo em dia retroativo continuam mostrando as duas datas,
+ * em cinza: a informação está lá, sem gritar.
+ */
+const TIPOS_DE_CORRECAO = new Set([
+  'ESTORNO',
+  'ANULACAO',
+  'ALTERACAO',
+  'RELANCAMENTO',
+  'FECHAMENTO_POS_REABERTURA',
+]);
+
+/**
+ * O evento foi lançado num dia e pertence a outro.
+ *
+ * Comparação feita em TEXTO, não em `Date`: `data_liquidacao` é DATE puro e
+ * `momento` é instante. Converter a primeira para `Date` a colocaria em
+ * meia-noite UTC e, no Brasil, ela recuaria um dia — e aí metade dos eventos
+ * normais apareceria como correção retroativa.
+ */
+const diasDiferentes = (ev: EventoAuditoria) => {
+  if (!ev.data_liquidacao) return false;
+  const d = new Date(ev.momento);
+  const diaDoRelogio =
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return diaDoRelogio !== ev.data_liquidacao.substring(0, 10);
+};
+
 export default function AuditoriaPage() {
   const { profile } = useUser();
   const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
@@ -94,6 +147,7 @@ export default function AuditoriaPage() {
   const [ate, setAte] = useState(hojeIso());
   const [tipo, setTipo] = useState('');
   const [usuario, setUsuario] = useState('');
+  const [cliente, setCliente] = useState('');
 
   const [eventos, setEventos] = useState<EventoAuditoria[] | null>(null);
   const [pagina, setPagina] = useState(0);
@@ -135,6 +189,7 @@ export default function AuditoriaPage() {
         rotaId: rotaId || null,
         tipo: tipo || null,
         usuario,
+        cliente,
         limite: POR_PAGINA,
         offset: p * POR_PAGINA,
       });
@@ -188,29 +243,27 @@ export default function AuditoriaPage() {
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3">
           <div className="md:col-span-2">
             <label className="block text-xs text-gray-500 mb-1">Empresa</label>
-            <select
-              value={empresaId}
-              onChange={(e) => { setEmpresaId(e.target.value); setRotaId(''); }}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
-            >
-              {empresas.map((e) => (
-                <option key={e.empresa_id} value={e.empresa_id}>{e.nome}</option>
-              ))}
-            </select>
+            <ComboBuscavel
+              opcoes={empresas.map((e) => ({ valor: e.empresa_id, rotulo: e.nome }))}
+              valor={empresaId}
+              onChange={(v) => { setEmpresaId(v); setRotaId(''); }}
+            />
           </div>
 
           <div>
             <label className="block text-xs text-gray-500 mb-1">Rota</label>
-            <select
-              value={rotaId}
-              onChange={(e) => setRotaId(e.target.value)}
-              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white"
-            >
-              <option value="">Todas</option>
-              {rotasDaEmpresa.map((r) => (
-                <option key={r.rota_id} value={r.rota_id}>{r.nome}</option>
-              ))}
-            </select>
+            {/* O vendedor entra como detalhe: numa empresa com trinta rotas, é
+                por ele que se procura tantas vezes quanto pelo nome da rota. */}
+            <ComboBuscavel
+              opcoes={rotasDaEmpresa.map((r) => ({
+                valor: r.rota_id,
+                rotulo: r.nome,
+                detalhe: r.vendedor_nome,
+              }))}
+              valor={rotaId}
+              onChange={setRotaId}
+              rotuloVazio="Todas as rotas"
+            />
           </div>
 
           <div>
@@ -260,6 +313,22 @@ export default function AuditoriaPage() {
               className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
             />
           </div>
+
+          <div className="flex-1">
+            <label className="block text-xs text-gray-500 mb-1">Cliente</label>
+            {/* Nome ou código. Eventos sem cliente — reabertura, despesa —
+                somem quando este campo é preenchido, e é o esperado: quem
+                pergunta "o que houve com o Cristian" não quer despesa de
+                gasolina no meio. */}
+            <input
+              type="text"
+              value={cliente}
+              onChange={(e) => setCliente(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') buscar(0); }}
+              placeholder="Nome ou código — ex.: Cristian ou 1042"
+              className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm"
+            />
+          </div>
           <div className="flex items-end">
             <button
               onClick={() => buscar(0)}
@@ -280,8 +349,23 @@ export default function AuditoriaPage() {
         </div>
       )}
 
+      {/* ── Procurando ──
+          Uma tela que varre seis tabelas num mês demora segundos. Sem este
+          bloco, o usuário fica olhando a lista ANTERIOR e não sabe se o que
+          vê já é o resultado novo — o spinner no botão sozinho é pequeno
+          demais para carregar essa resposta. */}
+      {carregando && (
+        <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+          <Loader2 className="w-7 h-7 text-blue-600 animate-spin mx-auto mb-3" />
+          <p className="text-sm text-gray-600">Procurando movimentos...</p>
+          <p className="text-xs text-gray-400 mt-1">
+            Período longo com muitas rotas pode levar alguns segundos.
+          </p>
+        </div>
+      )}
+
       {/* ── Resultado ── */}
-      {eventos !== null && (
+      {eventos !== null && !carregando && (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div className="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
             <p className="text-sm text-gray-600">
@@ -334,11 +418,38 @@ export default function AuditoriaPage() {
                         {ev.usuario || '—'}
                         {ev.rota ? ` · ${ev.rota}` : ''}
                       </p>
+
+                      {/* AS DUAS DATAS.
+                          O cabeçalho do grupo diz o dia do RELÓGIO; aqui vai o
+                          dia da LIQUIDAÇÃO, a que a operação pertence — a
+                          régua do tempo deste domínio.
+                          O realce só vale para tipos de correção; ver o
+                          comentário de TIPOS_DE_CORRECAO. */}
+                      {ev.data_liquidacao && (
+                        <p
+                          className={`text-xs mt-0.5 ${
+                            diasDiferentes(ev) && TIPOS_DE_CORRECAO.has(ev.tipo)
+                              ? 'text-amber-700 font-medium'
+                              : 'text-gray-400'
+                          }`}
+                        >
+                          liquidação de {fmtDataLiq(ev.data_liquidacao)}
+                          {diasDiferentes(ev) && TIPOS_DE_CORRECAO.has(ev.tipo)
+                            ? ' — mexeu num dia anterior'
+                            : ''}
+                        </p>
+                      )}
                       {/* O motivo é o que o cliente pediu nominalmente: sem ele,
                           a reabertura vira "alguém mexeu" e a tela não responde
                           a pergunta que a motivou. */}
                       {ev.motivo && (
                         <p className="text-xs text-gray-700 mt-0.5 italic">{ev.motivo}</p>
+                      )}
+                      {ev.cliente && (
+                        <p className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                          <User className="w-3 h-3" />
+                          {ev.cliente}
+                        </p>
                       )}
                     </div>
 
