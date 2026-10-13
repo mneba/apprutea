@@ -662,13 +662,16 @@ function ModalDetalhesSolicitacao({
     }
   };
 
+  // No celular a caixa encosta embaixo e ocupa quase toda a altura: é onde o
+  // polegar alcança, e um modal centralizado de 90vh deixa uma faixa morta em
+  // cima que não serve para nada. No desktop, centralizado como sempre foi.
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       
-      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="relative bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-lg h-[92vh] sm:h-auto sm:max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between px-4 sm:px-6 py-4 border-b border-gray-200 bg-gray-50">
           <div className="flex items-center gap-3">
             <span className="text-2xl">{tipoConfig.icone}</span>
             <div>
@@ -684,7 +687,7 @@ function ModalDetalhesSolicitacao({
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
           
           {/* === ABERTURA DE LIQUIDAÇÃO === */}
           {isAbertura && (
@@ -1049,7 +1052,7 @@ function ModalDetalhesSolicitacao({
                     <div className="bg-blue-50 px-4 py-2 border-b border-gray-200">
                       <h3 className="text-sm font-semibold text-blue-900">Dados do Cliente</h3>
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-3">
+                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div className="col-span-2">
                         <label className="block text-xs text-gray-500 mb-1">Nome</label>
                         <input
@@ -1148,7 +1151,7 @@ function ModalDetalhesSolicitacao({
                     <div className="bg-emerald-50 px-4 py-2 border-b border-gray-200">
                       <h3 className="text-sm font-semibold text-emerald-900">Dados do Empréstimo</h3>
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-3">
+                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
                         <input
@@ -1361,7 +1364,7 @@ function ModalDetalhesSolicitacao({
                     <div className="bg-emerald-50 px-4 py-2 border-b border-gray-200">
                       <h3 className="text-sm font-semibold text-emerald-900">Dados da Renovação</h3>
                     </div>
-                    <div className="p-4 grid grid-cols-2 gap-3">
+                    <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
                         <input
@@ -1587,12 +1590,16 @@ function ModalDetalhesSolicitacao({
           )}
         </div>
 
-        {/* Footer */}
+        {/* Footer.
+            No celular, Aprovar e Rejeitar crescem para dividir a largura e
+            Cancelar sai de cena — o X do cabeçalho e o toque fora já fecham, e
+            três alvos numa linha de telefone deixam todos pequenos demais,
+            sendo dois deles irreversíveis. */}
         {solicitacao.status === 'PENDENTE' && !mostrarConfirmacao && (
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-end gap-2 px-4 sm:px-6 py-3 sm:py-4 border-t border-gray-200 bg-gray-50">
             <button
               onClick={onClose}
-              className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
+              className="hidden sm:block px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors text-sm"
             >
               Cancelar
             </button>
@@ -1602,7 +1609,7 @@ function ModalDetalhesSolicitacao({
                 <button
                   onClick={() => setMostrarMotivoRejeicao(true)}
                   disabled={loading}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50 text-sm font-medium"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-4 py-3 sm:py-2 bg-red-100 text-red-700 rounded-lg hover:bg-red-200 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   <XCircle className="w-4 h-4" />
                   Rejeitar
@@ -1610,7 +1617,7 @@ function ModalDetalhesSolicitacao({
                 <button
                   onClick={isVendaExcedeLimite ? handleAprovarVenda : isRenovacaoExcedeAnterior ? handleAprovarRenovacao : isMovimentacaoExcedeLimite ? handleAprovarMovimentacao : handleConfirmarAprovacao}
                   disabled={loading || salvandoVenda}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 py-3 sm:py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
                   {isAutorizacaoCliente ? 'Aprovar e Ativar Autorização' : isVendaExcedeLimite ? 'Aprovar Venda' : isRenovacaoExcedeAnterior ? 'Aprovar Renovação' : isMovimentacaoExcedeLimite ? 'Aprovar' : 'Aprovar'}
@@ -1627,7 +1634,7 @@ function ModalDetalhesSolicitacao({
                 <button
                   onClick={isVendaExcedeLimite ? handleRejeitarVenda : isRenovacaoExcedeAnterior ? handleRejeitarRenovacao : isMovimentacaoExcedeLimite ? handleRejeitarMovimentacao : () => onRejeitar(motivoRejeicao)}
                   disabled={loading || salvandoVenda || !motivoRejeicao.trim()}
-                  className="flex items-center gap-1.5 px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-5 py-3 sm:py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 text-sm font-medium"
                 >
                   {(loading || salvandoVenda) ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
                   Confirmar Rejeição
@@ -1992,18 +1999,25 @@ export default function LiberacoesPage() {
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex-shrink-0 space-y-4 pb-4 border-b border-gray-200">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Central de Solicitações</h1>
-            <p className="text-gray-500 mt-1">Gerencie as solicitações de autorização dos vendedores</p>
+        {/* AUTORIZAR NA RUA.
+            Esta tela é usada do celular, no meio da rota, por quem precisa
+            liberar uma venda enquanto o vendedor espera. Daí o `sm:`/`lg:` em
+            tudo: a largura de referência é a de um telefone, e o desktop é que
+            ganha o arranjo mais largo — não o contrário. */}
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Central de Solicitações</h1>
+            <p className="text-sm text-gray-500 mt-1 hidden sm:block">
+              Gerencie as solicitações de autorização dos vendedores
+            </p>
           </div>
           <button
             onClick={() => { invalidarCache('liberacoes:'); carregarSolicitacoes({ forcar: true }); carregarContadores({ forcar: true }); }}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors"
+            className="flex items-center gap-2 px-3 sm:px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition-colors shrink-0"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
+            <span className="hidden sm:inline">Atualizar</span>
           </button>
         </div>
 
@@ -2022,7 +2036,9 @@ export default function LiberacoesPage() {
 
         {/* Estatísticas — respeitam empresa/tipo/cliente/data/busca, mas não
             o status, senão selecionar um card zeraria os demais. */}
-        <div className="grid grid-cols-4 gap-4">
+        {/* Dois por linha no celular. Quatro num telefone dariam cartões de
+            85px, onde o número não cabe ao lado do ícone. */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <button
             onClick={() => setFiltroStatus('')}
             className={`p-4 rounded-xl border-2 transition-colors ${
@@ -2103,8 +2119,8 @@ export default function LiberacoesPage() {
         {/* Filtros */}
         <div className="space-y-3">
           {/* Linha 1: Busca geral + Cliente + Data */}
-          <div className="flex items-center gap-3">
-            <div className="relative flex-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[180px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
@@ -2115,7 +2131,7 @@ export default function LiberacoesPage() {
               />
             </div>
 
-            <div className="relative flex-1">
+            <div className="relative flex-1 min-w-[180px]">
               <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
               <input
                 type="text"
@@ -2138,7 +2154,7 @@ export default function LiberacoesPage() {
           </div>
 
           {/* Linha 2: Categoria + Tipo + Limpar */}
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <select
               value={filtroCategoria}
               onChange={(e) => { setFiltroCategoria(e.target.value); setFiltroTipo(''); }}
@@ -2267,7 +2283,68 @@ export default function LiberacoesPage() {
             <p className="text-sm">Ajuste os filtros ou aguarde novas solicitações</p>
           </div>
         ) : (
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <>
+          {/* ── CELULAR: cartões ──────────────────────────────────────────
+              Sete colunas num telefone viram rolagem horizontal, e quem está
+              na rua lê com uma mão só. O cartão mostra o que decide — tipo,
+              quem pediu, quando, status — e põe a ação num botão de linha
+              inteira, que é o alvo que o polegar acerta.
+
+              É a MESMA lista, com a mesma ordem e os mesmos filtros: o que
+              muda é o arranjo, não o conteúdo. */}
+          <div className="lg:hidden space-y-3">
+            {solicitacoesFiltradas.map((solicitacao) => {
+              const naoVista = !solicitacao.ja_visualizada && solicitacao.status === 'PENDENTE';
+              return (
+                <div
+                  key={solicitacao.id}
+                  onClick={() => setSolicitacaoSelecionada(solicitacao)}
+                  className={`bg-white rounded-xl border p-4 ${
+                    naoVista ? 'border-amber-300 bg-amber-50/40' : 'border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {naoVista && <span className="w-2 h-2 rounded-full bg-amber-500 shrink-0" />}
+                      <p className="font-medium text-gray-900 truncate">
+                        {TIPO_SOLICITACAO_LABELS[solicitacao.tipo_solicitacao] || solicitacao.tipo_solicitacao}
+                      </p>
+                    </div>
+                    <BadgeStatus status={solicitacao.status} />
+                  </div>
+
+                  <div className="mt-2 space-y-0.5">
+                    <p className="text-sm text-gray-900">
+                      {solicitacao.vendedor_nome}
+                      <span className="text-gray-400"> · {solicitacao.vendedor_codigo}</span>
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {solicitacao.rota_nome}
+                      {solicitacao.empresa_nome ? ` · ${solicitacao.empresa_nome}` : ''}
+                    </p>
+                    {descreverOrigem(solicitacao) && (
+                      <p className="text-xs text-gray-400">{descreverOrigem(solicitacao)}</p>
+                    )}
+                    <p className="text-xs text-gray-400">{formatarData(solicitacao.created_at)}</p>
+                  </div>
+
+                  <button
+                    onClick={(e) => { e.stopPropagation(); setSolicitacaoSelecionada(solicitacao); }}
+                    className={`mt-3 w-full py-2.5 rounded-lg text-sm font-medium ${
+                      solicitacao.status === 'PENDENTE'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700'
+                    }`}
+                  >
+                    {solicitacao.status === 'PENDENTE' ? 'Resolver' : 'Detalhes'}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ── DESKTOP: a tabela de sempre ── */}
+          <div className="hidden lg:block bg-white rounded-xl border border-gray-200 overflow-hidden">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-gray-50 border-b border-gray-200">
@@ -2327,6 +2404,7 @@ export default function LiberacoesPage() {
               </tbody>
             </table>
           </div>
+          </>
         )}
       </div>
 
