@@ -16,6 +16,7 @@ import {
   User,
   ShieldCheck,
   Tag,
+  ScrollText,
   BarChart3,
   MapPin,
   PanelLeftClose,
@@ -77,6 +78,10 @@ const menuGroups: MenuGroup[] = [
       { key: 'liberacoes', label: 'Central de Liberações', icon: <ShieldCheck className="w-5 h-5" />, href: '/liberacoes', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'CENTRAL_LIBERACOES' },
       { key: 'usuarios', label: 'Usuários e Permissões', icon: <Settings className="w-5 h-5" />, href: '/usuarios', roles: ['SUPER_ADMIN', 'ADMIN'], modulo: 'GESTAO_USUARIOS' },
       { key: 'categorias-financeiras', label: 'Categorias Financeiras', icon: <Tag className="w-5 h-5" />, href: '/categorias-financeiras', roles: ['SUPER_ADMIN'], sempreAtivo: true },
+      // `sempreAtivo` pelo mesmo motivo de Relatórios: a tela escolhe o
+      // próprio recorte (empresa e rota), então travá-la no seletor global
+      // seria trancar justamente quem precisa olhar o sistema inteiro.
+      { key: 'auditoria', label: 'Auditoria', icon: <ScrollText className="w-5 h-5" />, href: '/auditoria', roles: ['SUPER_ADMIN'], sempreAtivo: true },
     ],
   },
 ];
