@@ -137,6 +137,25 @@ function formatarFormaPagamento(forma: string | null): string {
 // COMPONENTE PRINCIPAL
 // =====================================================
 
+/**
+ * Uma linha da auditoria do dia (`fn_auditoria_liquidacao`).
+ *
+ * EXTRATO NÃO É LOG, e por isso só uma parte disto entra aqui: o bloco da
+ * reabertura — quem, quando, por quê — e o que veio DEPOIS dela. A linha do
+ * tempo inteira (cada pagamento como evento) repetiria, em forma de ação, o
+ * que o extrato já mostra como dinheiro. Ela pertence à tela de auditoria.
+ */
+interface EventoAuditoria {
+  momento: string;
+  tipo: string;
+  usuario: string | null;
+  descricao: string | null;
+  valor: number | null;
+  impacto_caixa: number | null;
+  motivo: string | null;
+  depois_da_reabertura: boolean;
+}
+
 interface ModalExtratoLiquidacaoProps {
   isOpen: boolean;
   onClose: () => void;
@@ -157,6 +176,7 @@ export function ModalExtratoLiquidacao({
   const [loading, setLoading] = useState(false);
   const [gerando, setGerando] = useState(false);
   const [registros, setRegistros] = useState<MovimentoFinanceiro[]>([]);
+  const [auditoria, setAuditoria] = useState<EventoAuditoria[]>([]);
   const [pagamentos, setPagamentos] = useState<PagamentoParcela[]>([]);
   const [vendasDia, setVendasDia] = useState<EmprestimoDia[]>([]);
   const [renegociacoesDia, setRenegociacoesDia] = useState<EmprestimoDia[]>([]);
@@ -285,6 +305,17 @@ export function ModalExtratoLiquidacao({
       setRenegociacoesDia(
         emps.filter((e: any) => e.tipo_emprestimo === 'RENEGOCIACAO') as EmprestimoDia[]
       );
+
+      // A auditoria só é buscada se o dia foi reaberto. Num dia normal — que é
+      // a esmagadora maioria — nem a chamada acontece.
+      if (liquidacao.data_reabertura) {
+        const { data: audit } = await supabase.rpc('fn_auditoria_liquidacao', {
+          p_liquidacao_id: liquidacao.id,
+        });
+        setAuditoria((audit || []) as EventoAuditoria[]);
+      } else {
+        setAuditoria([]);
+      }
     } catch (error) {
       console.error('Erro ao carregar extrato:', error);
     } finally {
@@ -295,6 +326,18 @@ export function ModalExtratoLiquidacao({
   // ============================================================
   // CÁLCULOS
   // ============================================================
+
+  // As reaberturas do dia, e o que veio depois delas.
+  //
+  // O FECHAMENTO_POS_REABERTURA sai da lista de alterações: ele é o
+  // encerramento do episódio, não uma alteração. Fica no bloco de cima, como
+  // parte da narrativa "reaberto às 09:16, fechado de novo às 09:22".
+  const reaberturas = auditoria.filter(
+    (a) => a.tipo === 'REABERTURA' || a.tipo === 'FECHAMENTO_POS_REABERTURA'
+  );
+  const alteracoesPosReabertura = auditoria.filter(
+    (a) => a.depois_da_reabertura && a.tipo !== 'FECHAMENTO_POS_REABERTURA'
+  );
 
   // Empréstimos/renovações que SAEM do caixa (renegociações não saem)
   const totalVendasEmprestimos = vendasDia.reduce(
@@ -569,6 +612,32 @@ export function ModalExtratoLiquidacao({
     }).join('')}
   ${registrosSaidas.length > 0 ? `<div class="total-line"><span class="verm b">TOTAL SAÍDAS</span><span class="verm b">-${formatarMoeda(totalSaidasDespesas)}</span></div>` : ''}
 
+  ${reaberturas.length > 0 ? `
+  <div class="secao azul">Reaberturas do Dia</div>
+  <hr class="sep">
+  ${reaberturas.map((ev) => `
+    <div class="item">
+      <div class="item-top"><span class="b">${ev.tipo === 'REABERTURA' ? 'Reaberta' : 'Fechada novamente'}</span></div>
+      <div class="item-sub">${ev.usuario || '—'}</div>
+      ${ev.motivo ? `<div class="item-sub">Motivo: ${ev.motivo}</div>` : ''}
+      <div class="item-meta">${formatarHora(ev.momento)}</div>
+    </div>`).join('')}
+  <div class="secao">Após a reabertura</div>
+  <hr class="sep">
+  ${alteracoesPosReabertura.length === 0
+    ? `<div class="item"><div class="item-sub">Nenhuma alteração registrada.</div></div>`
+    : alteracoesPosReabertura.map((ev) => `
+    <div class="item">
+      <div class="item-top">
+        <span>${ev.descricao || ev.tipo}</span>
+        <span class="${(ev.impacto_caixa || 0) < 0 ? 'verm' : 'verde'}">${
+          ev.impacto_caixa === null ? '—' : formatarMoeda(ev.impacto_caixa)
+        }</span>
+      </div>
+      <div class="item-meta">${formatarHora(ev.momento)} · ${ev.usuario || '—'}</div>
+    </div>`).join('')}
+  ` : ''}
+
   <hr class="sep2">
   <div class="row"><span class="lg">Saldo Final</span><span class="lg">${formatarMoeda(liquidacao.caixa_final)}</span></div>
   <hr class="sep2">
@@ -834,6 +903,62 @@ export function ModalExtratoLiquidacao({
                   </>
                 )}
               </Secao>
+
+              {/* Reaberturas — só existe quando o dia foi reaberto.
+                  O MOTIVO aparece aqui e NÃO no extrato do vendedor: quem
+                  recebe o comprovante no celular não tem o que fazer com
+                  "fulano reabriu para corrigir a frequência do cliente". */}
+              {reaberturas.length > 0 && (
+                <Secao titulo="Reaberturas do Dia" cor="text-blue-600">
+                  {reaberturas.map((ev, i) => (
+                    <div key={`reab-${i}`} className="py-2 border-b border-dashed border-gray-200 last:border-0">
+                      <div className="flex justify-between items-baseline">
+                        <span className="text-sm font-semibold text-gray-900">
+                          {ev.tipo === 'REABERTURA' ? 'Reaberta' : 'Fechada novamente'}
+                        </span>
+                        <span className="text-xs text-gray-500">{formatarHora(ev.momento)}</span>
+                      </div>
+                      <div className="text-xs text-gray-600">{ev.usuario || '—'}</div>
+                      {ev.motivo && (
+                        <div className="text-xs text-gray-700 mt-1 italic">Motivo: {ev.motivo}</div>
+                      )}
+                    </div>
+                  ))}
+
+                  <div className="pt-3">
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">
+                      Após a reabertura
+                    </p>
+                    {alteracoesPosReabertura.length === 0 ? (
+                      // Dizer "nenhuma" é informação, não ausência dela: um dia
+                      // reaberto e fechado sem mexer em nada é exatamente o que
+                      // um auditor quer ver confirmado.
+                      <p className="text-xs text-gray-500">Nenhuma alteração registrada.</p>
+                    ) : (
+                      alteracoesPosReabertura.map((ev, i) => (
+                        <div key={`alt-${i}`} className="flex justify-between items-baseline py-1">
+                          <div className="min-w-0 pr-2">
+                            <p className="text-sm text-gray-900 truncate">{ev.descricao || ev.tipo}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatarHora(ev.momento)} · {ev.usuario || '—'}
+                            </p>
+                          </div>
+                          <span
+                            className={`text-sm font-medium shrink-0 ${
+                              (ev.impacto_caixa || 0) < 0 ? 'text-red-600' : 'text-green-600'
+                            }`}
+                            // Impacto nulo é "não derivável", não zero. Ver o
+                            // COMMENT de fn_auditoria_liquidacao.
+                            title={ev.impacto_caixa === null ? 'Impacto no caixa não derivável' : undefined}
+                          >
+                            {ev.impacto_caixa === null ? '—' : formatarMoeda(ev.impacto_caixa)}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Secao>
+              )}
 
               {/* Saldo final */}
               <div className="border-t-2 border-gray-300 pt-4">
