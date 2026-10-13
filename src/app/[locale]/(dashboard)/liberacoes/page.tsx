@@ -1962,6 +1962,12 @@ export default function LiberacoesPage() {
   // Verificar se há filtros ativos
   const temFiltrosAtivos = filtroStatus || filtroTipo || filtroCategoria || filtroCliente || filtroData || filtroEmpresa || busca;
 
+  // O que está ATIVO E ESCONDIDO — sem o status, que no celular tem seletor
+  // próprio, à vista. É isto que o ponto no botão Filtros sinaliza: avisar
+  // sobre um filtro que a pessoa está olhando seria ruído, e o ponto perderia
+  // o sentido justamente quando precisasse dele.
+  const temFiltrosOcultos = filtroTipo || filtroCategoria || filtroCliente || filtroData || filtroEmpresa || busca;
+
   // Filtro de empresa é exclusivo do SUPER_ADMIN (só ele vê várias empresas)
   const ehSuperAdmin = isSuperAdmin;
 
@@ -1974,6 +1980,17 @@ export default function LiberacoesPage() {
   // Combobox de empresa: texto digitado filtra a lista
   const [buscaEmpresa, setBuscaEmpresa] = useState('');
   const [dropdownEmpresaAberto, setDropdownEmpresaAberto] = useState(false);
+
+  // NO CELULAR, A LISTA É A TELA.
+  //
+  // A primeira versão responsiva empilhou cabeçalho, quatro cartões e cinco
+  // filtros antes da lista — sobrava uma faixa de 5% da altura para aquilo que
+  // a pessoa abriu a tela para ver. Quem autoriza da rua quer a fila de
+  // solicitações; filtro é exceção, e exceção não ocupa o espaço da regra.
+  //
+  // Então: os cartões viram um seletor de status (a mesma informação, uma
+  // linha), e os filtros ficam atrás de um botão. No desktop nada muda.
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false);
 
   const empresasFiltradas = useMemo(() => {
     const termo = buscaEmpresa.trim().toLowerCase();
@@ -2036,9 +2053,10 @@ export default function LiberacoesPage() {
 
         {/* Estatísticas — respeitam empresa/tipo/cliente/data/busca, mas não
             o status, senão selecionar um card zeraria os demais. */}
-        {/* Dois por linha no celular. Quatro num telefone dariam cartões de
-            85px, onde o número não cabe ao lado do ícone. */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+        {/* Os cartões são do desktop. No celular a mesma informação está no
+            seletor logo abaixo — quatro cartões custariam metade da altura
+            útil para mostrar quatro números. */}
+        <div className="hidden lg:grid grid-cols-4 gap-4">
           <button
             onClick={() => setFiltroStatus('')}
             className={`p-4 rounded-xl border-2 transition-colors ${
@@ -2116,8 +2134,41 @@ export default function LiberacoesPage() {
           </button>
         </div>
 
-        {/* Filtros */}
-        <div className="space-y-3">
+        {/* ── CELULAR: a barra de uma linha ───────────────────────────────
+            O seletor carrega o que os quatro cartões diziam, com os mesmos
+            números; o botão abre os filtros e mostra um ponto quando algum
+            está ligado — sem ele, filtro ativo escondido viraria "sumiram as
+            solicitações" sem explicação na tela. */}
+        <div className="flex lg:hidden items-center gap-2">
+          <select
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value)}
+            className="flex-1 min-w-0 px-3 py-2.5 rounded-lg border border-gray-200 bg-white text-sm font-medium"
+          >
+            <option value="">Todas ({contadores.total})</option>
+            <option value="PENDENTE">Pendentes ({contadores.pendentes})</option>
+            <option value="APROVADO">Aprovadas ({contadores.aprovadas})</option>
+            <option value="REJEITADO">Rejeitadas ({contadores.rejeitadas})</option>
+          </select>
+
+          <button
+            onClick={() => setFiltrosAbertos((v) => !v)}
+            className={`relative shrink-0 flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm ${
+              filtrosAbertos || temFiltrosOcultos
+                ? 'border-blue-500 bg-blue-50 text-blue-700'
+                : 'border-gray-200 bg-white text-gray-600'
+            }`}
+          >
+            <Search className="w-4 h-4" />
+            Filtros
+            {temFiltrosOcultos && (
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-blue-600" />
+            )}
+          </button>
+        </div>
+
+        {/* Filtros — no celular só quando pedidos. */}
+        <div className={`${filtrosAbertos ? 'block' : 'hidden'} lg:block space-y-3`}>
           {/* Linha 1: Busca geral + Cliente + Data */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[180px]">
