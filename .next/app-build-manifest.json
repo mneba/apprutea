@@ -19,7 +19,7 @@
       "static/chunks/4bd1b696-444eaf46d1567890.js",
       "static/chunks/1517-4f957c4613e36837.js",
       "static/chunks/main-app-e3490f6f554896ce.js",
-      "static/css/78b84bef84dbf450.css",
+      "static/css/813a95ce4d7a94c2.css",
       "static/chunks/758-f96f414fb3bdef72.js",
       "static/chunks/app/[locale]/layout-c4cbf17759f2963f.js"
     ],
@@ -77,35 +77,8 @@
       "static/chunks/1068-d3c813be831ef6b5.js",
       "static/chunks/5600-d718102900133c8f.js",
       "static/chunks/2724-aaa77a6ad300685f.js",
-      "static/chunks/9730-6cb783073f5bedd2.js",
+      "static/chunks/9730-b0ee084c2a22216f.js",
       "static/chunks/app/[locale]/(dashboard)/layout-aaf6696ac2c378bf.js"
-    ],
-    "/[locale]/(dashboard)/categorias-financeiras/page": [
-      "static/chunks/webpack-ff98eeb43201214a.js",
-      "static/chunks/4bd1b696-444eaf46d1567890.js",
-      "static/chunks/1517-4f957c4613e36837.js",
-      "static/chunks/main-app-e3490f6f554896ce.js",
-      "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/app/[locale]/(dashboard)/categorias-financeiras/page-f67424efe3c4ba42.js"
-    ],
-    "/[locale]/(dashboard)/financeiro/page": [
-      "static/chunks/webpack-ff98eeb43201214a.js",
-      "static/chunks/4bd1b696-444eaf46d1567890.js",
-      "static/chunks/1517-4f957c4613e36837.js",
-      "static/chunks/main-app-e3490f6f554896ce.js",
-      "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/9761-8aaf7cc4001e38a6.js",
-      "static/chunks/1810-af3c499c0aafe50c.js",
-      "static/chunks/3671-b1a647eab90ad107.js",
-      "static/chunks/app/[locale]/(dashboard)/financeiro/page-24927775b1ae6905.js"
-    ],
-    "/[locale]/(dashboard)/dashboard/page": [
-      "static/chunks/webpack-ff98eeb43201214a.js",
-      "static/chunks/4bd1b696-444eaf46d1567890.js",
-      "static/chunks/1517-4f957c4613e36837.js",
-      "static/chunks/main-app-e3490f6f554896ce.js",
-      "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/app/[locale]/(dashboard)/dashboard/page-b52edf6511d4b1ac.js"
     ],
     "/[locale]/(dashboard)/auditoria/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
@@ -113,7 +86,8 @@
       "static/chunks/1517-4f957c4613e36837.js",
       "static/chunks/main-app-e3490f6f554896ce.js",
       "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/app/[locale]/(dashboard)/auditoria/page-d62039c5fd789714.js"
+      "static/chunks/929-1b5eff781598b84c.js",
+      "static/chunks/app/[locale]/(dashboard)/auditoria/page-73f41eeaeed95706.js"
     ],
     "/[locale]/(dashboard)/clientes/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
@@ -129,25 +103,32 @@
       "static/chunks/3039-23c37c4f9d856021.js",
       "static/chunks/app/[locale]/(dashboard)/clientes/page-c748311b1119ee4f.js"
     ],
-    "/[locale]/(dashboard)/relatorios/clientes/page": [
+    "/[locale]/(dashboard)/categorias-financeiras/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
       "static/chunks/4bd1b696-444eaf46d1567890.js",
       "static/chunks/1517-4f957c4613e36837.js",
       "static/chunks/main-app-e3490f6f554896ce.js",
       "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/758-f96f414fb3bdef72.js",
-      "static/chunks/7795-f3ea1849639939d8.js",
-      "static/chunks/7669-7d1ba9f9ae602bab.js",
-      "static/chunks/app/[locale]/(dashboard)/relatorios/clientes/page-ac510fd5edd813a0.js"
+      "static/chunks/app/[locale]/(dashboard)/categorias-financeiras/page-f67424efe3c4ba42.js"
     ],
-    "/[locale]/(dashboard)/organizacao/page": [
+    "/[locale]/(dashboard)/dashboard/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
       "static/chunks/4bd1b696-444eaf46d1567890.js",
       "static/chunks/1517-4f957c4613e36837.js",
       "static/chunks/main-app-e3490f6f554896ce.js",
       "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/2724-aaa77a6ad300685f.js",
-      "static/chunks/app/[locale]/(dashboard)/organizacao/page-e32e55854ab17e5e.js"
+      "static/chunks/app/[locale]/(dashboard)/dashboard/page-b52edf6511d4b1ac.js"
+    ],
+    "/[locale]/(dashboard)/financeiro/page": [
+      "static/chunks/webpack-ff98eeb43201214a.js",
+      "static/chunks/4bd1b696-444eaf46d1567890.js",
+      "static/chunks/1517-4f957c4613e36837.js",
+      "static/chunks/main-app-e3490f6f554896ce.js",
+      "static/chunks/8597-a00a9710b6bc69ec.js",
+      "static/chunks/9761-8aaf7cc4001e38a6.js",
+      "static/chunks/1810-af3c499c0aafe50c.js",
+      "static/chunks/3671-b1a647eab90ad107.js",
+      "static/chunks/app/[locale]/(dashboard)/financeiro/page-24927775b1ae6905.js"
     ],
     "/[locale]/(dashboard)/liberacoes/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
@@ -160,18 +141,7 @@
       "static/chunks/5600-d718102900133c8f.js",
       "static/chunks/1059-8c8dcfa30b7841d8.js",
       "static/chunks/3039-23c37c4f9d856021.js",
-      "static/chunks/app/[locale]/(dashboard)/liberacoes/page-a529864fef8c3648.js"
-    ],
-    "/[locale]/(dashboard)/relatorios/liquidacao-periodo/page": [
-      "static/chunks/webpack-ff98eeb43201214a.js",
-      "static/chunks/4bd1b696-444eaf46d1567890.js",
-      "static/chunks/1517-4f957c4613e36837.js",
-      "static/chunks/main-app-e3490f6f554896ce.js",
-      "static/chunks/8597-a00a9710b6bc69ec.js",
-      "static/chunks/758-f96f414fb3bdef72.js",
-      "static/chunks/7795-f3ea1849639939d8.js",
-      "static/chunks/7669-7d1ba9f9ae602bab.js",
-      "static/chunks/app/[locale]/(dashboard)/relatorios/liquidacao-periodo/page-dd1083b5ed3a3c89.js"
+      "static/chunks/app/[locale]/(dashboard)/liberacoes/page-e2083fd3e2db1c83.js"
     ],
     "/[locale]/(dashboard)/liquidacao/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
@@ -185,6 +155,39 @@
       "static/chunks/1059-8c8dcfa30b7841d8.js",
       "static/chunks/3671-b1a647eab90ad107.js",
       "static/chunks/app/[locale]/(dashboard)/liquidacao/page-b720e40a6b62e459.js"
+    ],
+    "/[locale]/(dashboard)/organizacao/page": [
+      "static/chunks/webpack-ff98eeb43201214a.js",
+      "static/chunks/4bd1b696-444eaf46d1567890.js",
+      "static/chunks/1517-4f957c4613e36837.js",
+      "static/chunks/main-app-e3490f6f554896ce.js",
+      "static/chunks/8597-a00a9710b6bc69ec.js",
+      "static/chunks/2724-aaa77a6ad300685f.js",
+      "static/chunks/app/[locale]/(dashboard)/organizacao/page-e32e55854ab17e5e.js"
+    ],
+    "/[locale]/(dashboard)/relatorios/clientes/page": [
+      "static/chunks/webpack-ff98eeb43201214a.js",
+      "static/chunks/4bd1b696-444eaf46d1567890.js",
+      "static/chunks/1517-4f957c4613e36837.js",
+      "static/chunks/main-app-e3490f6f554896ce.js",
+      "static/chunks/8597-a00a9710b6bc69ec.js",
+      "static/chunks/758-f96f414fb3bdef72.js",
+      "static/chunks/7795-f3ea1849639939d8.js",
+      "static/chunks/929-1b5eff781598b84c.js",
+      "static/chunks/7250-000e856ed1ecccad.js",
+      "static/chunks/app/[locale]/(dashboard)/relatorios/clientes/page-b77bf85f06075572.js"
+    ],
+    "/[locale]/(dashboard)/relatorios/liquidacao-periodo/page": [
+      "static/chunks/webpack-ff98eeb43201214a.js",
+      "static/chunks/4bd1b696-444eaf46d1567890.js",
+      "static/chunks/1517-4f957c4613e36837.js",
+      "static/chunks/main-app-e3490f6f554896ce.js",
+      "static/chunks/8597-a00a9710b6bc69ec.js",
+      "static/chunks/758-f96f414fb3bdef72.js",
+      "static/chunks/7795-f3ea1849639939d8.js",
+      "static/chunks/929-1b5eff781598b84c.js",
+      "static/chunks/7250-000e856ed1ecccad.js",
+      "static/chunks/app/[locale]/(dashboard)/relatorios/liquidacao-periodo/page-81fd862bf3a9a4fc.js"
     ],
     "/[locale]/(dashboard)/relatorios/page": [
       "static/chunks/webpack-ff98eeb43201214a.js",
@@ -202,7 +205,7 @@
       "static/chunks/8597-a00a9710b6bc69ec.js",
       "static/chunks/6397-394970b04c9db49d.js",
       "static/chunks/2724-aaa77a6ad300685f.js",
-      "static/chunks/9730-6cb783073f5bedd2.js",
+      "static/chunks/9730-b0ee084c2a22216f.js",
       "static/chunks/app/[locale]/(dashboard)/usuarios/page-edc31a95e597e0e6.js"
     ],
     "/[locale]/(dashboard)/vendedores/page": [

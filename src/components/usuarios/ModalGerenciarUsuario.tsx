@@ -1377,14 +1377,31 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
 
                   {/* Aviso para ADMIN sendo editado por não-SUPER_ADMIN — não acontece mais */}
 
-                  <div className="border border-gray-200 rounded-xl overflow-hidden">
+                  {/* O CABEÇALHO FICA FIXO AO ROLAR.
+                      Pedido do Julio em 14/10/2026: com a lista longa, rolar
+                      fazia sumir a linha que diz qual coluna é Guardar, Buscar
+                      e Eliminar — e aí marcar a caixa certa vira contagem.
+
+                      ⚠ O `overflow-hidden` SAIU daqui, e é a parte que importa:
+                      ele ANULA o `sticky` de qualquer descendente. O navegador
+                      passa a grudar o cabeçalho neste div, que nunca rola, em
+                      vez de no corpo do modal, que é quem rola — e o resultado
+                      é um `sticky` que não faz nada, sem erro nenhum.
+
+                      Ele estava ali só para recortar os cantos arredondados; o
+                      `rounded-xl` nas pontas do cabeçalho faz esse papel. */}
+                  <div className="border border-gray-200 rounded-xl">
                     <table className="w-full">
-                      <thead className="bg-gray-50">
+                      {/* `bg-gray-50` em cada `th`, e não só no `thead`: com
+                          `sticky`, o fundo do `thead` não é pintado por cima do
+                          conteúdo que passa embaixo, e as linhas atravessariam
+                          o cabeçalho. */}
+                      <thead className="sticky top-0 z-10">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">
+                          <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase bg-gray-50 rounded-tl-xl">
                             Módulo
                           </th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20 bg-gray-50">
                             <div className="flex flex-col items-center gap-1">
                               <span>Todos</span>
                               {(tipoUsuario !== 'ADMIN' || editorIsSuperAdmin) && (
@@ -1425,9 +1442,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               )}
                             </div>
                           </th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Guardar</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Buscar</th>
-                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20">Eliminar</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20 bg-gray-50">Guardar</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20 bg-gray-50">Buscar</th>
+                          <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase w-20 bg-gray-50 rounded-tr-xl">Eliminar</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1514,16 +1531,37 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                       <p className="text-sm text-gray-600 mb-3">
                         Configure quais tipos de solicitações este usuário pode aprovar, por empresa e rota.
                       </p>
-                      <div className="border border-gray-200 rounded-xl overflow-x-auto">
+                      {/* ESTA TABELA ROLA SOZINHA, e por isso é outro conserto.
+                          Ela precisa de rolagem HORIZONTAL (uma coluna por
+                          empresa e rota), e `overflow-x-auto` faz o navegador
+                          tratar o eixo vertical como `auto` também — o div vira
+                          contêiner de rolagem nos dois sentidos. Tirar o
+                          `overflow` quebraria a rolagem lateral, que é
+                          necessária.
+                          A saída é o contrário do caso anterior: em vez de
+                          devolver a rolagem ao modal, damos altura máxima a
+                          este div para que ele role de verdade — e aí o
+                          cabeçalho gruda nele. */}
+                      <div className="border border-gray-200 rounded-xl overflow-auto max-h-[60vh]">
                         <table className="w-full min-w-max">
-                          <thead className="bg-gray-50">
+                          {/* AS DUAS PONTAS FIXAS, e a ordem de empilhamento é o
+                              que faz as três camadas conviverem:
+
+                                z-30  o canto — fica acima das outras duas
+                                z-20  a linha do cabeçalho
+                                z-10  a primeira coluna do corpo
+
+                              Sem essa ordem, rolar para baixo faria a coluna
+                              fixa passar POR CIMA do cabeçalho: mesmo nível de
+                              empilhamento, e quem vem depois no HTML ganha. */}
+                          <thead className="sticky top-0 z-20">
                             {/* Linha de empresas */}
                             <tr>
-                              <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase min-w-[200px]">
+                              <th className="sticky left-0 z-30 px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase min-w-[200px] bg-gray-50">
                                 Tipo de Solicitação
                               </th>
                               {colunasLiberacao.map((col, idx) => (
-                                <th key={idx} className="px-3 py-3 text-left min-w-[130px]">
+                                <th key={idx} className="px-3 py-3 text-left min-w-[130px] bg-gray-50">
                                   <div
                                     className="text-xs font-semibold text-gray-700 leading-tight cursor-default"
                                     title={col.label}
@@ -1551,7 +1589,11 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                               <Fragment key={categoria}>
                                 {/* Linha de categoria */}
                                 <tr className="bg-gray-100">
-                                  <td className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
+                                  {/* Fundo PRÓPRIO, e não herdado da linha:
+                                      célula fixa sem fundo é transparente, e
+                                      as colunas que rolam apareceriam por
+                                      baixo do texto. */}
+                                  <td className="sticky left-0 z-10 bg-gray-100 px-4 py-2 text-xs font-semibold text-gray-600 uppercase">
                                     {categoria === 'LIQUIDACAO' ? 'Liquidação' : categoria === 'LIMITES' ? 'Limites' : 'Operações'}
                                   </td>
                                   {colunasLiberacao.map((col, idx) => (
@@ -1565,10 +1607,13 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                                     </td>
                                   ))}
                                 </tr>
-                                {/* Linhas de tipos */}
+                                {/* Linhas de tipos.
+                                    `group` no `tr` para a célula fixa
+                                    acompanhar o realce: com fundo próprio
+                                    opaco, o `hover` da linha não a atravessa. */}
                                 {TIPOS_SOLICITACAO[categoria].map((item) => (
-                                  <tr key={item.tipo} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3">
+                                  <tr key={item.tipo} className="group hover:bg-gray-50">
+                                    <td className="sticky left-0 z-10 bg-white group-hover:bg-gray-50 px-4 py-3">
                                       <div>
                                         <span className="text-sm text-gray-700">{item.label}</span>
                                         <p className="text-xs text-gray-400">{item.descricao}</p>

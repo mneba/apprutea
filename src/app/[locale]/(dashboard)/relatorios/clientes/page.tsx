@@ -41,8 +41,9 @@ import ModalNotasRelatorio from '@/components/relatorios/ModalNotasRelatorio';
 import { Paginacao } from '@/components/relatorios/ListaRelatorio';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
+import { useEscopoInicial } from '@/hooks/useEscopoInicial';
 import type {
-  ClientesRelatorio, EstruturaVisivel, FiltrosClientes, LinhaCliente, RotaNo,
+  ClientesRelatorio, EstruturaVisivel, FiltrosClientes, Frequencia, LinhaCliente, RotaNo,
 } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
@@ -90,6 +91,32 @@ const corAtraso = (d: number) =>
     : d <= 3 ? 'text-amber-600'
       : d <= 7 ? 'text-orange-600'
         : 'text-red-600';
+
+// ── A PERIODICIDADE É FILTRO, NÃO PRESET ───────────────────────────────
+//
+// Pedido do cliente em 12/10/2026: "filtrar clientes urgentes por
+// periodicidade, separando entre diários, semanais, quinzenais, mensais e
+// flexíveis."
+//
+// "Urgente" já tem nome aqui: ATRASADOS e VENCIDOS. Um preset com esse nome
+// seria sinônimo de um dos dois, ou uma mistura — e ninguém saberia qual.
+//
+// A periodicidade, ao contrário, atravessa todos os presets: ela faz sentido
+// em Atrasados, em Vencidos, em Por vencer e em Ativos. E qualifica a
+// urgência em vez de ser outra lista — TRÊS DIAS DE ATRASO NUM CLIENTE DIÁRIO
+// É GRAVE; NUM MENSAL É QUASE NADA. Como filtro, "Atrasados + Diários"
+// responde o pedido e "Por vencer + Mensais" nasce de graça.
+
+// As cinco, numa lista só: a ordem das fichas, o rótulo da ficha (plural) e o
+// rótulo da linha da tabela (singular). Duas listas separadas divergiriam na
+// primeira periodicidade nova.
+const FREQUENCIAS: { valor: Frequencia; singular: string; nome: string }[] = [
+  { valor: 'DIARIO', singular: 'Diário', nome: 'Diários' },
+  { valor: 'SEMANAL', singular: 'Semanal', nome: 'Semanais' },
+  { valor: 'QUINZENAL', singular: 'Quinzenal', nome: 'Quinzenais' },
+  { valor: 'MENSAL', singular: 'Mensal', nome: 'Mensais' },
+  { valor: 'FLEXIVEL', singular: 'Flexível', nome: 'Flexíveis' },
+];
 
 // ── OS PRESETS ─────────────────────────────────────────────────────────
 //
@@ -196,13 +223,9 @@ const PRESETS: Preset[] = [
  * diferentes, e ler isso exigia atravessar a tabela até a coluna do
  * principal.
  */
-const FREQ: Record<string, string> = {
-  DIARIO: 'Diário',
-  SEMANAL: 'Semanal',
-  QUINZENAL: 'Quinzenal',
-  MENSAL: 'Mensal',
-  FLEXIVEL: 'Flexível',
-};
+const FREQ: Record<string, string> = Object.fromEntries(
+  FREQUENCIAS.map((f) => [f.valor, f.singular])
+);
 
 
 /**
@@ -246,6 +269,7 @@ export default function RelatorioClientesPage() {
   const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
   const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
   const [data, setData] = useState(hojeIso());
+  const [frequencias, setFrequencias] = useState<Frequencia[]>([]);
 
   const [dados, setDados] = useState<ClientesRelatorio | null>(null);
   const [carregando, setCarregando] = useState(false);
@@ -286,6 +310,10 @@ export default function RelatorioClientesPage() {
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
   }, []);
+
+  // Abre já na rota escolhida no menu superior, em vez de pedir de novo uma
+  // escolha que o sistema conhece. Sugestão, não trava — ver o hook.
+  useEscopoInicial(estrutura, selecionadas, setSelecionadas);
 
   useEffect(() => {
     if (!escopoAberto) return;
@@ -341,7 +369,7 @@ export default function RelatorioClientesPage() {
     setErro(null);
     try {
       const r = await relatoriosService.buscarClientes(rotas, dia, {
-        ...filtros, busca, limite: POR_PAGINA, offset: pag * POR_PAGINA,
+        ...filtros, frequencias, busca, limite: POR_PAGINA, offset: pag * POR_PAGINA,
       });
       if (!r || !r.sucesso) {
         setErro(r?.mensagem || 'Não foi possível gerar o relatório.');
@@ -352,7 +380,7 @@ export default function RelatorioClientesPage() {
     } finally {
       setCarregando(false);
     }
-  }, [busca]);
+  }, [busca, frequencias]);
 
   const gerar = useCallback(async () => {
     if (selecionadas.size === 0) return;
@@ -375,9 +403,9 @@ export default function RelatorioClientesPage() {
     );
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [escopoGerado, rotasAtivasArr, preset, pagina, params, busca]);
+  }, [escopoGerado, rotasAtivasArr, preset, pagina, params, busca, frequencias]);
 
-  useEffect(() => { setPagina(0); }, [preset, busca, params]);
+  useEffect(() => { setPagina(0); }, [preset, busca, params, frequencias]);
 
   // Trocar de preset, página ou escopo esvazia a marcação. Marcação que
   // sobrevive a uma lista diferente imprime gente que o usuário nem viu.
@@ -582,7 +610,53 @@ export default function RelatorioClientesPage() {
               </div>
             )}
 
-            <div className={`flex flex-wrap ${rotasDoEscopo.length > 1 ? 'border-t border-gray-100' : ''}`}>
+            {/* PERIODICIDADE — mesma linguagem das fichas de rota, e de
+                propósito: as duas refazem os números sem gerar de novo, e o
+                usuário já aprendeu esse gesto ali em cima.
+
+                Nenhuma marcada significa TODAS. É o contrário do intuitivo
+                para quem programa e o certo para quem usa: ninguém abre um
+                relatório esperando lista vazia, e marcar as cinco para ver
+                tudo seria trabalho para chegar ao padrão. */}
+            <div className="flex flex-wrap items-center gap-1.5 px-3 py-2 border-t border-gray-100">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mr-0.5">
+                Periodicidade
+              </span>
+              {FREQUENCIAS.map((f) => {
+                const ligada = frequencias.includes(f.valor);
+                return (
+                  <button
+                    key={f.valor}
+                    onClick={() =>
+                      setFrequencias((atual) =>
+                        atual.includes(f.valor)
+                          ? atual.filter((x) => x !== f.valor)
+                          : [...atual, f.valor]
+                      )
+                    }
+                    aria-pressed={ligada}
+                    className={`inline-flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full border text-[12px] ${
+                      ligada
+                        ? 'bg-blue-50 border-blue-300 text-blue-700'
+                        : 'bg-gray-50 border-dashed border-gray-300 text-gray-500 hover:border-gray-400'
+                    }`}
+                  >
+                    <span className={`w-2 h-2 rounded-full ${ligada ? 'bg-blue-500' : 'bg-gray-300'}`} />
+                    {f.nome}
+                  </button>
+                );
+              })}
+              {frequencias.length > 0 && (
+                <button
+                  onClick={() => setFrequencias([])}
+                  className="ml-auto text-[11px] px-2 py-1 rounded-md border border-gray-200 text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                >
+                  Todas
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap border-t border-gray-100">
               <Ind rotulo="Situação em">{diaCurto(escopoGerado.data)}</Ind>
               <Ind rotulo="Clientes">{int(t?.clientes)}</Ind>
               <Ind rotulo="Com aberto">{int(t?.com_aberto)}</Ind>

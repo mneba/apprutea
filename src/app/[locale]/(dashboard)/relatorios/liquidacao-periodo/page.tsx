@@ -59,6 +59,7 @@ import PainelVendas from '@/components/relatorios/PainelVendas';
 import SeletorPeriodo from '@/components/relatorios/SeletorPeriodo';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
+import { useEscopoInicial } from '@/hooks/useEscopoInicial';
 import type { EstruturaVisivel, LiquidacoesPeriodo, RotaNo, RotaPeriodo } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
 
@@ -250,6 +251,10 @@ export default function LiquidacaoPeriodoPage() {
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
   }, []);
+
+  // Abre já na rota escolhida no menu superior, em vez de pedir de novo uma
+  // escolha que o sistema conhece. Sugestão, não trava — ver o hook.
+  useEscopoInicial(estrutura, selecionadas, setSelecionadas);
 
   // O popover fecha ao clicar fora ou com Esc. Sem isso ele fica preso aberto
   // sobre a tela, e a árvore de 52 rotas é alta.

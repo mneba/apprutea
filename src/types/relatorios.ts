@@ -522,6 +522,8 @@ export interface ClientesRelatorio {
   linhas: LinhaCliente[];
 }
 
+export type Frequencia = 'DIARIO' | 'SEMANAL' | 'QUINZENAL' | 'MENSAL' | 'FLEXIVEL';
+
 export interface FiltrosClientes {
   situacao?: SituacaoCliente;
   /** Dias de cobrança. */
@@ -536,6 +538,14 @@ export interface FiltrosClientes {
   principalMin?: number | null;
   taxaMin?: number | null;
   taxaMax?: number | null;
+  /**
+   * Periodicidade do empréstimo mais recente do cliente. Vazio = todas.
+   *
+   * É FILTRO, e não um preset "urgentes": três dias de atraso num cliente
+   * diário é grave e num mensal é quase nada — a periodicidade qualifica a
+   * urgência em vez de ser outra lista. Por isso combina com qualquer preset.
+   */
+  frequencias?: Frequencia[];
   ordenar?: 'ATRASO' | 'SALDO' | 'NOME' | 'PAGAMENTO';
   busca?: string;
   limite?: number;

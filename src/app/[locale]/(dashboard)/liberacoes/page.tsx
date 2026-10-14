@@ -2395,17 +2395,23 @@ export default function LiberacoesPage() {
           </div>
 
           {/* ── DESKTOP: a tabela de sempre ── */}
-          <div className="hidden lg:block bg-white rounded-xl border border-gray-200 overflow-hidden">
+          {/* O `sticky` do cabeçalho já estava aqui e nunca funcionou: o
+              `overflow-hidden` deste div anula o `sticky` de qualquer
+              descendente, fazendo-o grudar num elemento que não rola. Como a
+              lista costumava ser curta, ninguém reparou.
+              Ele só recortava os cantos; o arredondamento das pontas do
+              cabeçalho faz o mesmo. */}
+          <div className="hidden lg:block bg-white rounded-xl border border-gray-200">
             <table className="w-full text-sm">
               <thead className="sticky top-0 z-10">
                 <tr className="bg-gray-50 border-b border-gray-200">
-                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Tipo</th>
+                  <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50 rounded-tl-xl">Tipo</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Vendedor</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Empresa</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
                   <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Data</th>
                   <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
-                  <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
+                  <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50 rounded-tr-xl">Ações</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

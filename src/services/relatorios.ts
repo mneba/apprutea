@@ -213,6 +213,9 @@ export const relatoriosService = {
       p_principal_min: filtros.principalMin ?? null,
       p_taxa_min: filtros.taxaMin ?? null,
       p_taxa_max: filtros.taxaMax ?? null,
+      // Array vazio vira nulo: a funcao trata os dois como todas, e mandar
+      // [] seria pedir nenhuma periodicidade.
+      p_frequencias: filtros.frequencias?.length ? filtros.frequencias : null,
       p_ordenar: filtros.ordenar ?? 'ATRASO',
       p_busca: filtros.busca?.trim() || null,
       p_limite: filtros.limite ?? 100,
