@@ -20,7 +20,8 @@ import {
   BarChart3,
   MapPin,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
@@ -38,6 +39,18 @@ interface MenuItem {
   sempreAtivo?: boolean;
   roles?: string[];
   modulo?: string; // código do módulo para verificar permissão
+  /**
+   * Visível apenas para estes `auth.users.id`.
+   *
+   * Usado por ferramenta interna, que não tem módulo em
+   * `modulos_sistema` nem faz sentido para um tipo de usuário inteiro.
+   *
+   * ⚠ ISTO É COSMÉTICO, e está registrado como dívida no CLAUDE.md:
+   * esconder o item não impede ninguém de chamar as funções direto com a
+   * chave anon. O gate de verdade tem de estar no banco, e por decisão do
+   * Mauricio em 15/10/2026 ficou para depois.
+   */
+  userIds?: string[];
 }
 
 interface MenuGroup {
@@ -82,6 +95,17 @@ const menuGroups: MenuGroup[] = [
       // próprio recorte (empresa e rota), então travá-la no seletor global
       // seria trancar justamente quem precisa olhar o sistema inteiro.
       { key: 'auditoria', label: 'Auditoria', icon: <ScrollText className="w-5 h-5" />, href: '/auditoria', roles: ['SUPER_ADMIN'], sempreAtivo: true },
+      // Ferramenta interna de migração do sistema legado. `sempreAtivo`
+      // porque ela escolhe a própria rota, e `userIds` porque é operação
+      // de desenvolvedor, não função do produto.
+      {
+        key: 'importacao',
+        label: 'Importação SmartPay',
+        icon: <FileSpreadsheet className="w-5 h-5" />,
+        href: '/importacao',
+        sempreAtivo: true,
+        userIds: ['f1a47b2a-1089-46c6-bfa1-397fced89db0'],
+      },
     ],
   },
 ];
@@ -203,7 +227,14 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
               </div>
               <div className={`hidden mx-3 mb-2 border-t border-white/10 ${recolhida ? 'lg:block' : ''}`} />
               <ul className="space-y-1 px-2">
-                {group.items.filter(item => !item.roles || item.roles.includes(profile?.tipo_usuario || '')).map((item) => {
+                {group.items
+                  .filter(item => !item.roles || item.roles.includes(profile?.tipo_usuario || ''))
+                  // `user.id` e nao `profile.user_id`: os dois servem, mas o
+                  // do contexto de auth e a fonte, e nao depende de o perfil
+                  // ter carregado. Sem id ainda, o item fica escondido — o
+                  // lado seguro do erro.
+                  .filter(item => !item.userIds || item.userIds.includes(user?.id || ''))
+                  .map((item) => {
                   const habilitado = (temLocalizacao || item.sempreAtivo) &&
                     (!item.modulo || temPermissao(item.modulo));
                   const ativo = isActive(item.href);

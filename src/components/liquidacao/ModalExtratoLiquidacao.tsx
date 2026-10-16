@@ -84,6 +84,24 @@ function formatarHora(data: string | null | undefined): string {
   });
 }
 
+/**
+ * Data e hora de um timestamp do banco.
+ *
+ * O `Z` é acrescentado quando falta porque coluna `timestamp without time
+ * zone` chega sem fuso e é UTC — sem isso o navegador a leria como hora
+ * local, e o selo mostraria o fechamento cinco horas fora na Colômbia.
+ */
+function formatarDataHora(data: string | null | undefined): string {
+  if (!data) return '';
+  const utc = data.endsWith('Z') || data.includes('+') ? data : data + 'Z';
+  const dt = new Date(utc);
+  if (isNaN(dt.getTime())) return '';
+  return `${dt.toLocaleDateString('pt-BR')} ${dt.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })}`;
+}
+
 function formatarDataLiquidacaoBR(dataIso: string | null | undefined): string {
   if (!dataIso) return '';
   const dataStr = dataIso.split('T')[0];
@@ -187,6 +205,11 @@ export function ModalExtratoLiquidacao({
     renovados: 0,
     renegociados: 0,
   });
+  // Selo de fechamento. `quando` é `data_fechamento`; `por` é o nome de quem
+  // fechou, resolvido por `fn_nome_usuario` — que procura em `vendedores` e
+  // depois em `user_profiles`, cobrindo tanto o vendedor no app quanto o admin
+  // por aqui. Mesma fonte do selo do celular.
+  const [fechamento, setFechamento] = useState<{ quando: string; por: string | null } | null>(null);
 
   useEffect(() => {
     if (isOpen && liquidacao) {
@@ -204,7 +227,7 @@ export function ModalExtratoLiquidacao({
       // 1. Dados extras da liquidação (resumo operacional)
       const { data: liqExtra } = await supabase
         .from('liquidacoes_diarias')
-        .select('clientes_pagos, clientes_nao_pagos, clientes_novos, clientes_renovados, clientes_renegociados')
+        .select('clientes_pagos, clientes_nao_pagos, clientes_novos, clientes_renovados, clientes_renegociados, status, data_fechamento, fechado_por')
         .eq('id', liquidacao.id)
         .single();
 
@@ -216,6 +239,31 @@ export function ModalExtratoLiquidacao({
           renovados: (liqExtra as any).clientes_renovados || 0,
           renegociados: (liqExtra as any).clientes_renegociados || 0,
         });
+
+        // Só há selo se a liquidação foi de fato fechada. Uma REABERTA perde o
+        // selo de propósito: o extrato deixou de representar um dia encerrado,
+        // que é justamente o que o selo afirma. Quem quiser a história da
+        // reabertura a tem na seção própria, mais abaixo.
+        const fechadaEm = (liqExtra as any).data_fechamento as string | null;
+        const statusLiq = String((liqExtra as any).status || '').toUpperCase();
+        if (fechadaEm && statusLiq === 'FECHADO') {
+          setFechamento({ quando: fechadaEm, por: null });
+          const quem = (liqExtra as any).fechado_por;
+          if (quem) {
+            // O nome é um extra: se a busca falhar, o selo aparece mesmo assim
+            // com a data e a hora, que é o essencial.
+            const { data: nome, error: errNome } = await supabase.rpc('fn_nome_usuario', {
+              p_user_id: quem,
+            });
+            if (!errNome && typeof nome === 'string' && nome.trim()) {
+              setFechamento({ quando: fechadaEm, por: nome.trim() });
+            }
+          }
+        } else {
+          setFechamento(null);
+        }
+      } else {
+        setFechamento(null);
       }
 
       // 2. Movimentações financeiras (entradas/saídas)
@@ -474,6 +522,9 @@ export function ModalExtratoLiquidacao({
   .item-sub { color: #6B7280; font-size: 11px; margin-top: 2px; }
   .item-meta { color: #9CA3AF; font-size: 10px; margin-top: 2px; }
   .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-bottom: 4px; }
+  .selo { text-align: center; margin: 10px auto 0; padding: 7px 12px; border: 1px dashed #D1D5DB; border-radius: 6px; background: #F9FAFB; max-width: 260px; }
+  .selo-t { font-size: 11px; font-weight: 700; color: #374151; letter-spacing: 0.5px; }
+  .selo div:not(.selo-t) { font-size: 11px; color: #6B7280; margin-top: 2px; }
   .total-line { display: flex; justify-content: space-between; padding: 6px 10px; background: #F3F4F6; border-radius: 4px; margin-top: 8px; }
 </style></head>
 <body><div class="container">
@@ -482,6 +533,11 @@ export function ModalExtratoLiquidacao({
   ${vendedorNome ? `<div class="sub">${vendedorNome}</div>` : ''}
   ${empresaNome ? `<div class="sub">${empresaNome}</div>` : ''}
   <div class="sub">${dataLiqStr}</div>
+  ${fechamento ? `<div class="selo">
+    <div class="selo-t">🔒 SISTEMA FECHADO</div>
+    <div>${formatarDataHora(fechamento.quando)}</div>
+    ${fechamento.por ? `<div>por ${fechamento.por}</div>` : ''}
+  </div>` : ''}
   <hr class="sep2">
 
   <div class="row"><span>Caixa inicial</span><span>${formatarMoeda(liquidacao.caixa_inicial)}</span></div>
@@ -511,7 +567,7 @@ export function ModalExtratoLiquidacao({
         <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${clienteCodigo}${clienteNome}</span>
         <span class="item-val verm">-${formatarMoeda(Number(emp.valor_principal))}</span>
       </div>
-      <div class="item-sub">1° pgto: ${primeiroPgto} · ${emp.numero_parcelas}x ${formatarMoeda(Number(emp.valor_parcela))} · ${emp.taxa_juros}%</div>
+      <div class="item-sub">1° pgto: ${primeiroPgto} · ${emp.numero_parcelas}x ${formatarMoeda(Number(emp.valor_parcela))} · juros ${formatarMoeda(Number(emp.valor_total || 0) - Number(emp.valor_principal || 0))} (${emp.taxa_juros}%)</div>
       <div class="item-meta">${formatarHora(emp.created_at)}</div>
     </div>`;
   }).join('')}
@@ -529,7 +585,7 @@ export function ModalExtratoLiquidacao({
         <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${clienteNome}</span>
         <span class="item-val ambar">${formatarMoeda(Number(emp.valor_principal))}</span>
       </div>
-      <div class="item-sub">1° pgto: ${primeiroPgto} · ${emp.numero_parcelas}x ${formatarMoeda(Number(emp.valor_parcela))} · ${emp.taxa_juros}%</div>
+      <div class="item-sub">1° pgto: ${primeiroPgto} · ${emp.numero_parcelas}x ${formatarMoeda(Number(emp.valor_parcela))} · juros ${formatarMoeda(Number(emp.valor_total || 0) - Number(emp.valor_principal || 0))} (${emp.taxa_juros}%)</div>
       <div class="item-meta">${formatarHora(emp.created_at)}</div>
     </div>`;
   }).join('')}
@@ -572,7 +628,7 @@ export function ModalExtratoLiquidacao({
             <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${nomeCliente}</span>
             <span class="item-val verde">+${formatarMoeda(dinheiroRecebido)}</span>
           </div>
-          ${excedente > 0 ? `<div class="item-sub">Parcela: ${formatarMoeda(Number(p.valor_parcela || 0))} · Excedente: ${formatarMoeda(excedente)}</div>` : ''}
+          <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${excedente > 0 ? ` · Crédito gerado: ${formatarMoeda(excedente)}` : ''}</div>
           <div class="item-meta">${formatarHora(p.created_at)}${p.forma_pagamento ? ` · ${formatarFormaPagamento(p.forma_pagamento)}` : ''}</div>
         </div>`;
       }).join('')}
@@ -720,6 +776,19 @@ export function ModalExtratoLiquidacao({
                 {vendedorNome && <p className="text-sm text-gray-600 mt-1">{vendedorNome}</p>}
                 {empresaNome && <p className="text-xs text-gray-500">{empresaNome}</p>}
                 <p className="text-sm text-gray-500 mt-1">{dataLiqStr}</p>
+                {fechamento && (
+                  <div className="mt-3 inline-flex flex-col items-center px-4 py-2 rounded-lg border border-dashed border-gray-300 bg-gray-50">
+                    <span className="text-[11px] font-bold text-gray-700 tracking-wide">
+                      🔒 SISTEMA FECHADO
+                    </span>
+                    <span className="text-[11px] text-gray-500 mt-0.5">
+                      {formatarDataHora(fechamento.quando)}
+                    </span>
+                    {!!fechamento.por && (
+                      <span className="text-[11px] text-gray-500">por {fechamento.por}</span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Resumo de caixa */}
@@ -1041,6 +1110,7 @@ function CardEmprestimo({ emp, idx }: { emp: EmprestimoDia; idx: number }) {
     ? 'text-purple-700 bg-purple-100'
     : 'text-green-700 bg-green-100';
   const primeiroPgto = formatarDataParcela(emp.data_primeiro_vencimento);
+  const juros = Number(emp.valor_total || 0) - Number(emp.valor_principal || 0);
 
   return (
     <div className="p-3 bg-red-50 rounded-lg border-l-4 border-red-400">
@@ -1059,7 +1129,7 @@ function CardEmprestimo({ emp, idx }: { emp: EmprestimoDia; idx: number }) {
       </div>
       <div className="text-xs text-gray-600 mt-1">
         1° pgto: {primeiroPgto} · {emp.numero_parcelas}x {formatarMoeda(Number(emp.valor_parcela))} ·{' '}
-        {emp.taxa_juros}%
+        juros {formatarMoeda(juros)} ({emp.taxa_juros}%)
       </div>
       <div className="text-[10px] text-gray-400 mt-1">{formatarHora(emp.created_at)}</div>
     </div>
@@ -1069,6 +1139,7 @@ function CardEmprestimo({ emp, idx }: { emp: EmprestimoDia; idx: number }) {
 function CardRenegociacao({ emp, idx }: { emp: EmprestimoDia; idx: number }) {
   const clienteNome = emp.cliente?.nome || '—';
   const primeiroPgto = formatarDataParcela(emp.data_primeiro_vencimento);
+  const juros = Number(emp.valor_total || 0) - Number(emp.valor_principal || 0);
 
   return (
     <div className="p-3 bg-amber-50 rounded-lg border-l-4 border-amber-400">
@@ -1082,7 +1153,7 @@ function CardRenegociacao({ emp, idx }: { emp: EmprestimoDia; idx: number }) {
       </div>
       <div className="text-xs text-gray-600 mt-1">
         1° pgto: {primeiroPgto} · {emp.numero_parcelas}x {formatarMoeda(Number(emp.valor_parcela))} ·{' '}
-        {emp.taxa_juros}%
+        juros {formatarMoeda(juros)} ({emp.taxa_juros}%)
       </div>
       <div className="text-[10px] text-gray-400 mt-1">{formatarHora(emp.created_at)}</div>
     </div>
@@ -1106,11 +1177,11 @@ function CardCobranca({ p, idx }: { p: PagamentoParcela; idx: number }) {
           +{formatarMoeda(dinheiroRecebido)}
         </span>
       </div>
-      {excedente > 0 && (
-        <div className="text-xs text-gray-600 mt-1">
-          Parcela: {formatarMoeda(Number(p.valor_parcela || 0))} · Excedente: {formatarMoeda(excedente)}
-        </div>
-      )}
+      <div className="text-xs text-gray-600 mt-1">
+        Parcela {p.numero_parcela}: {formatarMoeda(Number(p.valor_parcela || 0))}
+        {creditoUsado > 0 && ` · ${formatarMoeda(creditoUsado)} com crédito`}
+        {excedente > 0 && ` · Crédito gerado: ${formatarMoeda(excedente)}`}
+      </div>
       <div className="text-[10px] text-gray-400 mt-1">
         {formatarHora(p.created_at)}
         {p.forma_pagamento && ` · ${formatarFormaPagamento(p.forma_pagamento)}`}
