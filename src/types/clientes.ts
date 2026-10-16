@@ -7,6 +7,24 @@
 // =====================================================
 
 export type StatusCliente = 'ATIVO' | 'INATIVO' | 'SUSPENSO';
+
+/**
+ * Uma linha de `cliente_status_historico` — suspensão ou reativação.
+ *
+ * `registrado_em` é o INSTANTE (timestamptz) e `data_operacional` é o dia
+ * da rota, no fuso da empresa. Mostre a segunda quando existir: a
+ * primeira, renderizada no navegador, sai no fuso de quem está olhando.
+ */
+export interface HistoricoStatusCliente {
+  id: string;
+  status_anterior: string | null;
+  status_novo: string;
+  motivo: string | null;
+  usuario_id: string | null;
+  usuario_nome: string | null;
+  registrado_em: string;
+  data_operacional: string | null;
+}
 export type StatusEmprestimo = 'ATIVO' | 'QUITADO' | 'CANCELADO' | 'VENCIDO' | 'RENEGOCIADO' | 'ADIANTADO' | 'INCOMPLETO';
 export type StatusParcela = 'PENDENTE' | 'PAGO' | 'PARCIAL' | 'VENCIDO' | 'CANCELADO';
 export type TipoEmprestimo = 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO';

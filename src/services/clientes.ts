@@ -23,6 +23,7 @@ import type {
   EmprestimoHistorico,
   ParcelaView,
   LinhaExportacaoEmprestimo,
+  HistoricoStatusCliente,
 } from '@/types/clientes';
 
 // =====================================================
@@ -32,17 +33,42 @@ import type {
 export const clientesService = {
   // Suspender ou reativar cliente. 'REATIVAR' recalcula ATIVO/INATIVO
   // conforme empréstimos vivos (regra no banco). Retorna o novo status.
-  async definirStatusCliente(clienteId: string, acao: 'SUSPENDER' | 'REATIVAR'): Promise<string> {
+  //
+  // O motivo é OBRIGATÓRIO para SUSPENDER e opcional para REATIVAR — a
+  // exigência vive no banco, não aqui, porque é lá que a linha do
+  // histórico é gravada. A mensagem de recusa vem de lá e pode ir direta
+  // para a tela.
+  async definirStatusCliente(
+    clienteId: string,
+    acao: 'SUSPENDER' | 'REATIVAR',
+    motivo?: string
+  ): Promise<string> {
     const supabase = createClient();
     const { data, error } = await supabase.rpc('fn_definir_status_cliente', {
       p_cliente_id: clienteId,
       p_acao: acao,
+      p_motivo: motivo?.trim() || null,
     });
     if (error) {
       console.error('Erro ao definir status do cliente:', error);
       throw error;
     }
     return data as string;
+  },
+
+  // Linha do tempo de suspensões e reativações, mais recente primeiro.
+  // Vazia para cliente suspenso antes de 16/10/2026: o histórico começa
+  // onde começou o registro, e não há de onde deduzir o que passou.
+  async buscarHistoricoStatus(clienteId: string): Promise<HistoricoStatusCliente[]> {
+    const supabase = createClient();
+    const { data, error } = await supabase.rpc('fn_cliente_status_historico', {
+      p_cliente_id: clienteId,
+    });
+    if (error) {
+      console.error('Erro ao buscar histórico de status do cliente:', error);
+      return [];
+    }
+    return (data || []) as HistoricoStatusCliente[];
   },
 
   // ==================================================

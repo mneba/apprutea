@@ -73,7 +73,14 @@ export default function ImportacaoPage() {
     setErro(null);
     setOcupado(etiqueta);
     try { await fn(); }
-    catch (e: any) { setErro(e?.message || 'Falha inesperada'); }
+    catch (e: any) {
+      const msg = e?.message || 'Falha inesperada';
+      setErro(msg);
+      // A recusa por execução em andamento manda "conclua ou aborte", e os
+      // dois botões estão no Histórico, que começa fechado. Abrir aqui é o
+      // que faltava para a mensagem levar a algum lugar.
+      if (/em andamento/i.test(msg)) setVerHistorico(true);
+    }
     finally { setOcupado(null); }
   }, []);
 
@@ -153,6 +160,49 @@ export default function ImportacaoPage() {
       setPasso('ACEITE');
     });
 
+  // A tela de EXECUÇÃO era um beco sem saída. Em 16/10/2026 as duas fases
+  // rodaram inteiras — 42 clientes, 42 empréstimos — e o pós recusou
+  // porque ninguém avançava a `etapa`; com o erro na tela não havia como
+  // voltar àquela execução, e recarregar a página levava para o começo.
+  // O conserto da etapa está em sql/2026-10-16_importacao_etapa_avanca.sql;
+  // este botão é a saída que faltava quando um passo falha no meio.
+  //
+  // Ele NÃO roda as fases de novo: só retoma do ponto que a etapa declara.
+  const retomar = (id: string) =>
+    comErro('retomando', async () => {
+      const e = await imp.buscarExecucao(id);
+      setExecucao(e);
+      setVerHistorico(false);
+      setRegistro([]);
+      anotar(`Retomando execução ${id} em ${e.etapa}`);
+
+      // Diagnóstico GRAVADO, não revalidado: validar de novo é escrita, e
+      // quem retoma quer ver o que foi decidido, não um estado novo. O
+      // botão "Validar de novo" está ali para isso.
+      setAchados((e.diagnostico?.achados || []) as imp.Achado[]);
+
+      if (['UPLOAD', 'STAGING', 'VALIDACAO', 'FASE1'].includes(e.etapa)) {
+        // FASE1 cai aqui de propósito: os empréstimos não entraram, então
+        // o caminho é o botão Importar, não o pós.
+        setPrev(await imp.previsto(id));
+        setLiberacao(await imp.podeAvancar(id));
+        setPasso('DIAGNOSTICO');
+        return;
+      }
+
+      if (e.etapa === 'FASE2') {
+        setPasso('EXECUCAO');
+        const ps = await imp.pos(id);
+        anotar(`PÓS — ${ps.mensagem}`);
+      }
+
+      // POS e ACEITE: a conferência é só leitura, e em ACEITE a tela já
+      // mostra o selo em vez do botão.
+      setConferencia(await imp.conferir(id));
+      setExecucao(await imp.buscarExecucao(id));
+      setPasso('ACEITE');
+    });
+
   const aceitar = () =>
     comErro('aceitando', async () => {
       if (!execucao) return;
@@ -162,17 +212,28 @@ export default function ImportacaoPage() {
       setHistorico(await imp.listarExecucoes());
     });
 
-  const abortar = () =>
+  // Recebe o id em vez de usar só a execução corrente, porque abortar
+  // também tem de ser possível a partir do Histórico: quem recarrega a
+  // página perde a execução de vista e a criação da próxima é recusada
+  // enquanto a anterior estiver em andamento. Era um impasse que só saía
+  // por SQL, e aborto é operação da ferramenta, não de banco.
+  const abortarExecucao = (id: string) =>
     comErro('abortando', async () => {
-      if (!execucao) return;
       const motivo = window.prompt('Motivo do aborto (fica registrado):') || '';
       if (!motivo.trim()) return;
-      const r = await imp.abortar(execucao.id, motivo.trim());
+      const r = await imp.abortar(id, motivo.trim());
       anotar(`ABORTADA — ${r.mensagem}`);
-      setExecucao(null); setAchados([]); setPrev(null); setLiberacao(null);
-      setPasso('ESCOLHA');
+      if (execucao?.id === id) {
+        setExecucao(null); setAchados([]); setPrev(null); setLiberacao(null);
+        setPasso('ESCOLHA');
+      }
       setHistorico(await imp.listarExecucoes());
     });
+
+  const abortar = () => {
+    if (!execucao) return;
+    abortarExecucao(execucao.id);
+  };
 
   const bloqueios = achados.filter(a => a.gravidade === 'BLOQUEIA');
   const conferir_ = achados.filter(a => a.gravidade === 'CONFERIR');
@@ -510,7 +571,7 @@ export default function ImportacaoPage() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Quando', 'Rota', 'Arquivo', 'Etapa', 'Linhas', 'Parcelas'].map(h => (
+                  {['Quando', 'Rota', 'Arquivo', 'Etapa', 'Linhas', 'Parcelas', ''].map(h => (
                     <th key={h} className="px-4 py-2 text-left text-xs font-semibold text-gray-500 uppercase">{h}</th>
                   ))}
                 </tr>
@@ -533,6 +594,37 @@ export default function ImportacaoPage() {
                     </td>
                     <td className="px-4 py-2 text-right font-mono text-xs">{h.registros_csv ?? '—'}</td>
                     <td className="px-4 py-2 text-right font-mono text-xs">{h.parcelas_previstas ?? '—'}</td>
+                    <td className="px-4 py-2 text-right whitespace-nowrap">
+                      {h.etapa === 'ABORTADO' ? (
+                        <span className="text-xs text-gray-400">—</span>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => retomar(h.id)}
+                            disabled={!!ocupado}
+                            className="px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50
+                                       rounded-md hover:bg-blue-100 disabled:opacity-50"
+                          >
+                            {h.etapa === 'ACEITE' ? 'Ver' : 'Retomar'}
+                          </button>
+                          {/* Aceita não aborta: o aceite é o fim da linha, e
+                              apagar a staging de uma importação aceita
+                              jogaria fora a prova de onde os cadastros
+                              vieram. */}
+                          {h.etapa !== 'ACEITE' && (
+                            <button
+                              onClick={() => abortarExecucao(h.id)}
+                              disabled={!!ocupado}
+                              className="px-2.5 py-1 text-xs font-medium text-red-700 bg-red-50
+                                         rounded-md hover:bg-red-100 disabled:opacity-50"
+                              title="Abortar esta execução e liberar a rota"
+                            >
+                              Abortar
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

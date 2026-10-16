@@ -47,14 +47,16 @@ import { AnexosCliente } from '@/components/clientes/AnexosCliente';
 import { LightboxImagem } from '@/components/liquidacao/CardsFinanceiros';
 import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
 import { ModalQuitarEmprestimo } from '@/components/liquidacao/ModalQuitarEmprestimo';
+import { ModalSuspenderCliente } from '@/components/clientes/ModalSuspenderCliente';
 import { usePermissaoModulo } from '@/hooks/usePermissaoModulo';
 import { useUser } from '@/contexts/UserContext';
-import type { 
-  Cliente, 
-  EmprestimoHistorico, 
+import type {
+  Cliente,
+  EmprestimoHistorico,
   ParcelaView,
   ClienteComTotais,
   Segmento,
+  HistoricoStatusCliente,
 } from '@/types/clientes';
 
 // =====================================================
@@ -76,6 +78,51 @@ function formatarData(data: string): string {
 function formatarDataHora(data: string): string {
   if (!data) return '-';
   return new Date(data).toLocaleString('pt-BR');
+}
+
+/**
+ * A data de uma suspensão/reativação, como o usuário deve vê-la.
+ *
+ * `data_operacional` é 'YYYY-MM-DD' no fuso da EMPRESA e é a preferida —
+ * parseada ao meio-dia local, porque à meia-noite o fuso do navegador
+ * puxaria para o dia anterior. Sem ela (cliente sem rota de onde tirar o
+ * fuso), cai no instante do registro, que é a verdade de auditoria.
+ */
+function dataDoMovimentoStatus(h: HistoricoStatusCliente): string {
+  if (h.data_operacional) {
+    return new Date(h.data_operacional + 'T12:00:00').toLocaleDateString('pt-BR');
+  }
+  return formatarDataHora(h.registrado_em);
+}
+
+/** Uma linha da história de suspensões do cliente. */
+function LinhaHistoricoStatus({ h }: { h: HistoricoStatusCliente }) {
+  const suspensao = h.status_novo === 'SUSPENSO';
+  return (
+    <div className={`flex gap-3 p-3 rounded-lg border ${
+      suspensao ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+    }`}>
+      <div className="flex-shrink-0 mt-0.5">
+        {suspensao
+          ? <Ban className="w-4 h-4 text-red-600" />
+          : <RotateCcw className="w-4 h-4 text-green-600" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className={`text-sm font-semibold ${suspensao ? 'text-red-800' : 'text-green-800'}`}>
+            {suspensao ? 'Suspenso' : `Reativado (${h.status_novo})`}
+          </span>
+          <span className="text-xs text-gray-500">{dataDoMovimentoStatus(h)}</span>
+          {h.usuario_nome && (
+            <span className="text-xs text-gray-500">por {h.usuario_nome}</span>
+          )}
+        </div>
+        {h.motivo
+          ? <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap break-words">{h.motivo}</p>
+          : <p className="mt-1 text-xs text-gray-400 italic">Sem motivo informado.</p>}
+      </div>
+    </div>
+  );
 }
 
 // =====================================================
@@ -590,6 +637,7 @@ function FormularioEdicao({
   temParcelaEmAtraso,
   temEmprestimoEmDia,
   onStatusAlterado,
+  historicoStatus,
 }: {
   cliente: Cliente;
   segmentos: Segmento[];
@@ -601,6 +649,8 @@ function FormularioEdicao({
   temParcelaEmAtraso: boolean;
   temEmprestimoEmDia: boolean;
   onStatusAlterado?: () => void;
+  /** Suspensões e reativações já registradas, mais recente primeiro. */
+  historicoStatus: HistoricoStatusCliente[];
 }) {
   const [form, setForm] = useState<FormEdicaoCliente>({
     nome: cliente.nome || '',
@@ -623,26 +673,30 @@ function FormularioEdicao({
 
   // Status atual (Ativo/Inativo são automáticos; Suspenso é a ação manual)
   const [statusCliente, setStatusCliente] = useState<string>(cliente.status || 'ATIVO');
-  const [alterandoStatus, setAlterandoStatus] = useState(false);
+  const [modalStatusAberto, setModalStatusAberto] = useState(false);
 
-  const handleToggleSuspensao = async () => {
+  // O último movimento de status, quando houver. Cliente suspenso ANTES de
+  // 16/10/2026 não tem nenhum — a data real não existe em lugar nenhum
+  // (`updated_at` é o da última edição qualquer) e inventá-la seria pior
+  // que admitir a falta.
+  const ultimoMovimento = historicoStatus[0];
+  const suspensaoAtual = statusCliente === 'SUSPENSO' && ultimoMovimento?.status_novo === 'SUSPENSO'
+    ? ultimoMovimento
+    : null;
+
+  // O motivo não é validado aqui: quem exige é
+  // `fn_definir_status_cliente`, que é também quem grava o histórico.
+  // Validar nos dois lugares cria duas regras para divergir.
+  const handleConfirmarStatus = async (motivo: string) => {
     const suspender = statusCliente !== 'SUSPENSO';
-    const msg = suspender
-      ? 'Suspender este cliente? Ele ficará marcado como SUSPENSO até ser reativado.'
-      : 'Reativar este cliente? O status voltará a ATIVO ou INATIVO conforme os empréstimos dele.';
-    if (!window.confirm(msg)) return;
-
-    setAlterandoStatus(true);
-    try {
-      const novo = await clientesService.definirStatusCliente(cliente.id, suspender ? 'SUSPENDER' : 'REATIVAR');
-      setStatusCliente(novo);
-      onStatusAlterado?.();
-    } catch (e) {
-      console.error('Erro ao alterar status do cliente:', e);
-      alert('Não foi possível alterar o status do cliente. Tente novamente.');
-    } finally {
-      setAlterandoStatus(false);
-    }
+    const novo = await clientesService.definirStatusCliente(
+      cliente.id,
+      suspender ? 'SUSPENDER' : 'REATIVAR',
+      motivo
+    );
+    setStatusCliente(novo);
+    setModalStatusAberto(false);
+    onStatusAlterado?.();
   };
 
   const handleChange = (campo: keyof FormEdicaoCliente, valor: string | boolean) => {
@@ -691,25 +745,54 @@ function FormularioEdicao({
             {podeAlterarStatus && (
               <button
                 type="button"
-                onClick={handleToggleSuspensao}
-                disabled={alterandoStatus}
-                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors disabled:opacity-50 ${
+                onClick={() => setModalStatusAberto(true)}
+                className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
                   statusCliente === 'SUSPENSO'
                     ? 'text-green-700 bg-green-50 hover:bg-green-100'
                     : 'text-red-700 bg-red-50 hover:bg-red-100'
                 }`}
                 title={statusCliente === 'SUSPENSO' ? 'Reativar cliente' : 'Suspender cliente'}
               >
-                {alterandoStatus ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  : statusCliente === 'SUSPENSO' ? <RotateCcw className="w-3.5 h-3.5" />
+                {statusCliente === 'SUSPENSO' ? <RotateCcw className="w-3.5 h-3.5" />
                   : <Ban className="w-3.5 h-3.5" />}
                 {statusCliente === 'SUSPENSO' ? 'Reativar' : 'Suspender'}
               </button>
             )}
           </div>
+
+          {/* Por que este cliente está suspenso, logo onde o selo aparece.
+              A linha do tempo inteira fica na aba Histórico. */}
+          {statusCliente === 'SUSPENSO' && (
+            suspensaoAtual ? (
+              <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-[11px] text-red-700">
+                  Suspenso em {dataDoMovimentoStatus(suspensaoAtual)}
+                  {suspensaoAtual.usuario_nome ? ` por ${suspensaoAtual.usuario_nome}` : ''}
+                </p>
+                {suspensaoAtual.motivo && (
+                  <p className="mt-0.5 text-xs text-red-800 whitespace-pre-wrap break-words">
+                    {suspensaoAtual.motivo}
+                  </p>
+                )}
+              </div>
+            ) : (
+              <p className="mt-2 text-[11px] text-gray-400">
+                Suspensão anterior a 16/10/2026 — sem data e motivo registrados.
+              </p>
+            )
+          )}
+
           <p className="mt-1 text-[11px] text-gray-400">
             Ativo/Inativo são definidos automaticamente pelos empréstimos.
           </p>
+
+          <ModalSuspenderCliente
+            isOpen={modalStatusAberto}
+            acao={statusCliente === 'SUSPENSO' ? 'REATIVAR' : 'SUSPENDER'}
+            clienteNome={cliente.nome}
+            onClose={() => setModalStatusAberto(false)}
+            onConfirmar={handleConfirmarStatus}
+          />
         </div>
       </div>
 
@@ -974,6 +1057,10 @@ export function ModalDetalhesCliente({
   // Dados auxiliares
   const [segmentos, setSegmentos] = useState<Segmento[]>([]);
   const [microseguros, setMicroseguros] = useState<MicroseguroInfo[]>([]);
+  // Suspensões e reativações, mais recente primeiro. Alimenta tanto o
+  // aviso ao lado do selo de status quanto a linha do tempo da aba
+  // Histórico — uma consulta só, lida nos dois lugares.
+  const [historicoStatus, setHistoricoStatus] = useState<HistoricoStatusCliente[]>([]);
   
   // Estados de edição
   const [modoEdicao, setModoEdicao] = useState(false);
@@ -1003,6 +1090,7 @@ export function ModalDetalhesCliente({
       carregarDadosCompletos();
       carregarSegmentos();
       carregarMicroseguros();
+      carregarHistoricoStatus();
       setModoEdicao(false);
       setErro(null);
       setSucesso(null);
@@ -1053,6 +1141,19 @@ export function ModalDetalhesCliente({
     } finally {
       setCarregando(false);
     }
+  };
+
+  const carregarHistoricoStatus = async () => {
+    if (!cliente?.id) return;
+    const linhas = await clientesService.buscarHistoricoStatus(cliente.id);
+    setHistoricoStatus(linhas);
+  };
+
+  // Suspender ou reativar muda o selo do cliente na lista de fora E a
+  // linha do tempo daqui de dentro — os dois têm de recarregar.
+  const handleStatusAlterado = () => {
+    carregarHistoricoStatus();
+    onClienteAtualizado?.();
   };
 
   const carregarSegmentos = async () => {
@@ -1175,7 +1276,12 @@ export function ModalDetalhesCliente({
         endereco: dados.endereco || undefined,
         endereco_comercial: dados.endereco_comercial || undefined,
         observacoes: dados.observacoes || undefined,
-        status: dados.status as 'ATIVO' | 'INATIVO' | 'SUSPENSO',
+        // `status` NÃO vai mais no Salvar. Ele vinha de `form.status`, que
+        // nasce de `cliente.status` e nenhum controle da tela altera — o
+        // botão Suspender usa a RPC própria. Mandá-lo de volta
+        // DESSUSPENDIA o cliente em silêncio quando alguém suspendia e
+        // apertava Salvar sem fechar o modal. Status tem dono:
+        // `fn_definir_status_cliente`, que exige motivo e grava histórico.
         segmento_id: dados.segmento_id || undefined,
         foto_url: dados.foto_url || undefined,
       });
@@ -1363,7 +1469,8 @@ export function ModalDetalhesCliente({
                     temEmprestimoAtivo={emprestimosAtivos.length > 0}
                     temParcelaEmAtraso={temParcelaEmAtraso}
                     temEmprestimoEmDia={temEmprestimoEmDia}
-                    onStatusAlterado={onClienteAtualizado}
+                    onStatusAlterado={handleStatusAlterado}
+                    historicoStatus={historicoStatus}
                   />
                 ) : (
                   <div className="space-y-6">
@@ -1562,6 +1669,32 @@ export function ModalDetalhesCliente({
               {/* ABA: HISTÓRICO */}
               {abaAtiva === 'historico' && (
                 <div className="space-y-4">
+                  {/* Suspensões e reativações, antes dos empréstimos
+                      encerrados: é o que o Julio pediu em 23/09/2026 que
+                      ficasse "salvo no histórico do cliente para consulta
+                      posterior". Só aparece quando há registro — cliente
+                      nunca suspenso não ganha seção vazia. */}
+                  {historicoStatus.length > 0 && (
+                    <div>
+                      <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
+                        <Shield className="w-4 h-4 text-gray-400" />
+                        Suspensões e reativações
+                      </h4>
+                      <div className="space-y-2">
+                        {historicoStatus.map((h) => (
+                          <LinhaHistoricoStatus key={h.id} h={h} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {emprestimosFinalizados.length > 0 && historicoStatus.length > 0 && (
+                    <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-700 pt-2">
+                      <History className="w-4 h-4 text-gray-400" />
+                      Empréstimos finalizados
+                    </h4>
+                  )}
+
                   {emprestimosFinalizados.length > 0 ? (
                     emprestimosFinalizados.map((emp) => (
                       <CardEmprestimo
@@ -1581,6 +1714,13 @@ export function ModalDetalhesCliente({
                         anexoAutorNome={profile?.nome || null}
                       />
                     ))
+                  ) : historicoStatus.length > 0 ? (
+                    /* Com suspensão registrada, a aba não está vazia — o
+                       bloco grande de "Nenhum histórico" contradiria o que
+                       está logo acima. */
+                    <p className="text-sm text-gray-400 pt-2">
+                      Nenhum empréstimo finalizado.
+                    </p>
                   ) : (
                     <div className="flex flex-col items-center justify-center py-12 text-center">
                       <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
