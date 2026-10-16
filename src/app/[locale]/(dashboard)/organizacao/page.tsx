@@ -155,10 +155,15 @@ export default function OrganizacaoPage() {
   const [novoFeriadoDescricao, setNovoFeriadoDescricao] = useState('');
   const [salvandoFeriado, setSalvandoFeriado] = useState(false);
   const [excluindoFeriado, setExcluindoFeriado] = useState<string | null>(null);
+  // O que `fn_feriado_previsao` respondeu. A tela NÃO decide mais se a
+  // data é aceitável: ela pergunta ao banco, que é onde a regra mora.
   const [previewFeriado, setPreviewFeriado] = useState<{
     emprestimos: number;
     parcelas: number;
     mensagem: string;
+    permitido: boolean;
+    vaiDeslocar: boolean;
+    hojeDaRota: string | null;
   } | null>(null);
   const [trabalhaDomingoFeriados, setTrabalhaDomingoFeriados] = useState(false);
   const [salvandoDomingo, setSalvandoDomingo] = useState(false);
@@ -619,8 +624,12 @@ export default function OrganizacaoPage() {
     }
 
     try {
+      // `fn_feriado_previsao` e nao `fn_verificar_feriado_preview`: a nova
+      // responde se a data e PERMITIDA e se vai deslocar parcela, com a
+      // mesma condicao do gatilho. A antiga só contava impacto, e a tela
+      // tinha de adivinhar o resto.
       const { data, error } = await (await import('@/lib/supabase/client')).createClient()
-        .rpc('fn_verificar_feriado_preview', { 
+        .rpc('fn_feriado_previsao', {
           p_rota_id: rotaParaFeriados.id,
           p_data: novoFeriadoData
         });
@@ -630,7 +639,10 @@ export default function OrganizacaoPage() {
         setPreviewFeriado({
           emprestimos: data[0].emprestimos_afetados,
           parcelas: data[0].parcelas_afetadas,
-          mensagem: data[0].mensagem,
+          mensagem: data[0].motivo,
+          permitido: data[0].permitido,
+          vaiDeslocar: data[0].vai_deslocar,
+          hojeDaRota: data[0].hoje_da_rota,
         });
       }
     } catch (err) {
@@ -644,20 +656,27 @@ export default function OrganizacaoPage() {
       return;
     }
 
-    // Validar data futura
+    // DATA RETROATIVA É PERMITIDA desde 16/10/2026, a pedido do cliente:
+    // na prática o feriado só é registrado no dia seguinte.
+    //
+    // A trava que estava aqui — `new Date()` do APARELHO comparado com a
+    // data escolhida — saiu por dois motivos. Ela proibia o passado, que
+    // agora é o caso de uso; e usava o relógio do dispositivo, proibido
+    // neste domínio para qualquer coisa que o usuário veja (CLAUDE.md, "A
+    // liquidação é a régua do tempo"). Quem decide é
+    // `fn_feriado_previsao`, com a MESMA condição do gatilho — regra em
+    // dois lugares diverge no primeiro caso de borda.
     const dataFeriado = new Date(novoFeriadoData + 'T00:00:00');
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    
-    if (dataFeriado < hoje) {
-      alert('Só é permitido cadastrar feriados para datas futuras');
+
+    if (previewFeriado && !previewFeriado.permitido) {
+      alert(previewFeriado.mensagem);
       return;
     }
 
-    // Mostrar confirmação com preview
     const parcelas = previewFeriado?.parcelas || 0;
     const emprestimos = previewFeriado?.emprestimos || 0;
-    
+    const vaiDeslocar = previewFeriado?.vaiDeslocar ?? false;
+
     const dataFormatada = dataFeriado.toLocaleDateString('pt-BR', {
       weekday: 'long',
       day: '2-digit',
@@ -668,10 +687,18 @@ export default function OrganizacaoPage() {
     setConfirmacaoTipo('feriado');
     setConfirmacaoPreview({
       titulo: `Adicionar Feriado: ${novoFeriadoDescricao.trim()}`,
-      mensagem: `Data: ${dataFormatada}\n\nAo adicionar este feriado, as parcelas que vencem nesta data serão automaticamente movidas para o próximo dia útil.`,
-      impacto: parcelas > 0 
-        ? `${parcelas} parcela(s) de ${emprestimos} empréstimo(s) serão reagendadas.`
-        : 'Nenhuma parcela pendente será afetada.',
+      // A mensagem diz o que VAI acontecer, não o que costumava acontecer.
+      // A versão antiga prometia sempre "as parcelas serão movidas" — com
+      // feriado retroativo isso é falso, e tela que promete o que não vai
+      // acontecer é pior que tela que não explica nada.
+      mensagem: vaiDeslocar
+        ? `Data: ${dataFormatada}\n\nO dia deixa de contar como atraso, e as parcelas a partir dele serão remarcadas para o próximo dia útil.`
+        : `Data: ${dataFormatada}\n\nO dia deixa de contar como atraso de imediato, para todos os clientes da rota.\n\nNENHUM vencimento será alterado: a rota já operou nesta data ou depois dela, e remarcar reescreveria dia fechado.`,
+      impacto: vaiDeslocar
+        ? (parcelas > 0
+            ? `${parcelas} parcela(s) de ${emprestimos} empréstimo(s) serão remarcadas.`
+            : 'Nenhuma parcela pendente será afetada.')
+        : 'Nenhuma parcela será remarcada.',
       parcelas,
       emprestimos
     });
@@ -2140,14 +2167,31 @@ export default function OrganizacaoPage() {
                 </button>
               </div>
 
-              {/* Preview do impacto */}
+              {/* O que vai acontecer, respondido pelo banco. Três casos:
+                  recusa, registra sem mover, registra e ajusta. */}
               {previewFeriado && (
                 <div className={`mt-3 p-3 rounded-lg text-sm ${
-                  previewFeriado.emprestimos > 0 
-                    ? 'bg-amber-50 border border-amber-200 text-amber-800' 
-                    : 'bg-green-50 border border-green-200 text-green-800'
+                  !previewFeriado.permitido
+                    ? 'bg-red-50 border border-red-200 text-red-800'
+                    : previewFeriado.vaiDeslocar && previewFeriado.parcelas > 0
+                      ? 'bg-amber-50 border border-amber-200 text-amber-800'
+                      : 'bg-green-50 border border-green-200 text-green-800'
                 }`}>
-                  {previewFeriado.mensagem}
+                  <p>{previewFeriado.mensagem}</p>
+                  {previewFeriado.permitido && previewFeriado.vaiDeslocar && previewFeriado.parcelas > 0 && (
+                    <p className="mt-1 text-xs">
+                      {previewFeriado.parcelas} parcela(s) de {previewFeriado.emprestimos} empréstimo(s)
+                      serão remarcadas.
+                    </p>
+                  )}
+                  {previewFeriado.hojeDaRota && (
+                    /* O dia operacional DA ROTA, que não é o relógio de
+                       quem está olhando a tela — a rota pode estar num
+                       fuso diferente, e o dia dela é o que vale. */
+                    <p className="mt-1 text-xs opacity-75">
+                      Dia operacional da rota: {new Date(previewFeriado.hojeDaRota + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

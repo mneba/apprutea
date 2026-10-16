@@ -10,13 +10,13 @@
   "/[locale]/(dashboard)/dashboard/page": "app/[locale]/(dashboard)/dashboard/page.js",
   "/[locale]/(dashboard)/importacao/page": "app/[locale]/(dashboard)/importacao/page.js",
   "/[locale]/(dashboard)/clientes/page": "app/[locale]/(dashboard)/clientes/page.js",
-  "/[locale]/(dashboard)/relatorios/clientes/page": "app/[locale]/(dashboard)/relatorios/clientes/page.js",
   "/[locale]/(dashboard)/financeiro/page": "app/[locale]/(dashboard)/financeiro/page.js",
-  "/[locale]/(dashboard)/liberacoes/page": "app/[locale]/(dashboard)/liberacoes/page.js",
-  "/[locale]/(dashboard)/organizacao/page": "app/[locale]/(dashboard)/organizacao/page.js",
-  "/[locale]/(dashboard)/relatorios/page": "app/[locale]/(dashboard)/relatorios/page.js",
   "/[locale]/(dashboard)/liquidacao/page": "app/[locale]/(dashboard)/liquidacao/page.js",
-  "/[locale]/(dashboard)/relatorios/liquidacao-periodo/page": "app/[locale]/(dashboard)/relatorios/liquidacao-periodo/page.js",
+  "/[locale]/(dashboard)/liberacoes/page": "app/[locale]/(dashboard)/liberacoes/page.js",
+  "/[locale]/(dashboard)/relatorios/clientes/page": "app/[locale]/(dashboard)/relatorios/clientes/page.js",
+  "/[locale]/(dashboard)/relatorios/page": "app/[locale]/(dashboard)/relatorios/page.js",
+  "/[locale]/(dashboard)/organizacao/page": "app/[locale]/(dashboard)/organizacao/page.js",
+  "/[locale]/(dashboard)/usuarios/page": "app/[locale]/(dashboard)/usuarios/page.js",
   "/[locale]/(dashboard)/vendedores/page": "app/[locale]/(dashboard)/vendedores/page.js",
-  "/[locale]/(dashboard)/usuarios/page": "app/[locale]/(dashboard)/usuarios/page.js"
+  "/[locale]/(dashboard)/relatorios/liquidacao-periodo/page": "app/[locale]/(dashboard)/relatorios/liquidacao-periodo/page.js"
 }
