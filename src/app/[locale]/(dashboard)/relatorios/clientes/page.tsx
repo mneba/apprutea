@@ -42,6 +42,8 @@ import { Paginacao } from '@/components/relatorios/ListaRelatorio';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
 import { useEscopoInicial } from '@/hooks/useEscopoInicial';
+import { useEstadoTela, chaveTela } from '@/lib/estadoTela';
+import { useUser } from '@/contexts/UserContext';
 import type {
   ClientesRelatorio, EstruturaVisivel, FiltrosClientes, Frequencia, LinhaCliente, RotaNo,
 } from '@/types/relatorios';
@@ -266,17 +268,28 @@ const campo =
   'border border-gray-200 rounded-md px-2 py-1 text-[11.5px] bg-white focus:outline-none focus:ring-2 focus:ring-blue-500';
 
 export default function RelatorioClientesPage() {
-  const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
-  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
-  const [data, setData] = useState(hojeIso());
-  const [frequencias, setFrequencias] = useState<Frequencia[]>([]);
+  // Só para compor a chave do estado preservado. O escopo em si continua
+  // vindo da árvore e de `useEscopoInicial`, que lê a mesma localização.
+  const { localizacao } = useUser();
 
-  const [dados, setDados] = useState<ClientesRelatorio | null>(null);
+  // O relatorio gerado, seus filtros e seus resultados sobrevivem a
+  // sair e voltar da tela (pedido do cliente em 14/10/2026). A chave
+  // leva a empresa: as rotas selecionadas sao ids de UMA empresa.
+  const chaveEstado = chaveTela('rel-clientes', localizacao?.empresa_id);
+
+  // `estrutura` fica FORA: e a arvore de escopo inteira, vem de uma
+  // consulta so e nao e escolha do usuario.
+  const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
+  const [selecionadas, setSelecionadas] = useEstadoTela<Set<string>>(`${chaveEstado}|selecionadas`, () => new Set());
+  const [data, setData] = useEstadoTela(`${chaveEstado}|data`, hojeIso);
+  const [frequencias, setFrequencias] = useEstadoTela<Frequencia[]>(`${chaveEstado}|frequencias`, []);
+
+  const [dados, setDados] = useEstadoTela<ClientesRelatorio | null>(`${chaveEstado}|dados`, null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [preset, setPreset] = useState('ativos');
-  const [pagina, setPagina] = useState(0);
-  const [busca, setBusca] = useState('');
+  const [preset, setPreset] = useEstadoTela(`${chaveEstado}|preset`, 'ativos');
+  const [pagina, setPagina] = useEstadoTela(`${chaveEstado}|pagina`, 0);
+  const [busca, setBusca] = useEstadoTela(`${chaveEstado}|busca`, '');
   const [escopoAberto, setEscopoAberto] = useState(false);
   const [ajudaAberta, setAjudaAberta] = useState(false);
   /** O cliente cujas notas estão abertas. */
@@ -293,7 +306,7 @@ export default function RelatorioClientesPage() {
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
 
   /** Os prazos e valores dos presets. Editáveis: nada fica preso no código. */
-  const [params, setParams] = useState<Params>({
+  const [params, setParams] = useEstadoTela<Params>(`${chaveEstado}|params`, () => ({
     diasSemContato: 30,
     diasPorVencer: 15,
     de: primeiroDoMes(),
@@ -301,11 +314,14 @@ export default function RelatorioClientesPage() {
     principalMin: 1000,
     taxaMin: 0,
     taxaMax: 100,
-  });
+  }));
 
+  // A peca central da preservacao: e `escopoGerado` que o efeito de
+  // consulta observa, entao restaura-lo faz o relatorio se refazer sozinho
+  // na volta — com os numeros do momento, nao os de antes.
   const [escopoGerado, setEscopoGerado] =
-    useState<{ rotas: string[]; data: string } | null>(null);
-  const [rotasAtivas, setRotasAtivas] = useState<Set<string>>(new Set());
+    useEstadoTela<{ rotas: string[]; data: string } | null>(`${chaveEstado}|escopoGerado`, null);
+  const [rotasAtivas, setRotasAtivas] = useEstadoTela<Set<string>>(`${chaveEstado}|rotasAtivas`, () => new Set());
 
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
@@ -405,7 +421,25 @@ export default function RelatorioClientesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [escopoGerado, rotasAtivasArr, preset, pagina, params, busca, frequencias]);
 
-  useEffect(() => { setPagina(0); }, [preset, busca, params, frequencias]);
+  // Mudar filtro volta para a primeira página — mas só mudança DE VERDADE.
+  //
+  // Com o estado da tela preservado, este efeito passou a ter duas chances
+  // de disparar sem o usuário ter mexido em nada: na montagem, e quando a
+  // chave do estado assenta (a localização chega vazia no primeiro render),
+  // porque aí os objetos restaurados trocam de identidade. Nos dois casos o
+  // usuário voltava ao relatório na página 1, com a lista da página 3 ainda
+  // na tela.
+  //
+  // Por isso a comparação é por CONTEÚDO e não por identidade: `params` é
+  // objeto, e identidade nova com conteúdo igual não é mudança de filtro.
+  const assinaturaFiltros = JSON.stringify({ preset, busca, params, frequencias });
+  const assinaturaAnterior = useRef(assinaturaFiltros);
+  useEffect(() => {
+    if (assinaturaAnterior.current === assinaturaFiltros) return;
+    assinaturaAnterior.current = assinaturaFiltros;
+    setPagina(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [assinaturaFiltros]);
 
   // Trocar de preset, página ou escopo esvazia a marcação. Marcação que
   // sobrevive a uma lista diferente imprime gente que o usuário nem viu.

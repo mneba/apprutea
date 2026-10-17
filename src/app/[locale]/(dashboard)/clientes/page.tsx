@@ -13,7 +13,8 @@ import {
   AlertCircle,
   X,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RefreshCw
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
@@ -430,6 +431,14 @@ export default function ClientesPage() {
     carregarDados({ forcar: true });
   };
 
+  // Derruba o cache do módulo e busca de novo. `invalidarCache` antes do
+  // `forcar` porque o forçar só ignora a leitura da chave corrente — as
+  // outras combinações de filtro continuariam servindo o valor velho.
+  const atualizar = () => {
+    invalidarCache('clientes:');
+    carregarDados({ forcar: true });
+  };
+
   const handleFiltroStatus = (status: string) => {
     if (statusFiltro === status) {
       setStatusFiltro('');
@@ -607,6 +616,23 @@ export default function ClientesPage() {
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
             </div>
           )}
+
+          {/* Atualizar
+              A lista tem cache de 5 minutos em memória, e mudança vinda de
+              FORA desta tela — importação, o app do vendedor, outro admin —
+              não tem como avisá-la. Sem este botão, a única saída era F5:
+              em 16/10/2026 uma importação de 38 clientes não apareceu e
+              pareceu importação falha. */}
+          <button
+            onClick={atualizar}
+            disabled={loading}
+            title="Recarregar do banco, ignorando o cache de 5 minutos"
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-xl
+                       hover:bg-gray-50 transition-colors disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Atualizar
+          </button>
 
           {/* Ordenação */}
           <div className="relative">

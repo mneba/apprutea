@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Wallet, 
   Building2, 
@@ -29,6 +29,7 @@ import {
 } from 'recharts';
 import { useUser } from '@/contexts/UserContext';
 import { comCache, chave, temCache, invalidarCache, TTL_CURTO, TTL_LONGO } from '@/lib/cacheDados';
+import { useEstadoTela, chaveTela } from '@/lib/estadoTela';
 import { financeiroService } from '@/services/financeiro';
 import { liquidacaoService } from '@/services/liquidacao';
 import { ModalCalendarioLiquidacao } from '@/components/liquidacao/ModalCalendarioLiquidacao';
@@ -378,26 +379,33 @@ export default function FinanceiroPage() {
   const rotaId = localizacao?.rota_id;
   const rotaNome = localizacao?.rota?.nome;
 
+  // Periodo e filtros sobrevivem a sair e voltar da tela (pedido do
+  // cliente em 14/10/2026). A chave leva empresa e rota: trocar de
+  // contexto da estado novo, e voltar restaura o que estava la —
+  // conta e categoria sao ids de UMA empresa e nao fazem sentido na
+  // outra.
+  const chaveEstado = chaveTela('financeiro', empresaId, rotaId);
+
   const [modalEscolhaTransacao, setModalEscolhaTransacao] = useState(false);
-  const [filtroResumo, setFiltroResumo] = useState<FiltroData>({
+  const [filtroResumo, setFiltroResumo] = useEstadoTela<FiltroData>(`${chaveEstado}|filtroResumo`, {
     tipo: 'hoje',
     dataInicio: new Date().toISOString().split('T')[0],
     dataFim: new Date().toISOString().split('T')[0],
   });
-  const [filtroExtrato, setFiltroExtrato] = useState<FiltroData>({
+  const [filtroExtrato, setFiltroExtrato] = useEstadoTela<FiltroData>(`${chaveEstado}|filtroExtrato`, {
     tipo: 'hoje',
     dataInicio: new Date().toISOString().split('T')[0],
     dataFim: new Date().toISOString().split('T')[0],
   });
-  const [contaFiltro, setContaFiltro] = useState<string>('');
+  const [contaFiltro, setContaFiltro] = useEstadoTela<string>(`${chaveEstado}|contaFiltro`, '');
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
   const [maisFiltrosAberto, setMaisFiltrosAberto] = useState(false);
-  const [categoriaFiltro, setCategoriaFiltro] = useState<string>('');
-  const [buscaExtrato, setBuscaExtrato] = useState<string>('');
-  const [tipoMovimento, setTipoMovimento] = useState<string>(''); // '', 'ENTRADA', 'SAIDA'
-  const [statusFiltro, setStatusFiltro] = useState<string>('PAGO'); // '', 'PAGO', 'PENDENTE', 'ANULADO', 'TODOS'
-  const [modoFiltroTemporal, setModoFiltroTemporal] = useState<'periodo' | 'liquidacao'>('liquidacao');
-  const [dataLiquidacao, setDataLiquidacao] = useState<string>(''); // YYYY-MM-DD
+  const [categoriaFiltro, setCategoriaFiltro] = useEstadoTela<string>(`${chaveEstado}|categoriaFiltro`, '');
+  const [buscaExtrato, setBuscaExtrato] = useEstadoTela<string>(`${chaveEstado}|buscaExtrato`, '');
+  const [tipoMovimento, setTipoMovimento] = useEstadoTela<string>(`${chaveEstado}|tipoMovimento`, ''); // '', 'ENTRADA', 'SAIDA'
+  const [statusFiltro, setStatusFiltro] = useEstadoTela<string>(`${chaveEstado}|statusFiltro`, 'PAGO'); // '', 'PAGO', 'PENDENTE', 'ANULADO', 'TODOS'
+  const [modoFiltroTemporal, setModoFiltroTemporal] = useEstadoTela<'periodo' | 'liquidacao'>(`${chaveEstado}|modoFiltroTemporal`, 'liquidacao');
+  const [dataLiquidacao, setDataLiquidacao] = useEstadoTela<string>(`${chaveEstado}|dataLiquidacao`, ''); // YYYY-MM-DD
   const [loadingUltimaLiquidacao, setLoadingUltimaLiquidacao] = useState(false);
   // Calendário de liquidações (reaproveita o modal da tela de Liquidação)
   const [calendarioAberto, setCalendarioAberto] = useState(false);
@@ -585,7 +593,21 @@ export default function FinanceiroPage() {
   // — era possível ver dias que não existem na rota atual e vincular o
   // lançamento à data errada. Sumia ao recarregar a página ou trocar de mês,
   // justamente porque isso forçava uma nova busca.
+  //
+  // ⚠ SÓ NA TROCA DE VERDADE. Este efeito rodava também na montagem, e com
+  // o estado da tela agora preservado isso apagaria a data restaurada a
+  // cada volta ao módulo — o filtro voltava e o dia não.
+  //
+  // E `!rotaAnterior.current` cobre o caso que não é troca nenhuma: a
+  // localização chega vazia no primeiro render e só depois resolve para a
+  // rota, o que pelo `!==` pareceria mudança.
+  const rotaAnterior = useRef(rotaId);
   useEffect(() => {
+    if (!rotaAnterior.current || rotaAnterior.current === rotaId) {
+      rotaAnterior.current = rotaId;
+      return;
+    }
+    rotaAnterior.current = rotaId;
     setHistoricoLiquidacoes([]);
     setLiquidacoesMes([]);
     setDataLiquidacao('');
