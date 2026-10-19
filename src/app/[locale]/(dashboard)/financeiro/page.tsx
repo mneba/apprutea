@@ -9,6 +9,7 @@ import {
   TrendingDown,
   ArrowRightLeft,
   Plus,
+  RefreshCw,
   CheckSquare,
   Loader2,
   Calendar,
@@ -755,6 +756,19 @@ export default function FinanceiroPage() {
   };
 
 
+  // Recarrega tudo que a tela mostra, derrubando o cache do módulo antes:
+  // o `forcar` sozinho só ignora a chave corrente, e trocar de filtro logo
+  // depois voltaria a servir valor velho das outras combinações.
+  const atualizarTudo = () => {
+    invalidarCache('financeiro:');
+    carregarSaldos({ forcar: true });
+    carregarContas({ forcar: true });
+    carregarExtrato({ forcar: true });
+    carregarCategorias({ forcar: true });
+  };
+
+  const carregando = loadingSaldos || loadingExtrato || loadingContas;
+
   const totalEntradas = movimentos.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
 
@@ -1023,13 +1037,32 @@ export default function FinanceiroPage() {
           </div>
         </div>
 
-        <button
-          onClick={() => setModalEscolhaTransacao(true)}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors whitespace-nowrap"
-        >
-          <Plus className="w-5 h-5" />
-          Adicionar transação
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Dar o botão em vez de brigar com o F5: quem recarrega a
+              página quer dados novos, e a tela tem cache de módulo que
+              segura saldo, extrato e contas por minutos. Aqui ele derruba
+              o cache e busca de novo, sem perder os filtros — que é o
+              que o F5 faz de ruim, não de bom. */}
+          <button
+            onClick={atualizarTudo}
+            disabled={carregando}
+            title="Recarregar do banco, mantendo os filtros"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white border border-gray-300
+                       text-gray-700 hover:bg-gray-50 font-medium transition-colors whitespace-nowrap
+                       disabled:opacity-50"
+          >
+            <RefreshCw className={`w-5 h-5 ${carregando ? 'animate-spin' : ''}`} />
+            Atualizar
+          </button>
+
+          <button
+            onClick={() => setModalEscolhaTransacao(true)}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 text-white hover:bg-blue-700 font-medium shadow-sm transition-colors whitespace-nowrap"
+          >
+            <Plus className="w-5 h-5" />
+            Adicionar transação
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_34%] gap-3 min-h-0">
