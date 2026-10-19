@@ -18,6 +18,9 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
+// `updated_at` é timestamptz do banco: formatar por aqui, que normaliza
+// para UTC antes de converter para o fuso de quem olha.
+import { formatarData, formatarDataHora } from '@/utils/dateFormat';
 import { clientesService } from '@/services/clientes';
 import { ModalNovaVenda } from '@/components/clientes';
 import { ModalDetalhesCliente } from '@/components/clientes/ModalDetalhesCliente';
@@ -99,20 +102,40 @@ function BadgeStatus({ status }: { status: string }) {
   );
 }
 
+/**
+ * Teto da consulta de clientes. Era o default implicito do servico (1000);
+ * virou constante da tela porque o total do rodape precisa saber se a
+ * lista foi cortada — total parcial exibido como se fosse completo e o
+ * pior tipo de numero errado, o que parece certo.
+ *
+ * Folgado hoje: a maior empresa tem 509 clientes.
+ */
+const LIMITE_LISTA = 1000;
+
 function TabelaClientes({
   clientes,
   onDetalhes,
   onNovaVenda,
-  podeNovaVenda
+  podeNovaVenda,
+  truncada
 }: {
   clientes: ClienteComTotais[];
   onDetalhes: (cliente: ClienteComTotais) => void;
   onNovaVenda: (cliente: ClienteComTotais) => void;
   podeNovaVenda?: boolean;
+  /** A consulta bateu no limite: o total abaixo é parcial e precisa dizer isso. */
+  truncada?: boolean;
 }) {
   const formatarMoeda = (valor: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
   };
+
+  // Pedido do Julio em 03/10/2026: o saldo total do filtro aplicado, no fim
+  // da lista. Somado AQUI, da mesma lista que está sendo desenhada, e não
+  // numa consulta própria — assim ele acompanha todo filtro (status, rota,
+  // busca, periodicidade) sem que nenhum deles precise ser repetido, e
+  // nunca mostra um total que não corresponde às linhas em tela.
+  const totalSaldo = clientes.reduce((s, c) => s + Number(c.valor_saldo_devedor || 0), 0);
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden h-full flex flex-col">
@@ -130,6 +153,7 @@ function TabelaClientes({
               <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-gray-50">Saldo Devedor</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Empréstimos</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
+              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Última alteração</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
             </tr>
           </thead>
@@ -200,6 +224,13 @@ function TabelaClientes({
                 <td className="px-4 py-3 text-center">
                   <BadgeStatus status={cliente.status} />
                 </td>
+                {/* Diz QUE mudou, não o quê — o que mudou está na aba
+                    Histórico do cliente. A hora vem no title porque na
+                    coluna só a data cabe sem apertar a tabela. */}
+                <td className="px-4 py-3 whitespace-nowrap text-gray-600"
+                    title={cliente.updated_at ? formatarDataHora(cliente.updated_at) : undefined}>
+                  {cliente.updated_at ? formatarData(cliente.updated_at) : '—'}
+                </td>
                 <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                   {podeNovaVenda && (
                     <button
@@ -213,6 +244,27 @@ function TabelaClientes({
               </tr>
             ))}
           </tbody>
+
+          {/* Fica grudado no fim da área de rolagem, como o cabeçalho fica
+              no começo: o total de uma lista de centenas de linhas não
+              serve se for preciso rolar até o fim para vê-lo. */}
+          <tfoot className="sticky bottom-0 z-10">
+            <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold text-gray-800">
+              <td className="px-3 py-3" />
+              <td className="px-4 py-3 whitespace-nowrap" colSpan={6}>
+                {clientes.length} cliente{clientes.length === 1 ? '' : 's'} no filtro
+                {truncada && (
+                  <span className="ml-2 font-normal text-xs text-amber-700">
+                    — lista cortada no limite da consulta, total parcial
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
+                {formatarMoeda(totalSaldo)}
+              </td>
+              <td className="px-4 py-3" colSpan={4} />
+            </tr>
+          </tfoot>
         </table>
       </div>
     </div>
@@ -386,12 +438,14 @@ export default function ClientesPage() {
         status: (statusFiltro as 'ATIVO' | 'INATIVO' | 'SUSPENSO') || undefined,
         busca: busca || undefined,
         frequencias: freqParam,
+        limite: LIMITE_LISTA,
       } as any);
       const buscarBase = () => clientesService.buscarClientes({
         empresa_id: empresaId,
         rota_id: rotaParam,
         busca: busca || undefined,
         frequencias: freqParam,
+        limite: LIMITE_LISTA,
       } as any);
 
       const [clientesData, baseParaContagem] = await Promise.all([
@@ -535,10 +589,18 @@ export default function ClientesPage() {
           />
         </div>
 
-        {/* Filtros e Controles */}
-              <div className="flex flex-col sm:flex-row gap-3">
-          {/* Busca */}
-          <div className="relative flex-1">
+        {/* Filtros e Controles
+            `flex-wrap`: a linha tem seis controles de largura própria, e sem
+            poder quebrar ela espremia o único que encolhe — a busca. */}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+          {/* Busca
+              `min-w-[18rem]` é o conserto da reclamação do Julio em
+              09/10/2026: *"ao digitar um nome, como Julio, aparece
+              praticamente só uma letra"*. `flex-1` sozinho tem
+              `flex-basis: 0`, então o campo recebia apenas a sobra dos
+              outros controles — e não sobrava nada. Com piso, ele deixa de
+              encolher e a linha quebra no lugar de esmagá-lo. */}
+          <div className="relative flex-1 min-w-[18rem]">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
             <input
               type="text"
@@ -716,6 +778,7 @@ export default function ClientesPage() {
         ) : clientesOrdenados.length > 0 ? (
           <TabelaClientes
             clientes={clientesOrdenados}
+            truncada={clientesOrdenados.length >= LIMITE_LISTA}
             onDetalhes={(cliente) => {
               setClienteDetalhes(cliente);
               setModalDetalhes(true);
@@ -770,7 +833,11 @@ export default function ClientesPage() {
           setClienteDetalhes(null);
         }}
         cliente={clienteDetalhes}
-        onClienteAtualizado={carregarDados}
+        /* `atualizar` e nao `carregarDados`: este era chamado SEM argumento,
+           entao caia no cache de 5 minutos e devolvia a lista velha. O
+           sintoma era suspender um cliente e o contador de suspensos nao
+           mexer — e a linha dele na tabela continuar como estava. */
+        onClienteAtualizado={atualizar}
       />
     </div>
   );

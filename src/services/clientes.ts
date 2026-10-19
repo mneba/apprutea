@@ -23,7 +23,7 @@ import type {
   EmprestimoHistorico,
   ParcelaView,
   LinhaExportacaoEmprestimo,
-  HistoricoStatusCliente,
+  HistoricoCliente,
 } from '@/types/clientes';
 
 // =====================================================
@@ -56,19 +56,22 @@ export const clientesService = {
     return data as string;
   },
 
-  // Linha do tempo de suspensões e reativações, mais recente primeiro.
-  // Vazia para cliente suspenso antes de 16/10/2026: o histórico começa
-  // onde começou o registro, e não há de onde deduzir o que passou.
-  async buscarHistoricoStatus(clienteId: string): Promise<HistoricoStatusCliente[]> {
+  // A vida do cadastro, mais recente primeiro: criação, alterações de
+  // campo e suspensões.
+  //
+  // Vazia para cliente mexido antes de 16/10/2026 (status) e 18/10/2026
+  // (campos): o histórico começa onde começou o registro, e não há de onde
+  // deduzir o que passou.
+  async buscarHistoricoCliente(clienteId: string): Promise<HistoricoCliente[]> {
     const supabase = createClient();
-    const { data, error } = await supabase.rpc('fn_cliente_status_historico', {
+    const { data, error } = await supabase.rpc('fn_cliente_historico', {
       p_cliente_id: clienteId,
     });
     if (error) {
-      console.error('Erro ao buscar histórico de status do cliente:', error);
+      console.error('Erro ao buscar histórico do cliente:', error);
       return [];
     }
-    return (data || []) as HistoricoStatusCliente[];
+    return (data || []) as HistoricoCliente[];
   },
 
   // ==================================================

@@ -20,6 +20,7 @@ import {
   Eye
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { InputNumero } from '@/components/ui/InputNumero';
 import { createClient } from '@/lib/supabase/client';
 import { comCache, chave, temCache, invalidarCache, TTL_CURTO } from '@/lib/cacheDados';
 import { solicitacoesService, TIPO_SOLICITACAO_LABELS, STATUS_SOLICITACAO_COLORS, type Solicitacao } from '@/services/solicitacoes';
@@ -1154,32 +1155,33 @@ function ModalDetalhesSolicitacao({
                     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
-                        <input
-                          type="number"
+                        <InputNumero
                           step="0.01"
-                          value={editVenda.valor_principal}
-                          onChange={(e) => setEditVenda({ ...editVenda, valor_principal: parseFloat(e.target.value) || 0 })}
+                          valor={editVenda.valor_principal}
+                          vazio={0}
+                          onChange={(n) => setEditVenda({ ...editVenda, valor_principal: n })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Nº de parcelas</label>
-                        <input
-                          type="number"
-                          value={editVenda.numero_parcelas}
-                          onChange={(e) => setEditVenda({ ...editVenda, numero_parcelas: parseInt(e.target.value) || 1 })}
+                        <InputNumero
+                          valor={editVenda.numero_parcelas}
+                          vazio={1}
+                          inteiro
+                          onChange={(n) => setEditVenda({ ...editVenda, numero_parcelas: n })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Taxa de juros (%)</label>
-                        <input
-                          type="number"
+                        <InputNumero
                           step="0.01"
-                          value={editVenda.taxa_juros}
-                          onChange={(e) => setEditVenda({ ...editVenda, taxa_juros: parseFloat(e.target.value) || 0 })}
+                          valor={editVenda.taxa_juros}
+                          vazio={0}
+                          onChange={(n) => setEditVenda({ ...editVenda, taxa_juros: n })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
@@ -1367,32 +1369,33 @@ function ModalDetalhesSolicitacao({
                     <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
-                        <input
-                          type="number"
+                        <InputNumero
                           step="0.01"
-                          value={editRenovacao.valor_principal}
-                          onChange={(e) => setEditRenovacao({ ...editRenovacao, valor_principal: parseFloat(e.target.value) || 0 })}
+                          valor={editRenovacao.valor_principal}
+                          vazio={0}
+                          onChange={(n) => setEditRenovacao({ ...editRenovacao, valor_principal: n })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Nº de parcelas</label>
-                        <input
-                          type="number"
-                          value={editRenovacao.numero_parcelas}
-                          onChange={(e) => setEditRenovacao({ ...editRenovacao, numero_parcelas: parseInt(e.target.value) || 1 })}
+                        <InputNumero
+                          valor={editRenovacao.numero_parcelas}
+                          vazio={1}
+                          inteiro
+                          onChange={(n) => setEditRenovacao({ ...editRenovacao, numero_parcelas: n })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                       </div>
                       <div>
                         <label className="block text-xs text-gray-500 mb-1">Taxa de juros (%)</label>
-                        <input
-                          type="number"
+                        <InputNumero
                           step="0.01"
-                          value={editRenovacao.taxa_juros}
-                          onChange={(e) => setEditRenovacao({ ...editRenovacao, taxa_juros: parseFloat(e.target.value) || 0 })}
+                          valor={editRenovacao.taxa_juros}
+                          vazio={0}
+                          onChange={(n) => setEditRenovacao({ ...editRenovacao, taxa_juros: n })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />

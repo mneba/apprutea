@@ -21,6 +21,7 @@ import {
   GripVertical,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { InputNumero } from '@/components/ui/InputNumero';
 import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
 import { categoriasFinanceirasService } from '@/services/categoriasFinanceiras';
 import type { CategoriaFinanceira, CategoriaFinanceiraInput, TipoMovimento } from '@/types/categoriasFinanceiras';
@@ -582,10 +583,11 @@ export default function CategoriasFinanceirasPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Ordem de Exibição
                 </label>
-                <input
-                  type="number"
-                  value={formOrdem}
-                  onChange={(e) => setFormOrdem(parseInt(e.target.value) || 0)}
+                <InputNumero
+                  valor={formOrdem}
+                  vazio={0}
+                  inteiro
+                  onChange={setFormOrdem}
                   min={0}
                   className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />

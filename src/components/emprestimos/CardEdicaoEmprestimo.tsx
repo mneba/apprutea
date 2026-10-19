@@ -16,6 +16,7 @@ import {
   Calculator,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { InputNumero } from '@/components/ui/InputNumero';
 
 // =====================================================
 // TIPOS
@@ -596,10 +597,9 @@ export function CardEdicaoEmprestimo({
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="number"
-                    value={valorPrincipal}
-                    onChange={(e) => setValorPrincipal(parseFloat(e.target.value) || 0)}
+                  <InputNumero
+                    valor={valorPrincipal}
+                    onChange={setValorPrincipal}
                     min={0}
                     step={0.01}
                     disabled={temPagamento}
@@ -616,10 +616,9 @@ export function CardEdicaoEmprestimo({
                 </label>
                 <div className="relative">
                   <Percent className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="number"
-                    value={taxaJuros}
-                    onChange={(e) => setTaxaJuros(parseFloat(e.target.value) || 0)}
+                  <InputNumero
+                    valor={taxaJuros}
+                    onChange={setTaxaJuros}
                     min={0}
                     max={100}
                     step={0.1}
@@ -637,10 +636,10 @@ export function CardEdicaoEmprestimo({
                 </label>
                 <div className="relative">
                   <Hash className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="number"
-                    value={numeroParcelas}
-                    onChange={(e) => setNumeroParcelas(parseInt(e.target.value) || minParcelas)}
+                  <InputNumero
+                    valor={numeroParcelas}
+                    onChange={setNumeroParcelas}
+                    inteiro
                     min={minParcelas}
                     max={MAX_PARCELAS}
                     className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"

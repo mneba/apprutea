@@ -25,8 +25,16 @@ import {
   Search,
   Ban
 } from 'lucide-react';
-import {
-} from 'recharts';
+// ⚠ Aqui havia `import {} from 'recharts'` — um import VAZIO, que não
+// trazia nenhum identificador e mesmo assim carregava a biblioteca
+// inteira. Nada neste arquivo usa recharts, e nenhum outro arquivo do web
+// a importa.
+//
+// Era também a melhor explicação para a tela branca que o Julio relatou em
+// 12/10/2026: "Application error" ao dar F5 ou abrir o link direto do
+// Financeiro, funcionando normal pelo menu lateral. Pelo menu, o módulo é
+// avaliado no NAVEGADOR; no carregamento direto o Next renderiza este
+// componente no servidor, e aí a biblioteca é avaliada no Node.
 import { useUser } from '@/contexts/UserContext';
 import { comCache, chave, temCache, invalidarCache, TTL_CURTO, TTL_LONGO } from '@/lib/cacheDados';
 import { useEstadoTela, chaveTela } from '@/lib/estadoTela';

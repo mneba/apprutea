@@ -25,6 +25,7 @@ import {
   TrendingUp,
   History,
   Edit3,
+  UserPlus,
   Save,
   XCircle,
   MapPinned,
@@ -56,7 +57,7 @@ import type {
   ParcelaView,
   ClienteComTotais,
   Segmento,
-  HistoricoStatusCliente,
+  HistoricoCliente,
 } from '@/types/clientes';
 
 // =====================================================
@@ -88,38 +89,102 @@ function formatarDataHora(data: string): string {
  * puxaria para o dia anterior. Sem ela (cliente sem rota de onde tirar o
  * fuso), cai no instante do registro, que é a verdade de auditoria.
  */
-function dataDoMovimentoStatus(h: HistoricoStatusCliente): string {
+function dataDoMovimentoStatus(h: HistoricoCliente): string {
   if (h.data_operacional) {
     return new Date(h.data_operacional + 'T12:00:00').toLocaleDateString('pt-BR');
   }
   return formatarDataHora(h.registrado_em);
 }
 
-/** Uma linha da história de suspensões do cliente. */
-function LinhaHistoricoStatus({ h }: { h: HistoricoStatusCliente }) {
-  const suspensao = h.status_novo === 'SUSPENSO';
+/** Nome de campo como o usuário o conhece, não como a coluna se chama. */
+const ROTULO_CAMPO: Record<string, string> = {
+  nome: 'Nome',
+  documento: 'Documento',
+  telefone_celular: 'Celular',
+  telefone_fixo: 'Telefone fixo',
+  email: 'E-mail',
+  endereco: 'Endereço',
+  endereco_comercial: 'Endereço comercial',
+  segmento_id: 'Segmento',
+  observacoes: 'Observações',
+  foto_url: 'Foto',
+  permite_emprestimo_adicional: 'Permite empréstimo adicional',
+  permite_renegociacao: 'Permite renegociação',
+  rotas_ids: 'Rotas',
+};
+
+/**
+ * O valor como se lê. Id e URL viram "definido"/"removido": mostrar uuid
+ * de segmento ou link de foto não informa nada a quem está conferindo o
+ * cadastro, e ocupa a linha inteira.
+ */
+function valorLegivel(campo: string, v: unknown): string {
+  if (v === null || v === undefined || v === '') return '(vazio)';
+  if (typeof v === 'boolean') return v ? 'Sim' : 'Não';
+  if (Array.isArray(v)) return `${v.length} rota(s)`;
+  if (campo === 'segmento_id' || campo === 'foto_url') return 'definido';
+  const texto = String(v);
+  return texto.length > 60 ? `${texto.slice(0, 60)}…` : texto;
+}
+
+/** Uma linha da vida do cadastro: criação, alteração de campo ou status. */
+function LinhaHistoricoStatus({ h }: { h: HistoricoCliente }) {
+  const suspensao = h.tipo === 'STATUS' && h.status_novo === 'SUSPENSO';
+  const criacao = h.tipo === 'CRIACAO';
+
+  const cor = suspensao
+    ? 'bg-red-50 border-red-200'
+    : h.tipo === 'STATUS'
+      ? 'bg-green-50 border-green-200'
+      : 'bg-gray-50 border-gray-200';
+
+  const titulo = criacao
+    ? 'Cadastro criado'
+    : h.tipo === 'STATUS'
+      ? (suspensao ? 'Suspenso' : `Reativado (${h.status_novo})`)
+      : 'Cadastro alterado';
+
+  const campos = h.tipo === 'CADASTRO' ? Object.entries(h.alteracoes || {}) : [];
+
   return (
-    <div className={`flex gap-3 p-3 rounded-lg border ${
-      suspensao ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
-    }`}>
+    <div className={`flex gap-3 p-3 rounded-lg border ${cor}`}>
       <div className="flex-shrink-0 mt-0.5">
-        {suspensao
-          ? <Ban className="w-4 h-4 text-red-600" />
-          : <RotateCcw className="w-4 h-4 text-green-600" />}
+        {criacao ? <UserPlus className="w-4 h-4 text-gray-500" />
+          : suspensao ? <Ban className="w-4 h-4 text-red-600" />
+          : h.tipo === 'STATUS' ? <RotateCcw className="w-4 h-4 text-green-600" />
+          : <Edit3 className="w-4 h-4 text-gray-500" />}
       </div>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span className={`text-sm font-semibold ${suspensao ? 'text-red-800' : 'text-green-800'}`}>
-            {suspensao ? 'Suspenso' : `Reativado (${h.status_novo})`}
+          <span className={`text-sm font-semibold ${
+            suspensao ? 'text-red-800' : h.tipo === 'STATUS' ? 'text-green-800' : 'text-gray-800'
+          }`}>
+            {titulo}
           </span>
           <span className="text-xs text-gray-500">{dataDoMovimentoStatus(h)}</span>
-          {h.usuario_nome && (
-            <span className="text-xs text-gray-500">por {h.usuario_nome}</span>
-          )}
+          {h.usuario_nome
+            ? <span className="text-xs text-gray-500">por {h.usuario_nome}</span>
+            : <span className="text-xs text-gray-400">sem usuário (importação)</span>}
         </div>
-        {h.motivo
-          ? <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap break-words">{h.motivo}</p>
-          : <p className="mt-1 text-xs text-gray-400 italic">Sem motivo informado.</p>}
+
+        {h.tipo === 'STATUS' && (
+          h.motivo
+            ? <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap break-words">{h.motivo}</p>
+            : <p className="mt-1 text-xs text-gray-400 italic">Sem motivo informado.</p>
+        )}
+
+        {campos.length > 0 && (
+          <ul className="mt-1 space-y-0.5">
+            {campos.map(([campo, v]) => (
+              <li key={campo} className="text-xs text-gray-700 break-words">
+                <span className="font-medium">{ROTULO_CAMPO[campo] || campo}:</span>{' '}
+                <span className="text-gray-500 line-through">{valorLegivel(campo, v?.de)}</span>
+                {' → '}
+                <span>{valorLegivel(campo, v?.para)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -649,8 +714,8 @@ function FormularioEdicao({
   temParcelaEmAtraso: boolean;
   temEmprestimoEmDia: boolean;
   onStatusAlterado?: () => void;
-  /** Suspensões e reativações já registradas, mais recente primeiro. */
-  historicoStatus: HistoricoStatusCliente[];
+  /** A vida do cadastro, mais recente primeiro. */
+  historicoStatus: HistoricoCliente[];
 }) {
   const [form, setForm] = useState<FormEdicaoCliente>({
     nome: cliente.nome || '',
@@ -679,7 +744,9 @@ function FormularioEdicao({
   // 16/10/2026 não tem nenhum — a data real não existe em lugar nenhum
   // (`updated_at` é o da última edição qualquer) e inventá-la seria pior
   // que admitir a falta.
-  const ultimoMovimento = historicoStatus[0];
+  // O ultimo movimento DE STATUS — nao `historicoStatus[0]`, que agora
+  // pode ser uma alteracao de telefone feita depois da suspensao.
+  const ultimoMovimento = historicoStatus.find(h => h.tipo === 'STATUS');
   const suspensaoAtual = statusCliente === 'SUSPENSO' && ultimoMovimento?.status_novo === 'SUSPENSO'
     ? ultimoMovimento
     : null;
@@ -1060,7 +1127,7 @@ export function ModalDetalhesCliente({
   // Suspensões e reativações, mais recente primeiro. Alimenta tanto o
   // aviso ao lado do selo de status quanto a linha do tempo da aba
   // Histórico — uma consulta só, lida nos dois lugares.
-  const [historicoStatus, setHistoricoStatus] = useState<HistoricoStatusCliente[]>([]);
+  const [historicoStatus, setHistoricoStatus] = useState<HistoricoCliente[]>([]);
   
   // Estados de edição
   const [modoEdicao, setModoEdicao] = useState(false);
@@ -1145,7 +1212,7 @@ export function ModalDetalhesCliente({
 
   const carregarHistoricoStatus = async () => {
     if (!cliente?.id) return;
-    const linhas = await clientesService.buscarHistoricoStatus(cliente.id);
+    const linhas = await clientesService.buscarHistoricoCliente(cliente.id);
     setHistoricoStatus(linhas);
   };
 
@@ -1323,6 +1390,16 @@ export function ModalDetalhesCliente({
   // Usar dados completos se disponíveis, senão usar dados básicos
   const dadosExibicao = clienteCompleto || cliente;
 
+  // O último movimento, quando ele é a suspensão que está valendo. Serve ao
+  // cabeçalho, que é onde o selo "Suspenso" aparece em modo leitura — sem
+  // isto, "por que este cliente está suspenso" só se descobre entrando em
+  // edição ou abrindo a aba Histórico.
+  const ultimoStatus = historicoStatus.find(h => h.tipo === 'STATUS');
+  const suspensaoVigente =
+    dadosExibicao?.status === 'SUSPENSO' && ultimoStatus?.status_novo === 'SUSPENSO'
+      ? ultimoStatus
+      : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
@@ -1346,6 +1423,24 @@ export function ModalDetalhesCliente({
                 </span>
                 <BadgeStatus status={dadosExibicao.status} tipo="cliente" />
               </div>
+
+              {/* Em modo leitura o cabeçalho mostrava só o selo, e o motivo
+                  ficava a dois cliques — dentro da edição ou na aba
+                  Histórico. Selo que não diz por quê obriga a perguntar. */}
+              {dadosExibicao.status === 'SUSPENSO' && (
+                suspensaoVigente ? (
+                  <p className="mt-1 text-xs text-white/85 max-w-xl truncate"
+                     title={suspensaoVigente.motivo || undefined}>
+                    Suspenso em {dataDoMovimentoStatus(suspensaoVigente)}
+                    {suspensaoVigente.usuario_nome ? ` por ${suspensaoVigente.usuario_nome}` : ''}
+                    {suspensaoVigente.motivo ? ` — ${suspensaoVigente.motivo}` : ''}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-xs text-white/60">
+                    Suspensão anterior a 16/10/2026 — sem data e motivo registrados.
+                  </p>
+                )
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -1669,16 +1764,15 @@ export function ModalDetalhesCliente({
               {/* ABA: HISTÓRICO */}
               {abaAtiva === 'historico' && (
                 <div className="space-y-4">
-                  {/* Suspensões e reativações, antes dos empréstimos
-                      encerrados: é o que o Julio pediu em 23/09/2026 que
-                      ficasse "salvo no histórico do cliente para consulta
-                      posterior". Só aparece quando há registro — cliente
-                      nunca suspenso não ganha seção vazia. */}
+                  {/* A vida do cadastro — criação, alterações de campo e
+                      suspensões —, antes dos empréstimos encerrados. Só
+                      aparece quando há registro: cadastro antigo que nunca
+                      foi tocado desde 18/10/2026 não ganha seção vazia. */}
                   {historicoStatus.length > 0 && (
                     <div>
                       <h4 className="flex items-center gap-2 text-sm font-semibold text-gray-700 mb-2">
                         <Shield className="w-4 h-4 text-gray-400" />
-                        Suspensões e reativações
+                        Histórico do cadastro
                       </h4>
                       <div className="space-y-2">
                         {historicoStatus.map((h) => (

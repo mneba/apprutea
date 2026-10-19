@@ -44,6 +44,7 @@ import { relatoriosService } from '@/services/relatorios';
 import { useEscopoInicial } from '@/hooks/useEscopoInicial';
 import { useEstadoTela, chaveTela } from '@/lib/estadoTela';
 import { useUser } from '@/contexts/UserContext';
+import { InputNumero } from '@/components/ui/InputNumero';
 import type {
   ClientesRelatorio, EstruturaVisivel, FiltrosClientes, Frequencia, LinhaCliente, RotaNo,
 } from '@/types/relatorios';
@@ -773,9 +774,9 @@ export default function RelatorioClientesPage() {
                     {presetAtual.parametro === 'dias_sem_contato' && (
                       <label className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
                         sem pagar há
-                        <input
-                          type="number" min={1} value={params.diasSemContato}
-                          onChange={(e) => setParams((p) => ({ ...p, diasSemContato: Number(e.target.value) || 1 }))}
+                        <InputNumero
+                          min={1} valor={params.diasSemContato} vazio={1}
+                          onChange={(n) => setParams((p) => ({ ...p, diasSemContato: n }))}
                           className={`${campo} w-16 tabular-nums`}
                         />
                         dias
@@ -784,9 +785,9 @@ export default function RelatorioClientesPage() {
                     {presetAtual.parametro === 'dias_por_vencer' && (
                       <label className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
                         termina em até
-                        <input
-                          type="number" min={0} value={params.diasPorVencer}
-                          onChange={(e) => setParams((p) => ({ ...p, diasPorVencer: Number(e.target.value) || 0 }))}
+                        <InputNumero
+                          min={0} valor={params.diasPorVencer} vazio={0}
+                          onChange={(n) => setParams((p) => ({ ...p, diasPorVencer: n }))}
                           className={`${campo} w-16 tabular-nums`}
                         />
                         dias
@@ -807,9 +808,9 @@ export default function RelatorioClientesPage() {
                     {presetAtual.parametro === 'principal' && (
                       <label className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
                         principal a partir de
-                        <input
-                          type="number" min={0} step={100} value={params.principalMin}
-                          onChange={(e) => setParams((p) => ({ ...p, principalMin: Number(e.target.value) || 0 }))}
+                        <InputNumero
+                          min={0} step={100} valor={params.principalMin} vazio={0}
+                          onChange={(n) => setParams((p) => ({ ...p, principalMin: n }))}
                           className={`${campo} w-24 tabular-nums`}
                         />
                       </label>
@@ -817,12 +818,12 @@ export default function RelatorioClientesPage() {
                     {presetAtual.parametro === 'taxa' && (
                       <span className="flex items-center gap-1.5 text-[11.5px] text-gray-500">
                         taxa de
-                        <input type="number" min={0} step={1} value={params.taxaMin}
-                          onChange={(e) => setParams((p) => ({ ...p, taxaMin: Number(e.target.value) || 0 }))}
+                        <InputNumero min={0} step={1} valor={params.taxaMin} vazio={0}
+                        onChange={(n) => setParams((p) => ({ ...p, taxaMin: n }))}
                           aria-label="Taxa mínima" className={`${campo} w-16 tabular-nums`} />
                         a
-                        <input type="number" min={0} step={1} value={params.taxaMax}
-                          onChange={(e) => setParams((p) => ({ ...p, taxaMax: Number(e.target.value) || 0 }))}
+                        <InputNumero min={0} step={1} valor={params.taxaMax} vazio={0}
+                        onChange={(n) => setParams((p) => ({ ...p, taxaMax: n }))}
                           aria-label="Taxa máxima" className={`${campo} w-16 tabular-nums`} />
                         %
                       </span>

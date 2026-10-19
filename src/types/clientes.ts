@@ -9,17 +9,27 @@
 export type StatusCliente = 'ATIVO' | 'INATIVO' | 'SUSPENSO';
 
 /**
- * Uma linha de `cliente_status_historico` — suspensão ou reativação.
+ * Uma linha de `cliente_historico` — a vida do cadastro.
+ *
+ * `tipo` diz qual: CRIACAO (nasceu), CADASTRO (campo alterado, com o diff
+ * em `alteracoes`) ou STATUS (suspensão/reativação, com `motivo`).
  *
  * `registrado_em` é o INSTANTE (timestamptz) e `data_operacional` é o dia
  * da rota, no fuso da empresa. Mostre a segunda quando existir: a
  * primeira, renderizada no navegador, sai no fuso de quem está olhando.
  */
-export interface HistoricoStatusCliente {
+export type TipoHistoricoCliente = 'CRIACAO' | 'CADASTRO' | 'STATUS';
+
+/** `{ campo: { de, para } }` — o que mudou numa linha do tipo CADASTRO. */
+export type AlteracoesCliente = Record<string, { de: unknown; para: unknown }>;
+
+export interface HistoricoCliente {
   id: string;
+  tipo: TipoHistoricoCliente;
   status_anterior: string | null;
-  status_novo: string;
+  status_novo: string | null;
   motivo: string | null;
+  alteracoes: AlteracoesCliente | null;
   usuario_id: string | null;
   usuario_nome: string | null;
   registrado_em: string;
@@ -70,6 +80,9 @@ export interface ClienteComTotais extends Cliente {
   valor_saldo_devedor: number;
   parcelas_pendentes: number;
   parcelas_atrasadas: number;
+  // `updated_at` vem de `Cliente`, e desde 18/10/2026 `fn_buscar_clientes`
+  // de fato o devolve — antes o tipo prometia e a RPC não entregava.
+  // Diz QUE mudou, não o quê: o que mudou está em `cliente_historico`.
 }
 
 export interface Emprestimo {

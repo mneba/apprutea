@@ -29,6 +29,7 @@ import {
   Check,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import { InputNumero } from '@/components/ui/InputNumero';
 import { vendedoresService } from '@/services/vendedores';
 import {
   EditorModeloRecibo,
@@ -991,10 +992,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           />
                           <span className="text-sm font-medium text-gray-700">Valor Máximo Vendas</span>
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.valor_max_vendas}
-                          onChange={(e) => updateRestricao('valor_max_vendas', parseFloat(e.target.value) || 0)}
+                        <InputNumero
+                          valor={restricoes.valor_max_vendas}
+                          vazio={0}
+                          onChange={(n) => updateRestricao('valor_max_vendas', n)}
                           disabled={!restricoes.validar_valor_max_vendas}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                           placeholder="0.00"
@@ -1013,10 +1014,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           />
                           <span className="text-sm font-medium text-gray-700">Valor Máximo Gastos</span>
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.valor_max_gastos}
-                          onChange={(e) => updateRestricao('valor_max_gastos', parseFloat(e.target.value) || 0)}
+                        <InputNumero
+                          valor={restricoes.valor_max_gastos}
+                          vazio={0}
+                          onChange={(n) => updateRestricao('valor_max_gastos', n)}
                           disabled={!restricoes.validar_valor_gastos}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                           placeholder="0.00"
@@ -1035,10 +1036,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           />
                           <span className="text-sm font-medium text-gray-700">Valor Máximo Entradas</span>
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.valor_max_entradas}
-                          onChange={(e) => updateRestricao('valor_max_entradas', parseFloat(e.target.value) || 0)}
+                        <InputNumero
+                          valor={restricoes.valor_max_entradas}
+                          vazio={0}
+                          onChange={(n) => updateRestricao('valor_max_entradas', n)}
                           disabled={!restricoes.validar_valor_entradas}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50 disabled:text-gray-400"
                           placeholder="0.00"
@@ -1066,10 +1067,11 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Máx. Parcelas por Dia
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.numero_max_parcelas_por_dia}
-                          onChange={(e) => updateRestricao('numero_max_parcelas_por_dia', parseInt(e.target.value) || 0)}
+                        <InputNumero
+                          valor={restricoes.numero_max_parcelas_por_dia}
+                          vazio={0}
+                          inteiro
+                          onChange={(n) => updateRestricao('numero_max_parcelas_por_dia', n)}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                           placeholder="0"
                         />
@@ -1079,10 +1081,11 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Limite de Parcelas (Total)
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.numero_parcelas_limite}
-                          onChange={(e) => updateRestricao('numero_parcelas_limite', parseInt(e.target.value) || 99)}
+                        <InputNumero
+                          valor={restricoes.numero_parcelas_limite}
+                          vazio={99}
+                          inteiro
+                          onChange={(n) => updateRestricao('numero_parcelas_limite', n)}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                           placeholder="99"
                         />
@@ -1092,10 +1095,11 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Máx. Parcelas p/ Cancelar Venda
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.numero_max_parcelas_cancelar_venda}
-                          onChange={(e) => updateRestricao('numero_max_parcelas_cancelar_venda', parseInt(e.target.value) || 0)}
+                        <InputNumero
+                          valor={restricoes.numero_max_parcelas_cancelar_venda}
+                          vazio={0}
+                          inteiro
+                          onChange={(n) => updateRestricao('numero_max_parcelas_cancelar_venda', n)}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                           placeholder="0"
                         />
@@ -1105,10 +1109,11 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           Parcelas Permitidas Cancelar
                         </label>
-                        <input
-                          type="number"
-                          value={restricoes.parcelas_permitidas_cancelar}
-                          onChange={(e) => updateRestricao('parcelas_permitidas_cancelar', parseInt(e.target.value) || 0)}
+                        <InputNumero
+                          valor={restricoes.parcelas_permitidas_cancelar}
+                          vazio={0}
+                          inteiro
+                          onChange={(n) => updateRestricao('parcelas_permitidas_cancelar', n)}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                           placeholder="0"
                         />
@@ -1258,10 +1263,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         % Recaudo (Comissão sobre cobranças)
                       </label>
                       <div className="relative">
-                        <input
-                          type="number"
-                          value={recibos.percentual_recaudo}
-                          onChange={(e) => updateRecibo('percentual_recaudo', parseFloat(e.target.value) || 0)}
+                        <InputNumero
+                          valor={recibos.percentual_recaudo}
+                          vazio={0}
+                          onChange={(n) => updateRecibo('percentual_recaudo', n)}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 pr-10"
                           placeholder="0.00"
                           step="0.01"
@@ -1277,10 +1282,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         % Vendas (Comissão sobre vendas)
                       </label>
                       <div className="relative">
-                        <input
-                          type="number"
-                          value={recibos.percentual_vendas}
-                          onChange={(e) => updateRecibo('percentual_vendas', parseFloat(e.target.value) || 0)}
+                        <InputNumero
+                          valor={recibos.percentual_vendas}
+                          vazio={0}
+                          onChange={(n) => updateRecibo('percentual_vendas', n)}
                           className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 pr-10"
                           placeholder="0.00"
                           step="0.01"
@@ -1295,10 +1300,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Valor Pensão
                       </label>
-                      <input
-                        type="number"
-                        value={recibos.valor_pensao}
-                        onChange={(e) => updateRecibo('valor_pensao', parseFloat(e.target.value) || 0)}
+                      <InputNumero
+                        valor={recibos.valor_pensao}
+                        vazio={0}
+                        onChange={(n) => updateRecibo('valor_pensao', n)}
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                         placeholder="0.00"
                         step="0.01"
@@ -1309,10 +1314,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         Valor Saúde
                       </label>
-                      <input
-                        type="number"
-                        value={recibos.valor_saude}
-                        onChange={(e) => updateRecibo('valor_saude', parseFloat(e.target.value) || 0)}
+                      <InputNumero
+                        valor={recibos.valor_saude}
+                        vazio={0}
+                        onChange={(n) => updateRecibo('valor_saude', n)}
                         className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                         placeholder="0.00"
                         step="0.01"
