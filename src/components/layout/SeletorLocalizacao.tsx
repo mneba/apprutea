@@ -28,7 +28,18 @@ export function SeletorLocalizacao() {
     (profile.rotas_ids || []).length <= 1 &&
     localizacao.rota_id !== null // Só oculta se já tiver selecionado
   );
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
+
+  // O campo de busca recebe o foco quando o seletor abre: quem clica ali
+  // está procurando alguma coisa, e obrigar um segundo clique no campo é
+  // cobrar pedágio. `requestAnimationFrame` porque o input só existe
+  // depois que o painel foi desenhado.
+  const campoBusca = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (!isOpen) { setBuscaRota(''); return; }
+    const id = requestAnimationFrame(() => campoBusca.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [isOpen]);
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
   const [cidades, setCidades] = useState<Cidade[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -86,8 +97,14 @@ export function SeletorLocalizacao() {
         usuariosService.listarHierarquias(),
         organizacaoService.listarTodasCidades(),
         usuariosService.listarEmpresas(),
-        // Só o SUPER_ADMIN tem a busca global, então só ele paga esta query.
-        isSuperAdmin ? usuariosService.listarRotas() : Promise.resolve([] as Rota[]),
+        // Todos pagam esta query desde 19/10/2026, e ela é barata: a tabela
+        // tem algumas dezenas de rotas. Antes era exclusiva do SUPER_ADMIN,
+        // e por isso a busca não existia para mais ninguém — quem tem 8
+        // rotas em 5 empresas também precisa achar uma pelo nome.
+        // O RECORTE é feito no índice abaixo, a partir das empresas que a
+        // pessoa enxerga; carregar tudo e filtrar é o mesmo que a árvore já
+        // faz com hierarquias, cidades e empresas.
+        usuariosService.listarRotas(),
       ]);
 
       setRotasTodas(rotasTodasData);
@@ -215,7 +232,7 @@ export function SeletorLocalizacao() {
   // cada rota_id, o que já entrega o caminho completo país › estado ›
   // cidade › empresa para exibir e para gravar na localização de uma vez.
   const indiceRotas = useMemo(() => {
-    if (!isSuperAdmin || rotasTodas.length === 0) return [];
+    if (rotasTodas.length === 0) return [];
 
     const rotaPorId = new Map(rotasTodas.map((r) => [r.id, r]));
 
@@ -239,9 +256,11 @@ export function SeletorLocalizacao() {
         }];
       });
     });
-  }, [isSuperAdmin, rotasTodas, empresas, cidades, hierarquias]);
+    // `empresas` aqui já é a lista FILTRADA por permissão, então o índice
+    // de um usuário comum contém apenas as rotas das empresas dele.
+  }, [rotasTodas, empresas, cidades, hierarquias]);
 
-  const termoBusca = isSuperAdmin ? normalizarBusca(buscaRota) : '';
+  const termoBusca = normalizarBusca(buscaRota);
   const buscandoRota = termoBusca.length > 0;
 
   const LIMITE_RESULTADOS = 60;
@@ -466,16 +485,19 @@ export function SeletorLocalizacao() {
             </button>
           </div>
 
-          {/* Busca global de rotas — exclusiva do SUPER_ADMIN */}
-          {isSuperAdmin && (
+          {/* Busca de rotas. Era exclusiva do SUPER_ADMIN; agora é de quem
+              tiver mais de uma rota para procurar — que é justamente quem
+              precisa. Com uma rota só, procurar não faz sentido. */}
+          {indiceRotas.length > 1 && (
             <div className="px-3 pt-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
+                  ref={campoBusca}
                   type="text"
                   value={buscaRota}
                   onChange={(e) => setBuscaRota(e.target.value)}
-                  placeholder="Buscar rota em todas as empresas..."
+                  placeholder={isSuperAdmin ? 'Buscar rota em todas as empresas...' : 'Buscar rota...'}
                   className="w-full pl-9 pr-9 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white"
                 />
                 {buscaRota && (
