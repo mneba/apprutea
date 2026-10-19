@@ -43,8 +43,15 @@ export default function ModalGerenciarCidades({
   // Deleção
   const [deletandoId, setDeletandoId] = useState<string | null>(null);
 
-  // Criação inline (quando busca não retorna nada)
   const [criandoNova, setCriandoNova] = useState(false);
+  const [nomeNova, setNomeNova] = useState('');
+  
+  // Pais e estado vem das HIERARQUIAS, nao das cidades existentes.
+  // Antes, as duas listas saiam de `cidades` — e isso tornava impossivel
+  // criar a PRIMEIRA cidade de um estado: sem cidade, o estado nao aparecia
+  // no filtro, e `hierarquiaEscolhida` procurava dentro da propria lista de
+  // cidades e vinha nula. Estado recem-cadastrado ficava inalcancavel.
+  const [hierarquias, setHierarquias] = useState<{ id: string; pais: string; estado: string }[]>([]);
 
   // Carregar ao abrir
   useEffect(() => {
@@ -56,14 +63,19 @@ export default function ModalGerenciarCidades({
       setBusca('');
       setEditandoId(null);
       setNomeEditando('');
-    }
-  }, [aberto]);
+      setNomeNova('');
+      }
+      }, [aberto]);
 
   const carregarCidades = async () => {
-    setCarregando(true);
-    try {
-      const lista = await organizacaoService.listarTodasCidades();
-      setCidades(lista);
+  setCarregando(true);
+  try {
+  const [lista, hier] = await Promise.all([
+  organizacaoService.listarTodasCidades(),
+  organizacaoService.listarHierarquias(),
+  ]);
+  setCidades(lista);
+  setHierarquias(hier);
     } catch (err) {
       console.error('Erro ao carregar cidades:', err);
     } finally {
@@ -71,19 +83,20 @@ export default function ModalGerenciarCidades({
     }
   };
 
-  // Listas únicas para filtros
+  // Listas de filtro: TODOS os paises e estados cadastrados, tenham
+  // cidade ou nao. E essa diferenca que permite criar a primeira.
   const paisesDisponiveis = useMemo(() => {
-    const set = new Set(cidades.map((c) => c.pais));
-    return Array.from(set).sort();
-  }, [cidades]);
-
+  const set = new Set(hierarquias.map((h) => h.pais));
+  return Array.from(set).sort();
+  }, [hierarquias]);
+  
   const estadosDisponiveis = useMemo(() => {
-    const filtradas = filtroPais
-      ? cidades.filter((c) => c.pais === filtroPais)
-      : cidades;
-    const set = new Set(filtradas.map((c) => c.estado));
-    return Array.from(set).sort();
-  }, [cidades, filtroPais]);
+  const filtradas = filtroPais
+  ? hierarquias.filter((h) => h.pais === filtroPais)
+  : hierarquias;
+  const set = new Set(filtradas.map((h) => h.estado));
+  return Array.from(set).sort();
+  }, [hierarquias, filtroPais]);
 
   // Resetar estado quando muda país
   useEffect(() => {
@@ -106,34 +119,31 @@ export default function ModalGerenciarCidades({
       });
   }, [cidades, filtroPais, filtroEstado, busca]);
 
-  // Pode criar nova? Só faz sentido se tiver país E estado escolhidos
-  // E a busca digitada não retornar nada
-  const podeCriarNova =
-    !!filtroPais &&
-    !!filtroEstado &&
-    busca.trim().length > 0 &&
-    cidadesFiltradas.length === 0;
-
-  // Hierarquia escolhida pelos filtros (para criar nova cidade)
+  // Criar e acao EXPLICITA agora, com campo proprio: basta escolher pais e
+  // estado e digitar o nome. Antes o botao so aparecia quando a BUSCA nao
+  // achava nada — quem nao adivinhasse esse caminho concluia, com razao,
+  // que a tela so deixava ver.
   const hierarquiaEscolhida = useMemo(() => {
-    if (!filtroPais || !filtroEstado) return null;
-    return cidades.find(
-      (c) => c.pais === filtroPais && c.estado === filtroEstado
-    );
-  }, [cidades, filtroPais, filtroEstado]);
-
+  if (!filtroPais || !filtroEstado) return null;
+  return hierarquias.find(
+  (h) => h.pais === filtroPais && h.estado === filtroEstado
+  ) || null;
+  }, [hierarquias, filtroPais, filtroEstado]);
+  
+  const podeCriarNova = !!hierarquiaEscolhida && nomeNova.trim().length > 0;
+  
   const handleCriarNova = async () => {
-    if (!hierarquiaEscolhida) return;
-    const nome = busca.trim();
-    if (!nome) return;
+  if (!hierarquiaEscolhida) return;
+  const nome = nomeNova.trim();
+  if (!nome) return;
 
     setCriandoNova(true);
     try {
       await organizacaoService.criarCidade({
-        hierarquia_id: hierarquiaEscolhida.hierarquia_id,
-        nome,
+      hierarquia_id: hierarquiaEscolhida.id,
+      nome,
       });
-      setBusca('');
+      setNomeNova('');
       await carregarCidades();
       onCidadesAlteradas?.();
     } catch (err: any) {
@@ -282,31 +292,51 @@ export default function ModalGerenciarCidades({
             </div>
           </div>
 
-          {/* Botão de criar nova (aparece quando busca não acha nada) */}
-          {podeCriarNova && hierarquiaEscolhida && (
-            <button
-              onClick={handleCriarNova}
-              disabled={criandoNova}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm font-medium"
-            >
-              {criandoNova ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Plus className="w-4 h-4" />
-              )}
-              Adicionar "{busca.trim()}" em {filtroEstado}/{filtroPais}
-            </button>
-          )}
-
-          {/* Aviso quando filtro insuficiente para criar */}
-          {busca.trim().length > 0 &&
-            cidadesFiltradas.length === 0 &&
-            !podeCriarNova && (
-              <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                Para adicionar uma cidade nova, selecione primeiro o país e o
-                estado nos filtros acima.
-              </div>
+          {/* Adicionar cidade — sempre visível, com o porquê quando não dá.
+              Antes, criar era efeito colateral de uma busca que não achava
+              nada: quem não adivinhasse esse caminho concluía, com razão,
+              que a tela só deixava ver. */}
+          <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+            <label className="block text-sm font-medium text-gray-700">
+              Adicionar cidade
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={nomeNova}
+                onChange={(e) => setNomeNova(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' && podeCriarNova) handleCriarNova(); }}
+                disabled={!hierarquiaEscolhida}
+                placeholder={hierarquiaEscolhida
+                  ? `Nome da cidade em ${filtroEstado}`
+                  : 'Escolha país e estado acima'}
+                className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-50"
+              />
+              <button
+                onClick={handleCriarNova}
+                disabled={!podeCriarNova || criandoNova}
+                className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:bg-gray-300 text-sm font-medium whitespace-nowrap"
+              >
+                {criandoNova ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                Adicionar
+              </button>
+            </div>
+            {hierarquiaEscolhida && (
+              <p className="text-xs text-gray-500">
+                Vai para {filtroEstado}/{filtroPais}.
+              </p>
             )}
+          </div>
+
+          {/* O aviso antigo so aparecia quando a busca nao achava nada,
+              porque era a busca que revelava o botao de criar. Agora o campo
+              de adicionar esta sempre la, e o que falta dizer e apenas por
+              que ele esta desabilitado. */}
+          {!hierarquiaEscolhida && (
+            <div className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              Escolha país e estado acima para poder adicionar uma cidade.
+            </div>
+          )}
         </div>
 
         {/* Lista */}

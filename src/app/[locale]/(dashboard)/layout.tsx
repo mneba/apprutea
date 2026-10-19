@@ -72,10 +72,16 @@ const menuGroups: MenuGroup[] = [
       // recorte, de uma rota ao país inteiro. Sem isso, o seletor trancaria a
       // tela feita para dispensá-lo.
       //
-      // Gateado só por `roles` enquanto há um relatório. Quando houver vários,
-      // vale criar o módulo RELATORIOS em `modulos_sistema` e passar a usar
-      // `user_permissoes`, como os outros.
-      { key: 'relatorios', label: 'Relatórios', icon: <BarChart3 className="w-5 h-5" />, href: '/relatorios', roles: ['SUPER_ADMIN', 'ADMIN', 'MONITOR'], sempreAtivo: true },
+      // `modulo` e nao `roles`: Relatorios era o unico item do grupo que
+      // dependia do TIPO do usuario, e por isso nao havia caixa nenhuma
+      // para liberar a secretaria do Julio em 19/10/2026 — ela e
+      // USUARIO_PADRAO. O modulo RELATORIOS ja existia em
+      // `modulos_sistema`, so estava `ativo = false`, e a tela de
+      // permissoes lista apenas os ativos. Ver
+      // sql/2026-10-19_relatorios_por_permissao.sql, que tambem concede a
+      // permissao a quem entrava pelo tipo — senao a troca tiraria o menu
+      // dos admins e do monitor.
+      { key: 'relatorios', label: 'Relatórios', icon: <BarChart3 className="w-5 h-5" />, href: '/relatorios', modulo: 'RELATORIOS', sempreAtivo: true },
     ],
   },
   {

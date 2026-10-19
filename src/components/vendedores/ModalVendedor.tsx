@@ -138,7 +138,8 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   const [apellidos, setApellidos] = useState('');
   const [email, setEmail] = useState('');
   const [documento, setDocumento] = useState('');
-  const [ddi, setDdi] = useState('+55');
+  // Abre vazio, como o cadastro de cliente: sem país se não tiver país.
+  const [ddi, setDdi] = useState('');
   const [telefoneNumero, setTelefoneNumero] = useState('');
   const [endereco, setEndereco] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
@@ -806,6 +807,9 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           onChange={(e) => setDdi(e.target.value)}
                           className="px-3 py-3 rounded-l-xl border border-r-0 border-gray-200 bg-gray-50 text-sm focus:ring-2 focus:ring-blue-500 min-w-[110px]"
                         >
+                          {/* Sem pais e escolha legitima: o numero fica como foi
+                              digitado, sem DDI inventado. */}
+                          <option value="">— sem país</option>
                           {DDIS.map((d) => (
                             <option key={d.codigo} value={d.codigo}>
                               {d.bandeira} {d.codigo}

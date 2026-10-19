@@ -902,7 +902,7 @@ function FormularioEdicao({
             value={form.telefone_celular}
             onChange={(e) => handleChange('telefone_celular', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="(00) 00000-0000"
+            placeholder="+5511999999999 ou 11999999999"
           />
         </div>
         <div>
@@ -915,7 +915,7 @@ function FormularioEdicao({
             value={form.telefone_fixo}
             onChange={(e) => handleChange('telefone_fixo', e.target.value)}
             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            placeholder="(00) 0000-0000"
+            placeholder="+551133334444 ou 1133334444"
           />
         </div>
       </div>

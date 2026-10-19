@@ -23,6 +23,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { clientesService } from '@/services/clientes';
+import { useUser } from '@/contexts/UserContext';
 import { createClient } from '@/lib/supabase/client';
 import type { 
   Cliente,
@@ -103,7 +104,17 @@ export function ModalNovaVenda({
   rotaIdContexto,
   onSucesso 
 }: Props) {
-  const isNovoCliente = !cliente;
+  // O DDI sugerido vem do PAÍS da localização escolhida no menu — a
+    // mesma hierarquia que já define empresa e rota. Antes era `+55` fixo,
+    // e foi assim que as rotas colombianas ficaram com 100% dos telefones
+    // com DDI brasileiro.
+    //
+    // Sugestão, não trava: o seletor continua inteiro, e "— sem país"
+    // continua lá. Sem localização ou país desconhecido, abre vazio.
+    const { localizacao } = useUser();
+    const ddiSugerido = DDIS.find(d => d.pais === localizacao?.hierarquia?.pais)?.codigo || '';
+  
+    const isNovoCliente = !cliente;
   const temEmprestimoAtivo = cliente && 'qtd_emprestimos_ativos' in cliente && cliente.qtd_emprestimos_ativos > 0;
   
   const [activeTab, setActiveTab] = useState<TabType>('cliente');
@@ -119,9 +130,12 @@ export function ModalNovaVenda({
   // === Dados do Cliente ===
   const [nome, setNome] = useState('');
   const [documento, setDocumento] = useState('');
-  const [ddiCelular, setDdiCelular] = useState('+55');
+  // Abre VAZIO: sem país se não tiver país. Com o seletor fixo em +55,
+  // toda a base nasceu brasileira — inclusive as rotas colombianas, que
+  // ficaram com 100% dos telefones com DDI errado.
+  const [ddiCelular, setDdiCelular] = useState('');
   const [telefoneCelular, setTelefoneCelular] = useState('');
-  const [ddiFixo, setDdiFixo] = useState('+55');
+  const [ddiFixo, setDdiFixo] = useState('');
   const [telefoneFixo, setTelefoneFixo] = useState('');
   const [email, setEmail] = useState('');
   const [endereco, setEndereco] = useState('');
@@ -234,6 +248,10 @@ export function ModalNovaVenda({
             setDdiCelular(ddiEncontrado.codigo);
             setTelefoneCelular(cliente.telefone_celular.substring(ddiEncontrado.codigo.length));
           } else {
+            // Telefone gravado SEM país fica sem país: pôr o DDI sugerido
+            // aqui acrescentaria um prefixo que o número nunca teve, e o
+            // seletor ainda carregaria o valor do cliente anterior.
+            setDdiCelular('');
             setTelefoneCelular(cliente.telefone_celular);
           }
         }
@@ -242,9 +260,9 @@ export function ModalNovaVenda({
       } else {
         setNome('');
         setDocumento('');
-        setDdiCelular('+55');
+        setDdiCelular(ddiSugerido);
         setTelefoneCelular('');
-        setDdiFixo('+55');
+        setDdiFixo(ddiSugerido);
         setTelefoneFixo('');
         setEmail('');
         setEndereco('');
@@ -676,6 +694,9 @@ export function ModalNovaVenda({
                       onChange={(e) => setDdiCelular(e.target.value)}
                       className="w-24 flex-shrink-0 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm"
                     >
+                      {/* Sem pais e escolha legitima: o numero fica como foi
+                          digitado, sem DDI inventado. */}
+                      <option value="">— sem país</option>
                       {DDIS.map(d => (
                         <option key={d.codigo} value={d.codigo}>{d.bandeira} {d.codigo}</option>
                       ))}
@@ -701,6 +722,9 @@ export function ModalNovaVenda({
                       onChange={(e) => setDdiFixo(e.target.value)}
                       className="w-24 flex-shrink-0 px-2 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 text-sm"
                     >
+                      {/* Sem pais e escolha legitima: o numero fica como foi
+                          digitado, sem DDI inventado. */}
+                      <option value="">— sem país</option>
                       {DDIS.map(d => (
                         <option key={d.codigo} value={d.codigo}>{d.bandeira} {d.codigo}</option>
                       ))}

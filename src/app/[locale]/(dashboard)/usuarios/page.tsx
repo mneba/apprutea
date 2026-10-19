@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
   Settings,
@@ -104,7 +104,40 @@ export default function UsuariosPage() {
   const [conviteStatus, setConviteStatus] = useState<string | null>(null);
   const [confirmarRenovacao, setConfirmarRenovacao] = useState(false);
 
-  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+
+  // Filtro de empresa com digitação. `empresaBusca` é o que foi digitado
+  // e `empresaFiltro` é a escolha efetiva — separados de propósito: digitar
+  // não filtra a lista de usuários, só a de empresas, e desistir no meio
+  // tem de deixar o filtro como estava.
+  const [empresaAberta, setEmpresaAberta] = useState(false);
+  const [empresaBusca, setEmpresaBusca] = useState('');
+  const caixaEmpresa = useRef<HTMLDivElement>(null);
+
+  const nomeEmpresaFiltro =
+    empresaFiltro === '' ? '' :
+    empresaFiltro === 'sem_empresa' ? 'Sem Empresa' :
+    (empresas.find((e) => e.id === empresaFiltro)?.nome || '');
+
+  const empresasFiltradas = useMemo(() => {
+    const q = empresaBusca.trim().toLowerCase();
+    if (!q) return empresas;
+    return empresas.filter((e) => e.nome.toLowerCase().includes(q));
+  }, [empresas, empresaBusca]);
+
+  // Clicar fora fecha sem escolher — e o campo volta a mostrar o filtro
+  // vigente, não o texto meio digitado.
+  useEffect(() => {
+    if (!empresaAberta) return;
+    const fora = (ev: MouseEvent) => {
+      if (caixaEmpresa.current && !caixaEmpresa.current.contains(ev.target as Node)) {
+        setEmpresaAberta(false);
+        setEmpresaBusca('');
+      }
+    };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, [empresaAberta]);
 
   useEffect(() => {
     if (!loadingUser && profile) carregarDados();
@@ -267,20 +300,42 @@ export default function UsuariosPage() {
             />
           </div>
 
+          {/* Empresa: campo que FILTRA ENQUANTO SE DIGITA, não um
+              `<select>`. São 39 empresas, e achar uma na lista rolando é
+              trabalho — o nome na cabeça do usuário é o atalho mais curto.
+              Pedido do Mauricio em 19/10/2026. */}
           {ehSuperAdmin && (
-            <div className="relative">
-              <select
-                value={empresaFiltro}
-                onChange={(e) => setEmpresaFiltro(e.target.value)}
-                className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
-              >
-                <option value="">Todas as Empresas</option>
-                <option value="sem_empresa">Sem Empresa</option>
-                {empresas.map((e) => (
-                  <option key={e.id} value={e.id}>{e.nome}</option>
-                ))}
-              </select>
+            <div className="relative" ref={caixaEmpresa}>
+              <input
+                type="text"
+                value={empresaAberta ? empresaBusca : nomeEmpresaFiltro}
+                onChange={(e) => { setEmpresaBusca(e.target.value); setEmpresaAberta(true); }}
+                onFocus={() => { setEmpresaAberta(true); setEmpresaBusca(''); }}
+                placeholder="Todas as Empresas"
+                className="w-56 pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500"
+              />
               <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+
+              {empresaAberta && (
+                <div className="absolute z-20 mt-1 w-72 max-h-72 overflow-y-auto bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+                  {[{ id: '', nome: 'Todas as Empresas' },
+                    { id: 'sem_empresa', nome: 'Sem Empresa' },
+                    ...empresasFiltradas].map((e) => (
+                    <button
+                      key={e.id || 'todas'}
+                      onClick={() => { setEmpresaFiltro(e.id); setEmpresaAberta(false); setEmpresaBusca(''); }}
+                      className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 ${
+                        empresaFiltro === e.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                      }`}
+                    >
+                      {e.nome}
+                    </button>
+                  ))}
+                  {empresasFiltradas.length === 0 && empresaBusca.trim() && (
+                    <p className="px-3 py-2 text-sm text-gray-400">Nenhuma empresa com esse nome.</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
