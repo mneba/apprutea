@@ -103,13 +103,46 @@ export function SeletorLocalizacao() {
 
       // Filtrar por permissões para usuários não SUPER_ADMIN
       if (!isSuperAdmin && profile) {
-        const hierarquiasPermitidas = profile.hierarquias_ids || [];
-        const cidadesPermitidas = profile.cidades_ids || [];
+        // A EMPRESA é a unidade de acesso; cidade e hierarquia são os
+        // ancestrais dela e saem DERIVADOS, não de listas próprias.
+        //
+        // Antes, as três listas do perfil eram exigidas de forma
+        // independente, e a árvore é montada de cima para baixo: sem
+        // `hierarquias_ids`, não há país — e sem país não aparece cidade
+        // nem empresa, por mais que `empresas_ids` esteja cheio. Foi o que
+        // aconteceu com a secretária do Julio em 19/10/2026: 5 empresas,
+        // 3 cidades, `hierarquias_ids` vazio, e o seletor dizendo
+        // "Nenhuma localização disponível".
+        //
+        // As listas explícitas continuam valendo, somadas — quem as tem
+        // preenchidas não perde nada; quem não tem passa a enxergar o
+        // caminho até as empresas que já lhe pertencem.
         const empresasPermitidas = profile.empresas_ids || [];
+        const visiveis = empresasData.filter(e => empresasPermitidas.includes(e.id));
 
-        setHierarquias(hierarquiasData.filter(h => hierarquiasPermitidas.includes(h.id)));
-        setCidades(cidadesData.filter(c => cidadesPermitidas.includes(c.id)));
-        setEmpresas(empresasData.filter(e => empresasPermitidas.includes(e.id)));
+        const cidadesDasEmpresas = new Set(
+          visiveis.map(e => e.cidade_id).filter(Boolean) as string[]
+        );
+        const cidadesPermitidas = new Set([
+          ...(profile.cidades_ids || []),
+          ...cidadesDasEmpresas,
+        ]);
+
+        const hierarquiasDasCidades = new Set(
+          cidadesData
+            .filter(c => cidadesPermitidas.has(c.id))
+            .map(c => c.hierarquia_id)
+            .filter(Boolean) as string[]
+        );
+        const hierarquiasPermitidas = new Set([
+          ...(profile.hierarquias_ids || []),
+          ...hierarquiasDasCidades,
+          ...(visiveis.map(e => (e as any).hierarquia_id).filter(Boolean) as string[]),
+        ]);
+
+        setHierarquias(hierarquiasData.filter(h => hierarquiasPermitidas.has(h.id)));
+        setCidades(cidadesData.filter(c => cidadesPermitidas.has(c.id)));
+        setEmpresas(visiveis);
       } else {
         setHierarquias(hierarquiasData);
         setCidades(cidadesData);
