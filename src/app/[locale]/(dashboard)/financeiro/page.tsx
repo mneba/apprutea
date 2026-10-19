@@ -754,18 +754,6 @@ export default function FinanceiroPage() {
     await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
   };
 
-  if (!empresaId) {
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
-          </div>
-          <AvisoSelecioneEmpresa />
-        </div>
-      </div>
-    );
-  }
 
   const totalEntradas = movimentos.filter(m => m.tipo === 'RECEBER').reduce((acc, m) => acc + m.valor, 0);
   const totalSaidas = movimentos.filter(m => m.tipo === 'PAGAR').reduce((acc, m) => acc + m.valor, 0);
@@ -934,6 +922,34 @@ export default function FinanceiroPage() {
       .sort((a, b) => b.total - a.total);
   }, [movimentos, categorias]);
 
+
+  // ⚠ ESTA GUARDA FICA DEPOIS DE TODOS OS HOOKS, E ISSO NAO E ESTILO.
+  //
+  // Ela estava la em cima, antes de tres `useMemo`. No F5 (ou link
+  // direto) o primeiro render acontece com a localizacao ainda vazia:
+  // a funcao saia aqui e aqueles hooks nao rodavam. Quando o contexto
+  // resolvia e `empresaId` aparecia, o render passava reto e os hooks
+  // surgiam — contagem diferente da anterior, e o React aborta com o
+  // erro #310, "Rendered more hooks than during the previous render".
+  //
+  // Pelo menu lateral nunca acontecia, porque ali a empresa ja esta
+  // escolhida no primeiro render. Era o "funciona pelo menu, quebra no
+  // F5" que o Julio relatou em 12/10/2026.
+  //
+  // REGRA: retorno antecipado em componente React vem DEPOIS de todos os
+  // hooks. Sempre.
+  if (!empresaId) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+          <div className="mb-6">
+            <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
+          </div>
+          <AvisoSelecioneEmpresa />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">

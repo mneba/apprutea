@@ -1372,7 +1372,11 @@ export function ModalDetalhesCliente({
       if (resultado.success) {
         setSucesso('Cliente atualizado com sucesso!');
         setModoEdicao(false);
-        await carregarDadosCompletos();
+        // O histórico também: quem acabou de salvar é exatamente quem quer
+        // ver a linha nova. Sem isto era preciso fechar o modal e abrir de
+        // novo — a alteração estava gravada, mas a tela segurava a lista
+        // carregada na abertura.
+        await Promise.all([carregarDadosCompletos(), carregarHistoricoStatus()]);
         onClienteAtualizado?.();
       } else {
         setErro(resultado.error || 'Erro ao atualizar cliente');
