@@ -37,6 +37,8 @@ export interface LiquidacaoDiaria {
   
   // Contadores de clientes
   clientes_iniciais: number;
+  /** Clientes que pagaram algo no dia — não parcelas. */
+  clientes_pagos?: number;
   clientes_novos: number;
   clientes_renovados: number;
   clientes_renegociados: number;
@@ -44,7 +46,13 @@ export interface LiquidacaoDiaria {
   
   // Contadores de pagamentos
   pagamentos_pagos: number;
+  /**
+   * ⚠ NÃO é a contagem de parcelas não pagas. Medido em 20/10/2026: em
+   * 626 das 721 liquidações fechadas este campo é IGUAL a
+   * `clientes_iniciais`. A tela de Liquidação deixou de exibi-lo.
+   */
   pagamentos_nao_pagos: number;
+
   
   // Empréstimos do dia
   total_emprestado_dia: number;

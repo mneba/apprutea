@@ -616,7 +616,7 @@ export function ModalExtratoLiquidacao({
   <div class="secao">Detalhes Entradas (${pagamentosDinheiro.length + entradasOutras.length})</div>
   ${pagamentosDinheiro.length === 0 && entradasOutras.length === 0 ? `<div class="sub cinza">Nenhuma entrada</div>` : `
     ${pagamentosDinheiro.length > 0 ? `
-      <div class="sub cinza">── Cobranças de Parcelas (${pagamentosDinheiro.length}) ──</div>
+      <div class="sub cinza">── Cobranças em dinheiro (${pagamentosDinheiro.length}) ──</div>
       ${pagamentosDinheiro.map((p, idx) => {
         const nomeCliente = p.clientes?.nome || `Parcela ${p.numero_parcela}`;
         const excedente = Number(p.valor_credito_gerado || 0);
@@ -891,7 +891,7 @@ export function ModalExtratoLiquidacao({
                     {pagamentosDinheiro.length > 0 && (
                       <>
                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 mt-2">
-                          ── Cobranças de Parcelas ({pagamentosDinheiro.length}) ──
+                          ── Cobranças em dinheiro ({pagamentosDinheiro.length}) ──
                         </div>
                         {pagamentosDinheiro.map((p, idx) => (
                           <CardCobranca key={p.id} p={p} idx={idx} />

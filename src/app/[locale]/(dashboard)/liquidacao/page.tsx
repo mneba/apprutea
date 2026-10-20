@@ -2163,12 +2163,27 @@ export default function LiquidacaoDiariaPage() {
                   <span className="text-gray-500">Recebido</span>
                   <span className="font-semibold text-green-600 tabular-nums">{formatarMoeda(liquidacao.valor_recebido_dia)}</span>
                 </div>
+                {/* Duas linhas, porque são duas grandezas. Antes era uma só:
+                    "Parcelas 34/19", com 34 de PARCELAS pagas e 19 de
+                    CLIENTES planejados — números que não se dividem um pelo
+                    outro. Reclamação do Julio em 12/10/2026, Barcelona 10/10.
+
+                    `pagamentos_nao_pagos` saiu da tela de propósito: em 626
+                    das 721 liquidações fechadas ele é IGUAL aos clientes
+                    planejados, ou seja não conta não-pagos. Enquanto o
+                    acumulador não for consertado, exibi-lo é publicar um
+                    número que ninguém consegue conferir. */}
                 <div className="flex justify-between">
-                  <span className="text-gray-500">Parcelas</span>
+                  <span className="text-gray-500">Clientes</span>
                   <span className="font-semibold">
-                    <span className="text-green-600">{liquidacao.pagamentos_pagos}</span>
-                    <span className="text-gray-400">/</span>
-                    <span className="text-red-600">{liquidacao.pagamentos_nao_pagos}</span>
+                    <span className="text-green-600">{liquidacao.clientes_pagos ?? 0}</span>
+                    <span className="text-gray-400">/{liquidacao.clientes_iniciais ?? 0}</span>
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Parcelas pagas</span>
+                  <span className="font-semibold text-green-600 tabular-nums">
+                    {liquidacao.pagamentos_pagos ?? 0}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -2194,7 +2209,10 @@ export default function LiquidacaoDiariaPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] text-gray-500 uppercase font-semibold">Cobranças</p>
-                    <p className="text-[10px] text-gray-400">{cobrancasDia.qtd} parcela(s)</p>
+                    {/* LANÇAMENTOS, não parcelas: uma cobrança pode quitar várias de
+                        uma vez, e era por isso que este número (20) não batia
+                        com as 34 parcelas da Meta do Dia. */}
+                    <p className="text-[10px] text-gray-400">{cobrancasDia.qtd} cobrança(s)</p>
                   </div>
                   <span className="text-sm font-bold text-emerald-700 tabular-nums">{formatarMoeda(cobrancasDia.total)}</span>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
@@ -2653,7 +2671,7 @@ export default function LiquidacaoDiariaPage() {
                       <Banknote className="w-5 h-5 text-emerald-600" />
                       Cobranças do Dia
                     </h2>
-                    <p className="text-sm text-gray-500">{cobrancasDia.qtd} parcela(s) · {formatarMoeda(cobrancasDia.total)}</p>
+                    <p className="text-sm text-gray-500">{cobrancasDia.qtd} cobrança(s) · {formatarMoeda(cobrancasDia.total)}</p>
                   </div>
                   <button onClick={() => setModalCobrancas(false)} className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
                     <X className="w-5 h-5" />

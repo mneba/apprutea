@@ -197,7 +197,7 @@ export default function LoginPage() {
         </div>
 
         <div className="py-4 text-center text-sm text-gray-400">
-          © 2025 Apprutea. Todos os direitos reservados.
+          <span suppressHydrationWarning>&copy; {new Date().getFullYear()} Apprutea. Todos os direitos reservados.</span>
         </div>
       </div>
     </div>
