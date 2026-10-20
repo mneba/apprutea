@@ -2209,10 +2209,14 @@ export default function LiquidacaoDiariaPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[10px] text-gray-500 uppercase font-semibold">Cobranças</p>
-                    {/* LANÇAMENTOS, não parcelas: uma cobrança pode quitar várias de
-                        uma vez, e era por isso que este número (20) não batia
-                        com as 34 parcelas da Meta do Dia. */}
-                    <p className="text-[10px] text-gray-400">{cobrancasDia.qtd} cobrança(s)</p>
+                    {/* SEM contagem aqui, de propósito. Este card é sobre DINHEIRO;
+                        a contagem vive na Meta do Dia, em "Parcelas pagas".
+                        Ter duas contagens na mesma tela — 20 cobranças e 34
+                        parcelas — fazia o leitor procurar a conta que ligasse
+                        uma à outra, e não existe conta: uma cobrança pode
+                        quitar várias parcelas. O número de operações continua
+                        no detalhe, que é onde ele quer dizer alguma coisa. */}
+                    <p className="text-[10px] text-gray-400">ver detalhe</p>
                   </div>
                   <span className="text-sm font-bold text-emerald-700 tabular-nums">{formatarMoeda(cobrancasDia.total)}</span>
                   <ChevronRight className="w-4 h-4 text-gray-300" />
