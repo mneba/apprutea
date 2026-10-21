@@ -212,6 +212,58 @@ function ProgressBar({ percentual, cor }: { percentual: number; cor?: string }) 
   );
 }
 
+// A rosca dos clientes do dia: pagou a parcela, QUITOU o empréstimo, ou não
+// pagou. A quitação tem cor própria porque é ela que explica todo salto de
+// número do dia — na Barcelona em 10/10/2026, DUAS quitações responderam por
+// 19 das 37 parcelas, e era isso que fazia "34 parcelas" ao lado de "20
+// cobranças" parecer contradição.
+//
+// O centro é o TOTAL de quem pagou e a legenda é a divisão; a fatia cinza é
+// quem ficou faltando. Sem percentual escrito: a área já é a proporção.
+function RoscaClientes({ pagaramParcela, quitaram, naoPagaram, lado = 88 }: {
+  pagaramParcela: number; quitaram: number; naoPagaram: number; lado?: number;
+}) {
+  const grossura = 12;
+  const total = pagaramParcela + quitaram + naoPagaram;
+  const raio = (lado - grossura) / 2 - 1;
+  const volta = 2 * Math.PI * raio;
+
+  const fatias = [
+    { v: pagaramParcela, cor: '#059669' },  // emerald-600 — pagou parcela
+    { v: quitaram,       cor: '#0284c7' },  // sky-600     — quitou o empréstimo
+    { v: naoPagaram,     cor: '#e5e7eb' },  // gray-200    — ninguém pagou
+  ];
+
+  let andado = 0;
+  return (
+    <div className="relative grid place-items-center flex-shrink-0" style={{ width: lado, height: lado }}>
+      <svg width={lado} height={lado} viewBox={`0 0 ${lado} ${lado}`} className="-rotate-90">
+        <circle cx={lado / 2} cy={lado / 2} r={raio} fill="none" stroke="#f3f4f6" strokeWidth={grossura} />
+        {total > 0 && fatias.map((f, i) => {
+          const arco = volta * (f.v / total);
+          const inicio = -andado;
+          andado += arco;
+          if (f.v <= 0) return null;
+          return (
+            <circle
+              key={i}
+              cx={lado / 2} cy={lado / 2} r={raio}
+              fill="none" stroke={f.cor} strokeWidth={grossura}
+              /* 1,5px de respiro entre fatias, sem comer a menor delas */
+              strokeDasharray={`${Math.max(arco - 1.5, 0.5)} ${volta}`}
+              strokeDashoffset={inicio}
+            />
+          );
+        })}
+      </svg>
+      <div className="absolute inset-0 grid place-items-center content-center text-center">
+        <span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{pagaramParcela + quitaram}</span>
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400 leading-tight">de {total}</span>
+      </div>
+    </div>
+  );
+}
+
 // =====================================================
 // SKELETONS
 // =====================================================
@@ -665,6 +717,79 @@ interface EventoCliente {
 // durante a navegação client-side, guardamos aqui o resultado por liquidação.
 // Um dia fechado praticamente não muda; para o resto existe o botão Atualizar,
 // e toda ação que altera o dia recarrega com { forcar: true }.
+// Os números CONTADOS do dia, derivados dos pagamentos vivos em vez de lidos
+// dos acumuladores de `liquidacoes_diarias`.
+//
+// Por que derivar, e não ler o campo: `clientes_pagos` fica em 0 nos dias de
+// importação (Barcelona 18/07 tem 34.048,50 recebidos e 0 clientes pagos) e
+// `pagamentos_nao_pagos` é cópia de `clientes_iniciais` em 626 das 721
+// liquidações fechadas. Ver sql/2026-10-09_fechamento_cobranca_so_parcela.sql.
+// São ~40 linhas por dia numa consulta que entra na onda que já existe.
+//
+// `operacao_id` é o que o vendedor fez numa chegada — 1 para 1 com o
+// lançamento em `financeiro` — e está preenchido em 100% dos 19.698
+// pagamentos do sistema, desde 2024. É ele que separa "recebimento" de
+// "parcela", que era a distinção que a tela não fazia.
+// ⚠ A TELA TEM QUATRO UNIVERSOS DE CLIENTE, e confundi-los foi o defeito que
+// este bloco existe para fechar. Medido na Barcelona em 10/10/2026:
+//
+//   24  a lista que o vendedor percorre (`fn_clientes_da_liquidacao`) — tudo
+//       que está em aberto, em 84 LINHAS, porque um cliente com três
+//       empréstimos vem três vezes;
+//   19  `clientes_iniciais`, congelado na abertura. O comentário de
+//       `fn_abrir_liquidacao_diaria` é literal: "APENAS clientes com parcela
+//       vencendo HOJE";
+//   17  quem pagou — 10 deles ATRASADOS, que não estavam no plano do dia;
+//   10  os que, na lista, têm parcela vencendo no próprio dia.
+//
+// A rosca fecha na LISTA, não no plano, porque é o único par que se sustenta
+// em qualquer dia: o plano nunca foi guardado como CONJUNTO, só como
+// contagem — recalcular a Barcelona 10/10 hoje dá 11 em vez de 19, porque 8
+// daqueles empréstimos já não são ATIVO/VENCIDO. Para dia fechado, "era do
+// plano e pagou" é irrecuperável.
+//
+// Por que derivar em vez de ler o campo: `clientes_pagos` fica em 0 nos dias
+// de importação e `pagamentos_nao_pagos` é cópia de `clientes_iniciais` em
+// 626 das 721 liquidações fechadas. Ver
+// sql/2026-10-09_fechamento_cobranca_so_parcela.sql.
+//
+// `operacao_id` é o que o vendedor fez numa chegada — 1 para 1 com o
+// lançamento em `financeiro` — e está preenchido em 100% dos 19.698
+// pagamentos do sistema, desde 2024. É ele que separa "recebimento" de
+// "parcela".
+interface ResumoDia {
+  // a lista do dia, agrupada por CLIENTE
+  naLista: number;           // o total em que a rosca fecha
+  listaDoDia: number;        // destes, os que têm parcela vencendo no dia
+  listaSoVencidos: number;   // e os que só aparecem por parcela já vencida
+  pagaram: number;
+  naoPagaram: number;
+  clientesQuitaram: number;
+
+  // o que o vendedor fez
+  recebimentos: number;      // operações
+  recebQuitacao: number;     // quantas foram quitação de empréstimo
+  parcelasTocadas: number;   // parcelas distintas que receberam dinheiro
+  parcelasQuitadas: number;  // destas, as que zeraram o saldo
+  parcelasParciais: number;  // e as que seguiram devendo
+
+  // o dinheiro, separado pelo VENCIMENTO da parcela que ele pagou.
+  // "A meta é somente das parcelas que realmente vencem no dia" — decisão do
+  // Mauricio em 20/10/2026. Só `recebidoDoDia` entra no percentual; vencidas
+  // e futuras são dinheiro real, mas de outro dia.
+  recebidoDoDia: number;
+  recebidoVencidas: number;
+  recebidoFuturas: number;
+  creditoUsado: number;      // não é dinheiro novo: crédito que o cliente tinha
+}
+
+const RESUMO_DIA_VAZIO: ResumoDia = {
+  naLista: 0, listaDoDia: 0, listaSoVencidos: 0, pagaram: 0, naoPagaram: 0,
+  clientesQuitaram: 0, recebimentos: 0, recebQuitacao: 0, parcelasTocadas: 0,
+  parcelasQuitadas: 0, parcelasParciais: 0, recebidoDoDia: 0,
+  recebidoVencidas: 0, recebidoFuturas: 0, creditoUsado: 0,
+};
+
 interface DadosLiquidacaoCache {
   clientesDia: ClienteDoDia[];
   estatisticas: EstatisticasClientesDia | null;
@@ -672,6 +797,7 @@ interface DadosLiquidacaoCache {
   receitasDia: { total: number; qtd: number; itens: any[] };
   ajustesDia: { total: number; qtd: number; itens: any[] };
   cobrancasDia: { total: number; qtd: number; itens: any[] };
+  resumoDia: ResumoDia;
   ordemRotaMap: Map<string, number>;
   qtdNotasLiquidacao: number;
   emprestimosDoDia: any[];
@@ -760,6 +886,7 @@ export default function LiquidacaoDiariaPage() {
   const [modalCobrancas, setModalCobrancas] = useState(false);
   const [estornandoId, setEstornandoId] = useState<string | null>(null);
   const [cobrancasDia, setCobrancasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
+  const [resumoDia, setResumoDia] = useState<ResumoDia>(RESUMO_DIA_VAZIO);
 
   // Info pra abertura de nova liquidação (data prevista + dias pulados)
   const [proximaInfo, setProximaInfo] = useState<{
@@ -792,6 +919,7 @@ export default function LiquidacaoDiariaPage() {
     setReceitasDia(d.receitasDia);
     setAjustesDia(d.ajustesDia);
     setCobrancasDia(d.cobrancasDia);
+    setResumoDia(d.resumoDia);
     setOrdemRotaMap(d.ordemRotaMap);
     setQtdNotasLiquidacao(d.qtdNotasLiquidacao);
     setEmprestimosDoDia(d.emprestimosDoDia as any);
@@ -829,6 +957,7 @@ export default function LiquidacaoDiariaPage() {
         cobrancasRes,
         ordemRes,
         countNotasRes,
+        pagamentosRes,
       ] = await Promise.all([
         liq.id
           ? liquidacaoService.buscarClientesDaLiquidacao(liq.id)
@@ -857,6 +986,25 @@ export default function LiquidacaoDiariaPage() {
         supabase.from('ordem_rota_cliente').select('cliente_id, ordem').eq('rota_id', rotaId),
         supabase.from('notas').select('id', { count: 'exact', head: true })
           .eq('liquidacao_id', liq.id).eq('status', 'ATIVA'),
+        // Os pagamentos vivos do dia, só as colunas que as contagens da Meta
+        // do Dia precisam. Sem `liq.id` (dia consultado por data, sem
+        // liquidação) não há o que contar, e `eq('liquidacao_id', null)` não é
+        // consulta válida — por isso o atalho em vez de deixar o postgrest ir.
+        liq.id
+          ? supabase
+              .from('pagamentos_parcelas')
+              // `data_vencimento` vem da parcela porque é ele que decide se o
+              // dinheiro é DO DIA, de atrasada ou de futura — e a meta é só do
+              // dia. O FK é nomeado explicitamente, como em
+              // ModalExtratoLiquidacao, para o postgrest não ter de adivinhar.
+              .select(`
+                cliente_id, parcela_id, operacao_id, tipo_operacao,
+                status_parcela_atual, valor_pago_atual, valor_credito_usado,
+                emprestimo_parcelas!pagamentos_parcelas_parcela_id_fkey(data_vencimento)
+              `)
+              .eq('liquidacao_id', liq.id)
+              .eq('estornado', false)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
 
       const estatisticasCalc = liquidacaoService.calcularEstatisticasClientesDia(clientes);
@@ -913,6 +1061,101 @@ export default function LiquidacaoDiariaPage() {
         qtd: cobrancasEnriquecidas.length, itens: cobrancasEnriquecidas,
       };
       setCobrancasDia(cobrancasDiaCalc);
+
+      // ── Resumo contado do dia ──
+      // Tudo em Set porque a mesma parcela pode receber dinheiro duas vezes no
+      // dia (duas chegadas do vendedor) — contar linhas daria 2 parcelas onde
+      // há 1.
+      const diaRef = diaOperacional(liq);
+      const pagsDoDia = ((pagamentosRes as any)?.data || []) as any[];
+      const ops = new Set<string>();
+      const opsQuit = new Set<string>();
+      const parcTocadas = new Set<string>();
+      const parcQuitadas = new Set<string>();
+      const cliPagaram = new Set<string>();
+      const cliQuitaram = new Set<string>();
+      let creditoUsadoDia = 0;
+      let recebidoDoDia = 0;
+      let recebidoVencidas = 0;
+      let recebidoFuturas = 0;
+
+      pagsDoDia.forEach((p) => {
+        if (p.operacao_id) ops.add(p.operacao_id);
+        if (p.parcela_id) parcTocadas.add(p.parcela_id);
+        if (p.cliente_id) cliPagaram.add(p.cliente_id);
+        // `status_parcela_atual` é o retrato gravado NO ATO do pagamento, e não
+        // o status da tabela — que o trigger escreve comparando com
+        // CURRENT_DATE e por isso não serve (ver "A liquidação é a régua do
+        // tempo" no CLAUDE.md).
+        if (p.status_parcela_atual === 'PAGO' && p.parcela_id) parcQuitadas.add(p.parcela_id);
+        if (p.tipo_operacao === 'QUITACAO') {
+          if (p.operacao_id) opsQuit.add(p.operacao_id);
+          if (p.cliente_id) cliQuitaram.add(p.cliente_id);
+        }
+        creditoUsadoDia += Number(p.valor_credito_usado || 0);
+
+        // Crédito usado sai do líquido: não é dinheiro novo, é crédito que o
+        // cliente já tinha sendo consumido. É a mesma fórmula de
+        // `valor_recebido_dia` (CLAUDE.md), para os dois concordarem.
+        const liquido = Number(p.valor_pago_atual || 0) - Number(p.valor_credito_usado || 0);
+        // O embed de um-para-um do postgrest vem como OBJETO (é como
+        // ModalExtratoLiquidacao já lê `p.clientes?.nome` na mesma tabela), mas
+        // a guarda de array fica porque a falha aqui seria MUDA: sem
+        // vencimento, todo o dinheiro escapa das três gavetas e a meta mostra
+        // 0% sem nenhum erro no console.
+        const parc = Array.isArray(p.emprestimo_parcelas) ? p.emprestimo_parcelas[0] : p.emprestimo_parcelas;
+        const venc = String(parc?.data_vencimento || '').substring(0, 10);
+        // Comparação de 'YYYY-MM-DD' como texto: a ordem lexicográfica é a
+        // cronológica, e não há fuso para deslocar nada.
+        if (!venc) {
+          // parcela sem vencimento não entra em nenhum dos três
+        } else if (venc === diaRef) {
+          recebidoDoDia += liquido;
+        } else if (venc < diaRef) {
+          recebidoVencidas += liquido;
+        } else {
+          recebidoFuturas += liquido;
+        }
+      });
+
+      // A lista por CLIENTE. `fn_clientes_da_liquidacao` devolve uma linha por
+      // parcela — 84 linhas para 24 clientes na Barcelona 10/10 —, então
+      // agrupar antes de contar não é otimização, é correção.
+      const temParcelaDoDia = new Set<string>();
+      const naListaIds = new Set<string>();
+      clientes.forEach((c: any) => {
+        if (!c.cliente_id) return;
+        naListaIds.add(c.cliente_id);
+        // `=` e não `<=`: parcela que vence no próprio dia operacional está no
+        // prazo, não é atraso.
+        if (String(c.data_vencimento || '').substring(0, 10) === diaRef) {
+          temParcelaDoDia.add(c.cliente_id);
+        }
+      });
+      // A rosca fecha na UNIÃO de "está na lista" e "pagou". Na Barcelona
+      // 10/10 ninguém pagou de fora da lista, mas empréstimo criado e pago no
+      // mesmo dia cairia aí — e sem a união `pagaram` passaria do total.
+      const universo = new Set<string>(naListaIds);
+      cliPagaram.forEach((id) => universo.add(id));
+
+      const resumoDiaCalc: ResumoDia = {
+        naLista: universo.size,
+        listaDoDia: temParcelaDoDia.size,
+        listaSoVencidos: universo.size - temParcelaDoDia.size,
+        pagaram: cliPagaram.size,
+        naoPagaram: Math.max(0, universo.size - cliPagaram.size),
+        clientesQuitaram: cliQuitaram.size,
+        recebimentos: ops.size,
+        recebQuitacao: opsQuit.size,
+        parcelasTocadas: parcTocadas.size,
+        parcelasQuitadas: parcQuitadas.size,
+        parcelasParciais: parcTocadas.size - parcQuitadas.size,
+        recebidoDoDia,
+        recebidoVencidas,
+        recebidoFuturas,
+        creditoUsado: creditoUsadoDia,
+      };
+      setResumoDia(resumoDiaCalc);
 
       // Ordem dos clientes na rota
       const novoOrdemMap = new Map<string, number>();
@@ -985,6 +1228,7 @@ export default function LiquidacaoDiariaPage() {
           receitasDia: receitasDiaCalc,
           ajustesDia: ajustesDiaCalc,
           cobrancasDia: cobrancasDiaCalc,
+          resumoDia: resumoDiaCalc,
           ordemRotaMap: novoOrdemMap,
           qtdNotasLiquidacao: countNotasRes.count || 0,
           emprestimosDoDia: empsTodos,
@@ -1916,7 +2160,13 @@ export default function LiquidacaoDiariaPage() {
     return arr;
   }, [clientesFiltrados, ordenacao, ordemRotaMap]);
 
-  const percentualMeta = liquidacao ? calcularPercentual(liquidacao.valor_recebido_dia || 0, liquidacao.valor_esperado_dia || metaDia) : 0;
+  // A META É SÓ DAS PARCELAS QUE VENCEM NO DIA — decisão do Mauricio em
+  // 20/10/2026. Antes o numerador era `valor_recebido_dia`, que soma TODO
+  // pagamento (inclusive de parcela atrasada e de quitação, que paga parcelas
+  // futuras), contra um denominador que conta só as parcelas do dia. Medido
+  // em 20/10/2026: **391 de 749 liquidações (52,2%) passavam de 100%**, com
+  // máximo de 9010%. A Barcelona 10/10 mostrava 89% quando o dia fez 49%.
+  const percentualMeta = liquidacao ? calcularPercentual(resumoDia.recebidoDoDia, liquidacao.valor_esperado_dia || metaDia) : 0;
 
   if (loading) return <TelaSkeleton />;
 
@@ -2154,38 +2404,114 @@ export default function LiquidacaoDiariaPage() {
                 <span className="ml-auto text-lg font-bold text-gray-900 tabular-nums">{percentualMeta}%</span>
               </div>
               <ProgressBar percentual={percentualMeta} />
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 pt-2 border-t border-gray-100 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Esperado</span>
-                  <span className="font-semibold tabular-nums">{formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</span>
+
+              {/* A conta da meta, escrita por extenso. Os dois lados são do
+                  MESMO universo — parcelas que vencem no dia —, e é isso que
+                  faz o percentual acima poder ser lido como percentual. */}
+              <p className="mt-1.5 text-[11px] text-gray-500 leading-tight">
+                <span className="font-semibold text-green-600 tabular-nums">{formatarMoeda(resumoDia.recebidoDoDia)}</span>
+                {' de '}
+                <span className="font-semibold text-gray-700 tabular-nums">{formatarMoeda(liquidacao.valor_esperado_dia || metaDia)}</span>
+                {' que vencem hoje'}
+              </p>
+
+              {/* A rosca é a META — cliente, que é o que o vendedor persegue —
+                  e a cadeia ao lado desce do ato para a consequência: um
+                  RECEBIMENTO contém PARCELAS.
+
+                  Antes eram duas contagens soltas no mesmo cartão, "Parcelas
+                  pagas 34" ao lado de "20 cobrança(s)", e o leitor procurava a
+                  conta que ligasse uma à outra. Não existe conta: uma quitação
+                  é um recebimento e baixa dez parcelas. Rotular melhor não
+                  resolveu (reclamação do Julio em 12/10 e do Mauricio em
+                  20/10); o que resolve é mostrar que um contém o outro.
+
+                  Arranjo escolhido pelo Mauricio em 20/10/2026 entre três
+                  desenhos — claude.ai/artifact/6hdxTKgVsP2JVVEKn3SNNC. */}
+              <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-gray-100">
+                <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                  <RoscaClientes
+                    pagaramParcela={Math.max(0, resumoDia.pagaram - resumoDia.clientesQuitaram)}
+                    quitaram={resumoDia.clientesQuitaram}
+                    naoPagaram={resumoDia.naoPagaram}
+                  />
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">clientes</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Recebido</span>
+
+                <div className="flex-1 min-w-0 flex flex-col gap-1">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-base font-bold text-gray-900 tabular-nums w-7 text-right flex-shrink-0">{resumoDia.recebimentos}</span>
+                    <span className="text-[11px] leading-tight min-w-0">
+                      <span className="font-semibold text-gray-700">recebimentos</span>
+                      {resumoDia.recebQuitacao > 0 && (
+                        <span className="text-sky-600"> · {resumoDia.recebQuitacao} quitação{resumoDia.recebQuitacao > 1 ? 'ões' : ''}</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-2 pt-1 border-t border-dashed border-gray-100">
+                    <span className="text-base font-bold text-gray-900 tabular-nums w-7 text-right flex-shrink-0">{resumoDia.parcelasTocadas}</span>
+                    <span className="text-[11px] leading-tight min-w-0">
+                      <span className="font-semibold text-gray-700">parcelas</span>
+                      <span className="text-gray-400"> · {resumoDia.parcelasQuitadas} quitada{resumoDia.parcelasQuitadas === 1 ? '' : 's'}</span>
+                      {resumoDia.parcelasParciais > 0 && (
+                        <span className="text-amber-600">, {resumoDia.parcelasParciais} em parte</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {/* Crédito usado não é dinheiro novo — é crédito que o
+                      cliente já tinha sendo consumido, e é a razão de
+                      `valor_recebido_dia` ser `valor_pago_atual − credito_usado`.
+                      Só aparece quando houve, para não virar linha morta. */}
+                  {resumoDia.creditoUsado > 0 && (
+                    <p className="text-[10px] text-violet-600 leading-tight">
+                      {formatarMoeda(resumoDia.creditoUsado)} pagos com crédito do cliente
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* De onde vem o total da rosca, escrito — pedido do Mauricio em
+                  20/10/2026. A lista do dia NÃO é o plano do dia: ela traz
+                  também quem está só com parcela vencida, e sem essa linha o
+                  leitor supõe que o total é o previsto. Na Barcelona 10/10 são
+                  24 na lista contra 19 previstos, e a diferença é exatamente
+                  gente de outro dia que apareceu por atraso. */}
+              <p className="mt-1.5 text-[10px] text-gray-500 leading-tight">
+                <span className="font-semibold text-gray-600">{resumoDia.naLista} na lista</span>
+                {' = '}{resumoDia.listaDoDia} do dia
+                {' + '}{resumoDia.listaSoVencidos} vencido{resumoDia.listaSoVencidos === 1 ? '' : 's'}
+              </p>
+
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 pt-2 border-t border-gray-100 text-xs">
+                {/* Esperado saiu daqui: ele é só das parcelas do dia e já está
+                    na linha da meta, acima. Ficar ao lado de um "Recebido" que
+                    é TOTAL era a mistura que inflava a leitura — o par parecia
+                    comparável e não era. */}
+                <div className="flex justify-between col-span-2">
+                  <span className="text-gray-500">Recebido no dia (total)</span>
                   <span className="font-semibold text-green-600 tabular-nums">{formatarMoeda(liquidacao.valor_recebido_dia)}</span>
                 </div>
-                {/* Duas linhas, porque são duas grandezas. Antes era uma só:
-                    "Parcelas 34/19", com 34 de PARCELAS pagas e 19 de
-                    CLIENTES planejados — números que não se dividem um pelo
-                    outro. Reclamação do Julio em 12/10/2026, Barcelona 10/10.
+                {(resumoDia.recebidoVencidas > 0 || resumoDia.recebidoFuturas > 0) && (
+                  <p className="col-span-2 -mt-0.5 text-[10px] text-gray-400 leading-tight">
+                    {resumoDia.recebidoVencidas > 0 && <>{formatarMoeda(resumoDia.recebidoVencidas)} de parcelas vencidas</>}
+                    {resumoDia.recebidoVencidas > 0 && resumoDia.recebidoFuturas > 0 && ' · '}
+                    {/* Futuras vêm de quitação: o cliente pagou parcelas que
+                        ainda não venceram, então o dinheiro é real e a meta do
+                        dia não o espera. */}
+                    {resumoDia.recebidoFuturas > 0 && <>{formatarMoeda(resumoDia.recebidoFuturas)} de futuras (quitação)</>}
+                  </p>
+                )}
+                {/* Cliente e parcela saíram daqui: estão na rosca e na cadeia
+                    acima. Este bloco é só DINHEIRO, e é por isso que ele e a
+                    cadeia não competem mais pela mesma leitura.
 
-                    `pagamentos_nao_pagos` saiu da tela de propósito: em 626
-                    das 721 liquidações fechadas ele é IGUAL aos clientes
-                    planejados, ou seja não conta não-pagos. Enquanto o
-                    acumulador não for consertado, exibi-lo é publicar um
-                    número que ninguém consegue conferir. */}
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Clientes</span>
-                  <span className="font-semibold">
-                    <span className="text-green-600">{liquidacao.clientes_pagos ?? 0}</span>
-                    <span className="text-gray-400">/{liquidacao.clientes_iniciais ?? 0}</span>
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Parcelas pagas</span>
-                  <span className="font-semibold text-green-600 tabular-nums">
-                    {liquidacao.pagamentos_pagos ?? 0}
-                  </span>
-                </div>
+                    Os acumuladores `clientes_pagos`, `pagamentos_pagos` e
+                    `pagamentos_nao_pagos` deixaram de ser lidos: o primeiro
+                    fica em 0 nos dias de importação e o último é cópia de
+                    `clientes_iniciais` em 626 das 721 liquidações fechadas.
+                    A rosca conta os pagamentos vivos. Ver `ResumoDia`. */}
                 <div className="flex justify-between">
                   <span className="text-gray-500 flex items-center gap-1"><Banknote className="w-3 h-3" />Dinheiro</span>
                   <span className="font-semibold text-emerald-600 tabular-nums">{formatarMoeda(liquidacao.valor_dinheiro)}</span>
