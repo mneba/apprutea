@@ -9,6 +9,7 @@ import {
   Lock,
   RotateCcw,
 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
 
 // =====================================================
@@ -327,6 +328,56 @@ interface ResumoDiaCalendarioProps {
 }
 
 export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCalendarioProps) {
+  // ⚠ HOOKS ANTES DOS RETORNOS ANTECIPADOS. Este componente tem dois logo
+  // abaixo (`loading` e "sem registro neste dia"), e hook declarado depois
+  // deles dá React #310 — "Rendered more hooks than during the previous
+  // render" —, que neste projeto já virou tela branca no Financeiro. Ver
+  // CLAUDE.md, "Retorno antecipado vem DEPOIS de todos os hooks".
+  const [clientesDoDia, setClientesDoDia] = useState<{ naLista: number; pagaram: number } | null>(null);
+
+  // NÃO PAGOS CONTEMPLA TODOS OS QUE APARECEM NO DIA — regra do Mauricio em
+  // 21/10/2026: os que vencem naquele dia E os que só estão na lista por
+  // parcela vencida. Não há campo gravado que dê isso (`pagamentos_nao_pagos`
+  // é cópia de `clientes_iniciais`), então sai de duas leituras.
+  //
+  // Duas consultas num seletor de data são aceitáveis porque este resumo é de
+  // UM dia, o que o usuário acabou de clicar — não roda para o mês inteiro.
+  useEffect(() => {
+    const liqId = liquidacao?.id;
+    if (!liqId) { setClientesDoDia(null); return; }
+
+    // `vivo` descarta resposta de um dia que o usuário já abandonou: clicar
+    // rápido em três datas dispara três cargas, e sem isso a última a chegar
+    // vence, não a última pedida.
+    let vivo = true;
+    (async () => {
+      const supabase = createClient();
+      const [listaRes, pagosRes] = await Promise.all([
+        supabase.rpc('fn_clientes_da_liquidacao', { p_liquidacao_id: liqId }),
+        supabase.from('pagamentos_parcelas').select('cliente_id')
+          .eq('liquidacao_id', liqId).eq('estornado', false),
+      ]);
+      if (!vivo) return;
+
+      // Distintos por CLIENTE: a RPC devolve uma linha por PARCELA — 84 linhas
+      // para 24 clientes na Barcelona 10/10.
+      const naLista = new Set<string>(
+        ((listaRes.data || []) as any[]).map((r) => r.cliente_id).filter(Boolean)
+      );
+      const pagaram = new Set<string>(
+        ((pagosRes.data || []) as any[]).map((r) => r.cliente_id).filter(Boolean)
+      );
+      // Quem pagou entra no universo mesmo sem estar na lista — empréstimo
+      // criado e pago no mesmo dia cai aí, e sem a união os não pagos ficariam
+      // negativos.
+      pagaram.forEach((id) => naLista.add(id));
+
+      setClientesDoDia({ naLista: naLista.size, pagaram: pagaram.size });
+    })().catch(() => { if (vivo) setClientesDoDia(null); });
+
+    return () => { vivo = false; };
+  }, [liquidacao?.id]);
+
   const dataFormatada = data.toLocaleDateString('pt-BR', {
     weekday: 'long',
     day: 'numeric',
@@ -397,8 +448,9 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
   const temMicroseguro = microInicial > 0 || microFinal > 0 || microseguroDia > 0;
 
   // PAGAMENTOS
+  // `pagamentos_pagos` conta PARCELAS quitadas, não clientes. `naoPagos` saiu:
+  // `pagamentos_nao_pagos` é cópia de `clientes_iniciais` (ver a seção abaixo).
   const pagos = liquidacao.pagamentos_pagos || 0;
-  const naoPagos = liquidacao.pagamentos_nao_pagos || 0;
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
@@ -464,27 +516,53 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
         </SecaoBalanco>
       )}
 
-      {/* PAGAMENTOS DO DIA */}
+      {/* PAGAMENTOS DO DIA — refeito em 21/10/2026.
+
+          O que estava errado:
+
+          · "❌ Não pagos — N cliente(s)" lia `pagamentos_nao_pagos`, que é
+            CÓPIA de `clientes_iniciais` em 626 das 721 liquidações fechadas.
+            Mostrava o número de clientes PREVISTOS com rótulo de não pagos —
+            na Barcelona 10/10 dizia "19 cliente(s) não pagos" num dia em que
+            17 pagaram. O CONCEITO era válido; o campo não. Agora o número é
+            derivado, e contempla todos os que aparecem no dia: os que vencem
+            nele e os que só estão ali por parcela vencida.
+
+          · "✅ Pagos" mostrava `pagamentos_pagos` ao lado de um valor em
+            dinheiro, e `pagamentos_pagos` são PARCELAS, não clientes — 34
+            numa Barcelona de 17 clientes. O rótulo fazia ler 34 clientes.
+
+          · Aquele valor em dinheiro era a TERCEIRA aparição de `recebido` na
+            mesma tela: já está em "(+) Recebido" no Caixa e em "(−) Recaudo
+            do dia" na Carteira. Saiu.
+
+          As duas linhas que ficaram dizem uma coisa cada, e "de N" deixa o
+          universo à vista em vez de o leitor ter de supô-lo. */}
       <SecaoBalanco titulo="Pagamentos do Dia">
         <Linha
-          label="✅ Pagos"
+          label="✅ Parcelas pagas"
           valor={
             <span>
               <span className="text-green-600 font-bold">{pagos}</span>
-              <span className="text-gray-400 mx-1">·</span>
-              <span className="text-green-600 font-semibold">{formatarMoeda(recebido)}</span>
+              <span className="text-gray-400 ml-1 text-xs">parcela(s)</span>
             </span>
           }
         />
-        <Linha
-          label="❌ Não pagos"
-          valor={
-            <span>
-              <span className="text-red-600 font-bold">{naoPagos}</span>
-              <span className="text-gray-400 ml-1 text-xs">cliente(s)</span>
-            </span>
-          }
-        />
+        {clientesDoDia && (
+          <Linha
+            label="❌ Não pagos"
+            valor={
+              <span>
+                <span className="text-red-600 font-bold">
+                  {Math.max(0, clientesDoDia.naLista - clientesDoDia.pagaram)}
+                </span>
+                <span className="text-gray-400 ml-1 text-xs">
+                  de {clientesDoDia.naLista} cliente(s)
+                </span>
+              </span>
+            }
+          />
+        )}
       </SecaoBalanco>
     </div>
   );

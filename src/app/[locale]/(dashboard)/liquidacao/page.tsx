@@ -212,26 +212,24 @@ function ProgressBar({ percentual, cor }: { percentual: number; cor?: string }) 
   );
 }
 
-// A rosca dos clientes do dia: pagou a parcela, QUITOU o empréstimo, ou não
-// pagou. A quitação tem cor própria porque é ela que explica todo salto de
-// número do dia — na Barcelona em 10/10/2026, DUAS quitações responderam por
-// 19 das 37 parcelas, e era isso que fazia "34 parcelas" ao lado de "20
-// cobranças" parecer contradição.
+// A rosca dos clientes da lista, nos DOIS grupos que a lista já filtra: os do
+// dia e os vencidos de outro dia. É a mesma divisão do seletor DIA /
+// CARREGADOS logo abaixo, para o resumo e a lista nunca discordarem.
 //
 // O centro é o TOTAL de quem pagou e a legenda é a divisão; a fatia cinza é
 // quem ficou faltando. Sem percentual escrito: a área já é a proporção.
-function RoscaClientes({ pagaramParcela, quitaram, naoPagaram, lado = 88 }: {
-  pagaramParcela: number; quitaram: number; naoPagaram: number; lado?: number;
+function RoscaClientes({ doDiaPagaram, vencidosPagaram, naoPagaram, lado = 88 }: {
+  doDiaPagaram: number; vencidosPagaram: number; naoPagaram: number; lado?: number;
 }) {
   const grossura = 12;
-  const total = pagaramParcela + quitaram + naoPagaram;
+  const total = doDiaPagaram + vencidosPagaram + naoPagaram;
   const raio = (lado - grossura) / 2 - 1;
   const volta = 2 * Math.PI * raio;
 
   const fatias = [
-    { v: pagaramParcela, cor: '#059669' },  // emerald-600 — pagou parcela
-    { v: quitaram,       cor: '#0284c7' },  // sky-600     — quitou o empréstimo
-    { v: naoPagaram,     cor: '#e5e7eb' },  // gray-200    — ninguém pagou
+    { v: doDiaPagaram,    cor: '#059669' }, // emerald-600 — pagou, e vencia hoje
+    { v: vencidosPagaram, cor: '#0284c7' }, // sky-600     — pagou atraso de outro dia
+    { v: naoPagaram,      cor: '#e5e7eb' }, // gray-200    — não pagou
   ];
 
   let andado = 0;
@@ -257,7 +255,7 @@ function RoscaClientes({ pagaramParcela, quitaram, naoPagaram, lado = 88 }: {
         })}
       </svg>
       <div className="absolute inset-0 grid place-items-center content-center text-center">
-        <span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{pagaramParcela + quitaram}</span>
+        <span className="text-xl font-bold text-gray-900 tabular-nums leading-none">{doDiaPagaram + vencidosPagaram}</span>
         <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400 leading-tight">de {total}</span>
       </div>
     </div>
@@ -758,12 +756,14 @@ interface EventoCliente {
 // pagamentos do sistema, desde 2024. É ele que separa "recebimento" de
 // "parcela".
 interface ResumoDia {
-  // a lista do dia, agrupada por CLIENTE
-  naLista: number;           // o total em que a rosca fecha
-  listaDoDia: number;        // destes, os que têm parcela vencendo no dia
-  listaSoVencidos: number;   // e os que só aparecem por parcela já vencida
-  pagaram: number;
-  naoPagaram: number;
+  // QUEM pagou, não quantos: a divisão em "do dia" e "vencidos" é feita na
+  // renderização, por `ehDoDia`, que é a MESMA função do filtro DIA /
+  // CARREGADOS da lista. Contar aqui exigiria repetir o critério dela — e
+  // `idsDoDia` trata dois casos que uma comparação ingênua de data perde:
+  // venda do próprio dia (`status_dia === 'NOVO'`) e linha sem vencimento.
+  // Duas definições de "do dia" divergem, e o resumo passaria a contradizer a
+  // lista que está logo abaixo dele na tela.
+  pagantes: Set<string>;
   clientesQuitaram: number;
 
   // o que o vendedor fez
@@ -784,7 +784,7 @@ interface ResumoDia {
 }
 
 const RESUMO_DIA_VAZIO: ResumoDia = {
-  naLista: 0, listaDoDia: 0, listaSoVencidos: 0, pagaram: 0, naoPagaram: 0,
+  pagantes: new Set<string>(),
   clientesQuitaram: 0, recebimentos: 0, recebQuitacao: 0, parcelasTocadas: 0,
   parcelasQuitadas: 0, parcelasParciais: 0, recebidoDoDia: 0,
   recebidoVencidas: 0, recebidoFuturas: 0, creditoUsado: 0,
@@ -1118,32 +1118,8 @@ export default function LiquidacaoDiariaPage() {
         }
       });
 
-      // A lista por CLIENTE. `fn_clientes_da_liquidacao` devolve uma linha por
-      // parcela — 84 linhas para 24 clientes na Barcelona 10/10 —, então
-      // agrupar antes de contar não é otimização, é correção.
-      const temParcelaDoDia = new Set<string>();
-      const naListaIds = new Set<string>();
-      clientes.forEach((c: any) => {
-        if (!c.cliente_id) return;
-        naListaIds.add(c.cliente_id);
-        // `=` e não `<=`: parcela que vence no próprio dia operacional está no
-        // prazo, não é atraso.
-        if (String(c.data_vencimento || '').substring(0, 10) === diaRef) {
-          temParcelaDoDia.add(c.cliente_id);
-        }
-      });
-      // A rosca fecha na UNIÃO de "está na lista" e "pagou". Na Barcelona
-      // 10/10 ninguém pagou de fora da lista, mas empréstimo criado e pago no
-      // mesmo dia cairia aí — e sem a união `pagaram` passaria do total.
-      const universo = new Set<string>(naListaIds);
-      cliPagaram.forEach((id) => universo.add(id));
-
       const resumoDiaCalc: ResumoDia = {
-        naLista: universo.size,
-        listaDoDia: temParcelaDoDia.size,
-        listaSoVencidos: universo.size - temParcelaDoDia.size,
-        pagaram: cliPagaram.size,
-        naoPagaram: Math.max(0, universo.size - cliPagaram.size),
+        pagantes: cliPagaram,
         clientesQuitaram: cliQuitaram.size,
         recebimentos: ops.size,
         recebQuitacao: opsQuit.size,
@@ -2103,6 +2079,29 @@ export default function LiquidacaoDiariaPage() {
     carregados: clientesComEvento.length,
   }), [clientesComEvento, ehDoDia]);
 
+  // OS CLIENTES DO DIA SÃO DOIS GRUPOS, e não um total — decisão do Mauricio
+  // em 21/10/2026: *"na prática são 2 mesmo, os do dia e os que são
+  // vencidos"*. É a mesma divisão do seletor DIA / CARREGADOS que está logo
+  // abaixo na lista, por `ehDoDia`, de propósito: resumo e lista têm de dar o
+  // mesmo número quando o usuário clica no filtro.
+  //
+  // "Vencidos" aqui é quem está na lista e NÃO é do dia — gente de outro dia
+  // que o vendedor foi cobrar porque ficou devendo. A meta não os espera (ela
+  // é só das parcelas que vencem no dia, regra pétrea), mas o dinheiro deles é
+  // real e o trabalho de ir atrás foi feito.
+  const gruposClientes = useMemo(() => {
+    const g = {
+      doDia: { total: 0, pagaram: 0 },
+      vencidos: { total: 0, pagaram: 0 },
+    };
+    for (const { cliente } of clientesComEvento) {
+      const alvo = ehDoDia(cliente) ? g.doDia : g.vencidos;
+      alvo.total++;
+      if (resumoDia.pagantes.has(cliente.cliente_id)) alvo.pagaram++;
+    }
+    return g;
+  }, [clientesComEvento, ehDoDia, resumoDia.pagantes]);
+
   // Contagens seguem o escopo — senão os chips mostrariam números que não
   // batem com a lista exibida logo abaixo.
   const contagens = useMemo(() => {
@@ -2431,29 +2430,47 @@ export default function LiquidacaoDiariaPage() {
               <div className="flex items-center gap-3 mt-2.5 pt-2.5 border-t border-gray-100">
                 <div className="flex flex-col items-center gap-1 flex-shrink-0">
                   <RoscaClientes
-                    pagaramParcela={Math.max(0, resumoDia.pagaram - resumoDia.clientesQuitaram)}
-                    quitaram={resumoDia.clientesQuitaram}
-                    naoPagaram={resumoDia.naoPagaram}
+                    doDiaPagaram={gruposClientes.doDia.pagaram}
+                    vencidosPagaram={gruposClientes.vencidos.pagaram}
+                    naoPagaram={Math.max(0,
+                      (gruposClientes.doDia.total + gruposClientes.vencidos.total)
+                      - (gruposClientes.doDia.pagaram + gruposClientes.vencidos.pagaram))}
                   />
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-gray-400">clientes</span>
                 </div>
 
+                {/* Os DOIS grupos, cada um com o seu próprio total — e não um
+                    total só com nota de rodapé. São duas populações
+                    diferentes: a do dia é a meta, a vencida é recuperação. */}
                 <div className="flex-1 min-w-0 flex flex-col gap-1">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-base font-bold text-gray-900 tabular-nums w-7 text-right flex-shrink-0">{resumoDia.recebimentos}</span>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-sm bg-emerald-600 flex-shrink-0" />
                     <span className="text-[11px] leading-tight min-w-0">
-                      <span className="font-semibold text-gray-700">recebimentos</span>
-                      {resumoDia.recebQuitacao > 0 && (
-                        <span className="text-sky-600"> · {resumoDia.recebQuitacao} quitação{resumoDia.recebQuitacao > 1 ? 'ões' : ''}</span>
-                      )}
+                      <span className="font-bold text-gray-900 tabular-nums">{gruposClientes.doDia.pagaram}</span>
+                      <span className="text-gray-400 tabular-nums">/{gruposClientes.doDia.total}</span>
+                      <span className="text-gray-600"> do dia</span>
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-sm bg-sky-600 flex-shrink-0" />
+                    <span className="text-[11px] leading-tight min-w-0">
+                      <span className="font-bold text-gray-900 tabular-nums">{gruposClientes.vencidos.pagaram}</span>
+                      <span className="text-gray-400 tabular-nums">/{gruposClientes.vencidos.total}</span>
+                      <span className="text-gray-600"> vencidos</span>
                     </span>
                   </div>
 
-                  <div className="flex items-baseline gap-2 pt-1 border-t border-dashed border-gray-100">
-                    <span className="text-base font-bold text-gray-900 tabular-nums w-7 text-right flex-shrink-0">{resumoDia.parcelasTocadas}</span>
-                    <span className="text-[11px] leading-tight min-w-0">
-                      <span className="font-semibold text-gray-700">parcelas</span>
-                      <span className="text-gray-400"> · {resumoDia.parcelasQuitadas} quitada{resumoDia.parcelasQuitadas === 1 ? '' : 's'}</span>
+                  <div className="flex items-baseline gap-2 pt-1 mt-0.5 border-t border-dashed border-gray-100">
+                    <span className="text-sm font-bold text-gray-900 tabular-nums flex-shrink-0">{resumoDia.recebimentos}</span>
+                    <span className="text-[10px] leading-tight min-w-0 text-gray-500">
+                      recebimento{resumoDia.recebimentos === 1 ? '' : 's'}
+                      {resumoDia.recebQuitacao > 0 && `, ${resumoDia.recebQuitacao} quitação${resumoDia.recebQuitacao > 1 ? 'ões' : ''}`}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm font-bold text-gray-900 tabular-nums flex-shrink-0">{resumoDia.parcelasTocadas}</span>
+                    <span className="text-[10px] leading-tight min-w-0 text-gray-500">
+                      parcela{resumoDia.parcelasTocadas === 1 ? '' : 's'}, {resumoDia.parcelasQuitadas} quitada{resumoDia.parcelasQuitadas === 1 ? '' : 's'}
                       {resumoDia.parcelasParciais > 0 && (
                         <span className="text-amber-600">, {resumoDia.parcelasParciais} em parte</span>
                       )}
@@ -2466,23 +2483,11 @@ export default function LiquidacaoDiariaPage() {
                       Só aparece quando houve, para não virar linha morta. */}
                   {resumoDia.creditoUsado > 0 && (
                     <p className="text-[10px] text-violet-600 leading-tight">
-                      {formatarMoeda(resumoDia.creditoUsado)} pagos com crédito do cliente
+                      {formatarMoeda(resumoDia.creditoUsado)} pagos com crédito
                     </p>
                   )}
                 </div>
               </div>
-
-              {/* De onde vem o total da rosca, escrito — pedido do Mauricio em
-                  20/10/2026. A lista do dia NÃO é o plano do dia: ela traz
-                  também quem está só com parcela vencida, e sem essa linha o
-                  leitor supõe que o total é o previsto. Na Barcelona 10/10 são
-                  24 na lista contra 19 previstos, e a diferença é exatamente
-                  gente de outro dia que apareceu por atraso. */}
-              <p className="mt-1.5 text-[10px] text-gray-500 leading-tight">
-                <span className="font-semibold text-gray-600">{resumoDia.naLista} na lista</span>
-                {' = '}{resumoDia.listaDoDia} do dia
-                {' + '}{resumoDia.listaSoVencidos} vencido{resumoDia.listaSoVencidos === 1 ? '' : 's'}
-              </p>
 
               <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 mt-2 pt-2 border-t border-gray-100 text-xs">
                 {/* Esperado saiu daqui: ele é só das parcelas do dia e já está

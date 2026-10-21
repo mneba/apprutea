@@ -138,7 +138,15 @@ const AJUDA: SecaoAjuda[] = [
     titulo: 'Onde engana',
     itens: [
       '**Cobrança e venda não se comparam.** Uma é dinheiro que volta, a outra é dinheiro que sai.',
-      '**Não há percentual no período, de propósito.** Somar o esperado de semanas mistura a parcela que vencia no dia 3 e foi paga no dia 10 — numa rota real deu 107%, com dias de 231%. No dia a dia ele fica, porque ali significa a meta daquele dia.',
+      // A última frase deste item dizia "No dia a dia ele fica, porque ali
+      // significa a meta daquele dia" — e estava ERRADA. Quem a escreveu viu o
+      // sintoma no período e supôs que o dia estava são; o dia misturava
+      // igual, pela mesma causa. Medido em 20/10/2026: 391 de 749 liquidações
+      // passavam de 100%, máximo de 9010%. Corrigido em
+      // sql/2026-10-21_meta_do_dia_no_relatorio.sql, que passou o numerador a
+      // contar só pagamento de parcela que vence no dia.
+      '**Não há percentual no período, de propósito.** Somar o esperado de semanas mistura a parcela que vencia no dia 3 e foi paga no dia 10 — numa rota real deu 107%, com dias de 231%.',
+      '**Por dia, o percentual compara só o que vence naquele dia.** Cobrança de parcela atrasada e de quitação entra em Cobrança, porque é dinheiro que entrou, mas fica fora da meta — ela é do dia.',
       '**Caixa e carteira são do último dia de cada rota.** Somam entre rotas, nunca entre dias.',
       '**Clientes ativos é a base; clientes pagos é o movimento.** O segundo soma entre dias: o mesmo cliente pago em dez dias conta dez.',
       '**Transferência e aporte não entram no resultado.** Trocam de bolso ou são capital, não operação.',

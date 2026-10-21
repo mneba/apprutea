@@ -1,6 +1,18 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+
+// As cinco categorias que `fn_criar_movimentacao` NAO vincula a liquidacao:
+// ela desliga o vinculo para elas e grava `liquidacao_id` nulo de proposito.
+// A lista e COPIADA DELA, que e a autoridade -- se mudar la, muda aqui,
+// senao a guarda de handleSalvar passa a barrar operacao legitima.
+const CATEGORIAS_SEM_LIQUIDACAO = [
+  'EMPRESTIMO',
+  'ESTORNO_PAGAMENTO',
+  'RETIRO_MICROSEGURO',
+  'SAIDA_MICROSEGURO',
+  'AJUSTE_ABERTURA',
+];
 import { 
   X, 
   Loader2, 
@@ -118,6 +130,48 @@ export function ModalNovaMovimentacao({
       return;
     }
     
+
+    // -- Guardas de liquidacao, em conta de ROTA ------------------------
+    // `fn_criar_movimentacao` NAO verifica status de liquidacao: ela so
+    // confere que a liquidacao informada pertence a rota. Medido em
+    // 21/10/2026: 117 lancamentos foram criados DEPOIS de o dia fechar,
+    // entre 14/04 e 03/10, e cada um reescreveu o `caixa_final` de um dia
+    // ja conferido -- a funcao faz
+    //   UPDATE liquidacoes_diarias SET caixa_final = caixa_final +- valor
+    // sem olhar o status.
+    //
+    // ATENCAO: ISTO E GUARDA DE INTERFACE, E SO. A funcao segue permissiva
+    // para qualquer chamador -- o app do vendedor e RPC direta com a chave
+    // anon. Decisao do Mauricio em 21/10/2026: por enquanto, so no front.
+    if (contaSelecionada?.tipo_conta === 'ROTA' && !CATEGORIAS_SEM_LIQUIDACAO.includes(categoria)) {
+      // `liquidacaoSelId` vazio significa "usa a aberta", e e o backend que
+      // decide -- entao a guarda tem de olhar a MESMA que ele vai escolher.
+      const liqAlvo = liquidacaoSelId
+        ? liquidacoesRota.find((l: any) => l.id === liquidacaoSelId)
+        : liquidacaoAberta;
+
+      if (!liqAlvo) {
+        // Sem liquidacao, a funcao grava `liquidacao_id` nulo e o gatilho
+        // move o saldo da conta de qualquer jeito. O dinheiro anda e dia
+        // nenhum registra; a proxima abertura copia o saldo novo e o
+        // calendario mostra o degrau. Sao 9 casos no sistema, e e o formato
+        // mais dificil de rastrear.
+        setErro(
+          'Esta rota nao tem liquidacao aberta. Abra o dia, ou escolha uma liquidacao acima — '
+          + 'sem isso o lancamento move o saldo da conta e nenhum dia fica com o registro.'
+        );
+        return;
+      }
+
+      if (!['ABERTO', 'REABERTO'].includes(liqAlvo.status)) {
+        setErro(
+          `A liquidacao de ${fmtData(ymdLiq(liqAlvo))} esta ${liqAlvo.status}. `
+          + 'Reabra o dia para lancar nele — lancar num dia fechado altera o caixa final '
+          + 'de um dia ja conferido.'
+        );
+        return;
+      }
+    }
     setSalvando(true);
     setErro('');
     try {

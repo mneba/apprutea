@@ -727,7 +727,54 @@ export default function FinanceiroPage() {
     await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
   };
 
+  // Transferencia e ajuste PERTENCEM A UM DIA -- regra do Mauricio em
+  // 21/10/2026. A guarda vive aqui, e nao nos modais, porque
+  // `ModalTransferencia` nao recebe `rotaId` nem busca liquidacoes: mudar a
+  // interface dele custaria mais que guardar no handler, e o erro lancado
+  // daqui aparece no proprio modal (os dois tem catch que chama setErro).
+  //
+  // O que decide e o TIPO da conta, nao ter `rota_id`: `caixa_final` e o
+  // saldo da conta ROTA, e a conta de MICROSEGURO tem campos proprios. Pelo
+  // criterio de `rota_id`, a transferencia entre a conta da rota e a do
+  // microsseguro DA MESMA ROTA se anularia -- e ela existe (4.568,00 na
+  // Barcelona em 10/04).
+  //
+  // ⚠ Guarda de INTERFACE. `transferir_entre_contas` e `ajustar_saldo_conta`
+  // seguem gravando `liquidacao_id` nulo quando nao ha dia aberto, em vez de
+  // recusar. Decisao do Mauricio: por enquanto so no front.
+  const exigirDiaAberto = async (contaIds: (string | null | undefined)[]) => {
+    const rotas = Array.from(new Set(
+      contaIds
+        .map(id => contas.find(c => c.id === id))
+        .filter(c => c?.tipo_conta === 'ROTA' && c?.rota_id)
+        .map(c => c!.rota_id as string)
+    ));
+    if (rotas.length === 0) return; // so contas de empresa: nao ha dia a exigir
+
+    // import dinamico, como o resto do arquivo faz (ver carregarExtrato).
+    const { createClient } = await import('@/lib/supabase/client');
+    const supabase = createClient();
+    const { data } = await supabase
+      .from('liquidacoes_diarias')
+      .select('rota_id, status, data_liquidacao')
+      .in('rota_id', rotas)
+      .in('status', ['ABERTO', 'REABERTO']);
+
+    const comDiaAberto = new Set((data || []).map((l: any) => l.rota_id));
+    const semDia = rotas.filter(r => !comDiaAberto.has(r));
+
+    if (semDia.length > 0) {
+      const nomes = semDia
+        .map(r => contas.find(c => c.rota_id === r && c.tipo_conta === 'ROTA')?.nome || 'conta de rota')
+        .join(', ');
+      throw new Error(
+        `Sem liquidacao aberta em: ${nomes}. Abra o dia antes de lancar — sem isso o saldo `
+        + 'da conta se move e nenhum dia fica com o registro.'
+      );
+    }
+  };
   const handleSalvarTransferencia = async (dados: any) => {
+    await exigirDiaAberto([dados.conta_origem_id, dados.conta_destino_id]);
     const result = await financeiroService.criarTransferencia(
       dados,
       profile?.user_id,
@@ -742,6 +789,7 @@ export default function FinanceiroPage() {
   };
 
   const handleSalvarAjuste = async (dados: any) => {
+    await exigirDiaAberto([dados.conta_id]);
     const result = await financeiroService.criarAjusteSaldo(
       dados,
       profile?.user_id,

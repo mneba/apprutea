@@ -227,14 +227,49 @@ export function ModalExtratoLiquidacao({
       // 1. Dados extras da liquidação (resumo operacional)
       const { data: liqExtra } = await supabase
         .from('liquidacoes_diarias')
-        .select('clientes_pagos, clientes_nao_pagos, clientes_novos, clientes_renovados, clientes_renegociados, status, data_fechamento, fechado_por')
+        // `clientes_pagos` e `clientes_nao_pagos` saíram da lista: não são mais
+        // lidos (ver abaixo), e deixá-los aqui faria a próxima pessoa supor que
+        // a tela depende deles.
+        .select('clientes_novos, clientes_renovados, clientes_renegociados, status, data_fechamento, fechado_por')
         .eq('id', liquidacao.id)
         .single();
 
       if (liqExtra) {
+        // PAGOS E NÃO PAGOS SÃO DERIVADOS, não lidos de
+        // `clientes_pagos` / `clientes_nao_pagos`.
+        //
+        // Por que derivar em vez de medir se o campo está certo: medir
+        // responderia "hoje bate"; derivar remove a pergunta. `clientes_pagos`
+        // fica em 0 nos dias de importação, e o sistema inteiro já conta esses
+        // dois números a partir dos pagamentos vivos — a tela de liquidação, o
+        // calendário e o app do vendedor. Deixar o extrato na outra fonte é o
+        // formato de erro que este projeto já pagou várias vezes: dois números
+        // que precisam ser mantidos iguais em vez de serem o mesmo.
+        //
+        // "Não pagos" contempla TODOS os que aparecem no dia — os que vencem
+        // nele e os que só estão na lista por parcela vencida (regra do
+        // Mauricio, 21/10/2026).
+        const [listaRes, pagosRes] = await Promise.all([
+          supabase.rpc('fn_clientes_da_liquidacao', { p_liquidacao_id: liquidacao.id }),
+          supabase.from('pagamentos_parcelas').select('cliente_id')
+            .eq('liquidacao_id', liquidacao.id).eq('estornado', false),
+        ]);
+
+        // Distintos por CLIENTE: a RPC devolve uma linha por PARCELA — 84
+        // linhas para 24 clientes na Barcelona 10/10.
+        const universo = new Set<string>(
+          ((listaRes.data || []) as any[]).map((r) => r.cliente_id).filter(Boolean)
+        );
+        const pagaram = new Set<string>(
+          ((pagosRes.data || []) as any[]).map((r) => r.cliente_id).filter(Boolean)
+        );
+        // União: quem pagou conta mesmo sem estar na lista (empréstimo criado
+        // e pago no mesmo dia), senão os não pagos ficariam negativos.
+        pagaram.forEach((id) => universo.add(id));
+
         setResumoOp({
-          pagos: (liqExtra as any).clientes_pagos || 0,
-          naoPagos: (liqExtra as any).clientes_nao_pagos || 0,
+          pagos: pagaram.size,
+          naoPagos: Math.max(0, universo.size - pagaram.size),
           novos: (liqExtra as any).clientes_novos || 0,
           renovados: (liqExtra as any).clientes_renovados || 0,
           renegociados: (liqExtra as any).clientes_renegociados || 0,
