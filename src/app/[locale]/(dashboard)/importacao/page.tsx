@@ -25,9 +25,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ArrowRight, Ban, CheckCircle2, ChevronDown, ChevronRight,
-  FileSpreadsheet, History, Loader2, Play, ShieldCheck, Upload, XCircle,
+  FileSpreadsheet, History, Loader2, Play, RefreshCw, ShieldCheck, Upload, XCircle,
 } from 'lucide-react';
+import { useLocale } from 'next-intl';
 import { useUser } from '@/contexts/UserContext';
+import { invalidarCache } from '@/lib/cacheDados';
 import * as imp from '@/services/importacao';
 
 type Passo = 'ESCOLHA' | 'DIAGNOSTICO' | 'EXECUCAO' | 'ACEITE';
@@ -37,15 +39,25 @@ const fmtMoeda = (v: number | null | undefined) =>
     .format(Number(v || 0));
 
 export default function ImportacaoPage() {
-  const { user } = useUser();
+  const { user, localizacao } = useUser();
+  const locale = useLocale();
 
   const [passo, setPasso] = useState<Passo>('ESCOLHA');
   const [erro, setErro] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState<string | null>(null);
 
   // ── escolha ──────────────────────────────────────────────────────
+  // A ROTA VEM DO SELETOR DA PAGINA, nao de um seletor proprio (pedido do
+  // Mauricio em 21/10/2026). Eram duas escolhas de rota na mesma tela, e a
+  // de cima -- o seletor do cabecalho, que todo o resto do dashboard usa --
+  // nao tinha efeito aqui. Duas fontes para a mesma decisao e o formato de
+  // erro que este projeto ja pagou varias vezes.
+  //
+  // `listarRotas` FICA: e dela que saem `empresa_id`, `vendedor_id` e os
+  // nomes de empresa e vendedor. Resolver nome em vez de mostrar uuid foi o
+  // que faltou quando a Supra importou com a empresa errada.
   const [rotas, setRotas] = useState<Awaited<ReturnType<typeof imp.listarRotas>>>([]);
-  const [rotaId, setRotaId] = useState('');
+  const rotaId = localizacao?.rota_id || '';
   const [liquidacoes, setLiquidacoes] = useState<Awaited<ReturnType<typeof imp.listarLiquidacoesAbertas>>>([]);
   const [liquidacaoId, setLiquidacaoId] = useState('');
   const [arquivo, setArquivo] = useState<File | null>(null);
@@ -284,15 +296,33 @@ export default function ImportacaoPage() {
           <div className="bg-white rounded-xl border border-gray-200 p-5">
             <h2 className="text-sm font-semibold text-gray-700 mb-4">Destino</h2>
 
+            {/* A rota e a do SELETOR DA PAGINA, no cabecalho. Sem seletor
+                proprio: duas escolhas de rota na mesma tela e uma delas sem
+                efeito. */}
             <label className="block text-xs font-medium text-gray-600 mb-1">Rota</label>
-            <select
-              value={rotaId}
-              onChange={e => setRotaId(e.target.value)}
-              className="w-full mb-4 px-3 py-2 border border-gray-300 rounded-lg text-sm"
-            >
-              <option value="">Selecione a rota…</option>
-              {rotas.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
-            </select>
+            {rotaId && rota ? (
+              <p className="mb-4 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-900">
+                {rota.nome}
+              </p>
+            ) : rotaId && rotas.length > 0 ? (
+              /* Rota escolhida no topo mas AUSENTE da lista: `listarRotas`
+                 traz so `status = 'ATIVA'`. Sem esta mensagem a tela ficava
+                 muda e o botao desabilitado sem dizer por que -- o beco sem
+                 saida que esta tela ja teve uma vez. */
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                A rota selecionada no topo não está ativa, e a importação só aceita rota ativa.
+                Reative a rota em Organização, ou escolha outra no seletor.
+              </div>
+            ) : rotaId ? (
+              <p className="mb-4 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-500">
+                carregando…
+              </p>
+            ) : (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                Escolha a rota no seletor do topo da página. A importação escreve na rota
+                selecionada ali, e não em outra.
+              </div>
+            )}
 
             {/* Nomes resolvidos, nunca uuid: na rota Supra os INSERTs
                 saíram com empresa errada e só se descobriu depois. */}
@@ -326,8 +356,9 @@ export default function ImportacaoPage() {
             </select>
             {rotaId && liquidacoes.length === 0 && (
               <p className="mt-2 text-sm text-amber-700">
-                Esta rota não tem liquidação aberta. Abra o dia antes de importar — é dela que
-                saem a data dos empréstimos e o vínculo dos pagamentos históricos.
+                <strong>{rota?.nome || 'Esta rota'}</strong> não tem liquidação aberta. Abra o dia
+                antes de importar — é dela que saem a data dos empréstimos e o vínculo dos
+                pagamentos históricos.
               </p>
             )}
           </div>
@@ -529,13 +560,52 @@ export default function ImportacaoPage() {
           <Registro linhas={registro} />
 
           {execucao.etapa === 'ACEITE' ? (
-            <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex gap-3">
-              <ShieldCheck className="w-5 h-5 text-green-600 shrink-0" />
-              <p className="text-sm text-green-800">
-                Importação aceita. A conferência ficou guardada na execução — é a prova de
-                que no dia do aceite os números batiam.
-              </p>
-            </div>
+            <>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-xl flex gap-3">
+                <ShieldCheck className="w-5 h-5 text-green-600 shrink-0" />
+                <p className="text-sm text-green-800">
+                  Importação aceita. A conferência ficou guardada na execução — é a prova de
+                  que no dia do aceite os números batiam.
+                </p>
+              </div>
+
+              {/* RECARGA OBRIGATORIA, e nao sugerida (pedido do Mauricio em
+                  21/10/2026). A importacao escreveu clientes, emprestimos e
+                  parcelas direto no banco, e as outras telas estao com o
+                  cache de 5 minutos de cacheDados.ts cheio de dados de
+                  ANTES -- foi essa mesma causa que escondeu os 38 clientes
+                  importados em 16/10.
+                  `window.location.href` e nao `router.push`: a navegacao do
+                  Next e client-side e preservaria os dois caches de aba
+                  (cacheDados e estadoTela). Recarregar de verdade e o unico
+                  jeito de a liquidacao abrir com o que acabou de entrar. */}
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <div className="flex gap-3">
+                  <RefreshCw className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+                  <div className="text-sm text-blue-900">
+                    <p className="font-semibold">Recarregue para ver os dados.</p>
+                    <p className="mt-1 text-blue-800">
+                      Os clientes, empréstimos e parcelas já estão no banco, mas as outras
+                      telas ainda mostram o que tinham em memória. O botão abaixo recarrega
+                      a aplicação e abre a Liquidação Diária da rota.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    // Derruba o cache do módulo antes de sair -- se a recarga
+                    // falhar, ao menos ninguém segue lendo dado velho.
+                    invalidarCache();
+                    window.location.href = `/${locale}/liquidacao`;
+                  }}
+                  className="mt-4 w-full py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl
+                             font-semibold text-sm flex items-center justify-center gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Recarregar e ir para a Liquidação Diária
+                </button>
+              </div>
+            </>
           ) : (
             <button
               onClick={aceitar}
