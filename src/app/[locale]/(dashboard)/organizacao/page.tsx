@@ -2141,7 +2141,26 @@ export default function OrganizacaoPage() {
                       setTimeout(() => handlePreviewFeriado(), 100);
                     }}
                     onBlur={handlePreviewFeriado}
-                    min={new Date().toISOString().split('T')[0]}
+                    /* SEM `min`. Havia aqui
+                       `min={new Date().toISOString().split('T')[0]}`, e era ele
+                       que impedia o caso de uso: o seletor nao deixava nem
+                       CLICAR em data passada, antes de qualquer regra rodar.
+
+                       O relato do Julio em 21/10/2026: a liquidacao da Paola 2
+                       esta atrasada desde 08/10 e ha um feriado dentro do
+                       periodo; sem poder marca-lo, a liquidacao abre naquele
+                       dia. O banco ja aceitava desde 16/10 — a trava era so
+                       visual, e por isso o pedido parecia nao ter sido feito.
+
+                       Dois defeitos numa linha: ela proibia o passado, que e o
+                       caso de uso, E usava `new Date()` do APARELHO em UTC —
+                       proibido neste dominio (CLAUDE.md, a liquidacao e a
+                       regua do tempo). Perto da meia-noite ela errava ate o
+                       proprio 'hoje'.
+
+                       Quem recusa data e `fn_feriado_previsao`, com a MESMA
+                       condicao do gatilho, e a resposta dela aparece logo
+                       abaixo em vermelho com o motivo. */
                     className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:ring-2 focus:ring-orange-500 focus:border-transparent text-sm"
                   />
                 </div>
@@ -2156,7 +2175,13 @@ export default function OrganizacaoPage() {
                 </div>
                 <button
                   onClick={handleAdicionarFeriado}
-                  disabled={salvandoFeriado || !novoFeriadoData || !novoFeriadoDescricao.trim()}
+                  /* `previewFeriado && !permitido`, e nao
+                     `!previewFeriado?.permitido`: a previa e assincrona, e
+                     enquanto ela nao volta o estado e nulo. Travar no
+                     desconhecido bloquearia o salvamento legitimo nos
+                     primeiros 100ms. Trava-se no NAO conhecido. */
+                  disabled={salvandoFeriado || !novoFeriadoData || !novoFeriadoDescricao.trim()
+                    || (!!previewFeriado && !previewFeriado.permitido)}
                   className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
                   {salvandoFeriado ? (

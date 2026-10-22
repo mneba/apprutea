@@ -796,6 +796,16 @@ export function ModalTransferencia({
 // =====================================================
 
 interface ModalAjusteSaldoProps {
+  /**
+   * A conta escolhida no seletor da pagina: o modal abre com ela setada.
+   * Pedido do Mauricio em 21/10/2026. Quem clica em corrigir saldo com
+   * uma conta na tela quer corrigir AQUELA; obrigar a escolher de novo e
+   * pedir a mesma informacao duas vezes.
+   *
+   * Vazio (o seletor em todas as contas) abre sem nada setado, que e o
+   * certo: nao ha conta para supor.
+   */
+  contaPadraoId?: string;
   isOpen: boolean;
   onClose: () => void;
   contas: ContaComDetalhes[];
@@ -806,7 +816,8 @@ export function ModalAjusteSaldo({
   isOpen, 
   onClose, 
   contas,
-  onSalvar 
+  onSalvar,
+  contaPadraoId,
 }: ModalAjusteSaldoProps) {
   const [contaId, setContaId] = useState('');
   const [saldoFinal, setSaldoFinal] = useState('');
@@ -822,13 +833,16 @@ export function ModalAjusteSaldo({
 
   useEffect(() => {
     if (isOpen) {
-      setContaId('');
+      setContaId(contaPadraoId || '');
       setSaldoFinal('');
       setMotivo('');
       setObservacoes('');
       setErro('');
     }
-  }, [isOpen]);
+  // `contaPadraoId` nas dependencias: trocar a conta no seletor
+    // com o modal aberto faz ele acompanhar, como ModalNovaMovimentacao
+    // ja fazia.
+  }, [isOpen, contaPadraoId]);
 
   // Quando seleciona conta, preenche saldo atual como sugestão
   useEffect(() => {

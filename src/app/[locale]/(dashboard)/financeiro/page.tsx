@@ -1657,13 +1657,19 @@ export default function FinanceiroPage() {
       )}
 
       {/* Modais - Componentes externos padronizados */}
+      {/* Os dois modais abrem com a conta do seletor da pagina
+          (`contaFiltro`). O fallback `contaSelecionada?.id` que havia aqui
+          era redundante: `contaSelecionada` E
+          `contas.find(c => c.id === contaFiltro)`, entao com o filtro vazio
+          ela tambem e nula. Dois caminhos para o mesmo valor sugerem um
+          segundo criterio, e nao ha. */}
       <ModalNovaMovimentacao
         isOpen={modalMovimentacao}
         onClose={() => setModalMovimentacao(false)}
         contas={contas}
         categorias={categorias}
         onSalvar={handleSalvarMovimentacao}
-        contaPadraoId={contaFiltro || (contaSelecionada?.id) || ''}
+        contaPadraoId={contaFiltro}
         rotaId={rotaId || undefined}
       />
       <ModalTransferencia
@@ -1677,6 +1683,7 @@ export default function FinanceiroPage() {
         onClose={() => setModalAjuste(false)}
         contas={contas}
         onSalvar={handleSalvarAjuste}
+        contaPadraoId={contaFiltro}
       />
 
       {/* Modal Ver Todas Rotas */}
