@@ -328,29 +328,29 @@ export default function CategoriasFinanceirasPage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Ordem
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Código
+                  {/* Codigo, Nome (PT) e Nome (ES) eram TRES colunas para
+                      identificar a mesma categoria -- e as tres juntas
+                      custavam mais largura que tudo o resto da tabela. Viraram
+                      uma celula de tres linhas. Pedido do cliente de eliminar
+                      o scroll horizontal; aprovado pelo Mauricio em
+                      22/10/2026. */}
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    Categoria
                   </th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Nome (PT)
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                    Nome (ES)
-                  </th>
-                  <th className="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="text-left px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Tipo
                   </th>
-                  <th className="text-center px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Aplicável
                   </th>
-                  <th className="text-center px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <th className="text-center px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Status
                   </th>
                   {isSuperAdmin && (
-                    <th className="text-right px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    <th className="text-right px-3 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                       Ações
                     </th>
                   )}
@@ -359,30 +359,34 @@ export default function CategoriasFinanceirasPage() {
               <tbody className="divide-y divide-gray-200">
                 {categorias.map((categoria) => (
                   <tr key={categoria.id} className={`hover:bg-gray-50 ${!categoria.ativo ? 'opacity-50' : ''}`}>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-3 py-4 text-sm text-gray-500">
                       <div className="flex items-center gap-2">
                         <GripVertical className="w-4 h-4 text-gray-300" />
                         {categoria.ordem_exibicao}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="font-mono text-sm bg-gray-100 px-2 py-1 rounded">
+                    <td className="px-3 py-4 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {categoria.nome_pt}
+                      </p>
+                      {/* O nome em espanhol so aparece quando DIFERE do
+                          portugues: em boa parte das categorias os dois sao
+                          iguais, e repetir a mesma palavra gastava uma linha
+                          sem informar nada. */}
+                      {categoria.nome_es && categoria.nome_es !== categoria.nome_pt && (
+                        <p className="text-xs text-gray-500 truncate">{categoria.nome_es}</p>
+                      )}
+                      <code className="text-[11px] font-mono text-gray-400">
                         {categoria.codigo}
-                      </span>
+                      </code>
                     </td>
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {categoria.nome_pt}
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {categoria.nome_es}
-                    </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4">
                       <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${getTipoColor(categoria.tipo_movimento)}`}>
                         {getTipoIcon(categoria.tipo_movimento)}
                         {getTipoLabel(categoria.tipo_movimento)}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-3 py-4">
                       <div className="flex items-center justify-center gap-2">
                         {categoria.aplicavel_empresa && (
                           <span title="Empresa" className="p-1 bg-blue-100 rounded">
@@ -401,7 +405,7 @@ export default function CategoriasFinanceirasPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-center">
+                    <td className="px-3 py-4 text-center">
                       {isSuperAdmin ? (
                         <button
                           onClick={() => handleAlternarAtivo(categoria)}
@@ -423,7 +427,7 @@ export default function CategoriasFinanceirasPage() {
                       )}
                     </td>
                     {isSuperAdmin && (
-                      <td className="px-6 py-4 text-right">
+                      <td className="px-3 py-4 text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
                             onClick={() => abrirModalEditar(categoria)}

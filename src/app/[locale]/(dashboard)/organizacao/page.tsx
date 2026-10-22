@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Building2,
   MapPin,
@@ -617,38 +617,65 @@ export default function OrganizacaoPage() {
     }
   };
 
-  const handlePreviewFeriado = async () => {
-    if (!rotaParaFeriados || !novoFeriadoData) {
-      setPreviewFeriado(null);
-      return;
-    }
+  // A PREVIA SAI DE UM EFEITO SOBRE A DATA, nao de um `setTimeout` no
+  // `onChange`.
+  //
+  // O BUG, relatado pelo Mauricio em 22/10/2026: ele escolhia 23/09 (dia
+  // aberto), a tela recusava com razao; trocava para 24/09 (sem liquidacao)
+  // e A MENSAGEM NAO MUDAVA. Fechar e reabrir o modal "consertava".
+  //
+  // A causa: o `onChange` fazia `setNovoFeriadoData(...)` e logo
+  // `setTimeout(() => handlePreviewFeriado(), 100)`. `setState` e
+  // assincrono, e aquela funcao era a do render CORRENTE -- a closure dela
+  // tinha o valor ANTIGO. Cem milissegundos depois ela consultava a data
+  // anterior e repintava a mesma resposta. O `onBlur` as vezes corrigia,
+  // porque ali o render novo ja tinha acontecido: daí o comportamento
+  // parecer erratico em vez de sempre errado.
+  //
+  // Efeito resolve pela raiz: ele roda DEPOIS do commit, entao le sempre o
+  // valor vigente. Nao ha closure velha possivel.
+  const previaFeriado = useCallback(async (rotaId: string, data: string) => {
+    // `fn_feriado_previsao` e nao `fn_verificar_feriado_preview`: a nova
+    // responde se a data e PERMITIDA e se vai deslocar parcela, com a
+    // mesma condicao do gatilho. A antiga só contava impacto, e a tela
+    // tinha de adivinhar o resto.
+    const { data: linhas, error } = await (await import('@/lib/supabase/client')).createClient()
+      .rpc('fn_feriado_previsao', { p_rota_id: rotaId, p_data: data });
+    if (error) throw error;
+    return linhas && linhas.length > 0 ? linhas[0] : null;
+  }, []);
 
-    try {
-      // `fn_feriado_previsao` e nao `fn_verificar_feriado_preview`: a nova
-      // responde se a data e PERMITIDA e se vai deslocar parcela, com a
-      // mesma condicao do gatilho. A antiga só contava impacto, e a tela
-      // tinha de adivinhar o resto.
-      const { data, error } = await (await import('@/lib/supabase/client')).createClient()
-        .rpc('fn_feriado_previsao', {
-          p_rota_id: rotaParaFeriados.id,
-          p_data: novoFeriadoData
-        });
+  useEffect(() => {
+    const rotaId = rotaParaFeriados?.id;
+    if (!rotaId || !novoFeriadoData) { setPreviewFeriado(null); return; }
 
-      if (error) throw error;
-      if (data && data.length > 0) {
-        setPreviewFeriado({
-          emprestimos: data[0].emprestimos_afetados,
-          parcelas: data[0].parcelas_afetadas,
-          mensagem: data[0].motivo,
-          permitido: data[0].permitido,
-          vaiDeslocar: data[0].vai_deslocar,
-          hojeDaRota: data[0].hoje_da_rota,
-        });
+    // `vivo` descarta resposta de uma data que o usuario ja abandonou:
+    // trocar o dia tres vezes rapido dispara tres consultas, e sem isto a
+    // ultima a CHEGAR vence, nao a ultima PEDIDA.
+    let vivo = true;
+    const t = setTimeout(async () => {
+      try {
+        const r = await previaFeriado(rotaId, novoFeriadoData);
+        if (!vivo) return;
+        setPreviewFeriado(r ? {
+          emprestimos: r.emprestimos_afetados,
+          parcelas: r.parcelas_afetadas,
+          mensagem: r.motivo,
+          permitido: r.permitido,
+          vaiDeslocar: r.vai_deslocar,
+          hojeDaRota: r.hoje_da_rota,
+        } : null);
+      } catch (err) {
+        if (!vivo) return;
+        console.error('Erro no preview:', err);
+        // Limpa em vez de deixar a resposta da data ANTERIOR na tela --
+        // mensagem velha ao lado de data nova foi exatamente o defeito.
+        setPreviewFeriado(null);
       }
-    } catch (err) {
-      console.error('Erro no preview:', err);
-    }
-  };
+    }, 250); // o input de data dispara `onChange` por segmento digitado
+
+    return () => { vivo = false; clearTimeout(t); };
+  }, [rotaParaFeriados?.id, novoFeriadoData, previaFeriado]);
 
   const handleAdicionarFeriado = async () => {
     if (!rotaParaFeriados || !novoFeriadoData || !novoFeriadoDescricao.trim()) {
@@ -2135,12 +2162,12 @@ export default function OrganizacaoPage() {
                   <input
                     type="date"
                     value={novoFeriadoData}
-                    onChange={(e) => {
-                      setNovoFeriadoData(e.target.value);
-                      // Trigger preview após mudança
-                      setTimeout(() => handlePreviewFeriado(), 100);
-                    }}
-                    onBlur={handlePreviewFeriado}
+                    /* Só muda o estado. A prévia é um efeito sobre
+                       `novoFeriadoData` — ver o comentário dele. O
+                       `setTimeout` que havia aqui lia o valor antigo, e o
+                       `onBlur` que o remendava é o que fazia o
+                       comportamento parecer errático. */
+                    onChange={(e) => setNovoFeriadoData(e.target.value)}
                     /* SEM `min`. Havia aqui
                        `min={new Date().toISOString().split('T')[0]}`, e era ele
                        que impedia o caso de uso: o seletor nao deixava nem

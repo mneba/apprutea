@@ -144,16 +144,26 @@ function TabelaClientes({
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 w-10"></th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Código</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Nome</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Documento</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Telefone</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Endereço</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
-              <th className="px-4 py-3 text-right font-semibold text-gray-700 bg-gray-50">Saldo Devedor</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Empréstimos</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
-              <th className="px-4 py-3 text-left font-semibold text-gray-700 bg-gray-50">Última alteração</th>
+              {/* DOZE colunas viraram OITO, e `px-4` virou `px-3`. Pedido do
+                  cliente de eliminar o scroll horizontal; aprovado pelo
+                  Mauricio em 22/10/2026.
+
+                  As que se juntaram identificam a MESMA pessoa ou a MESMA
+                  forma de alcança-la, e separadas custavam quatro larguras:
+                    Nome + Código + Documento  -> Cliente
+                    Telefone + Endereço        -> Contato
+
+                  `Última alteração` passou a aparecer só em tela larga. Ela
+                  diz QUE mudou e não O QUE mudou, então ninguém decide nada
+                  por ela na lista — o histórico do cliente é que responde
+                  isso. */}
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Cliente</th>
+              <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Contato</th>
+              <th className="hidden lg:table-cell px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
+              <th className="px-3 py-3 text-right font-semibold text-gray-700 bg-gray-50">Saldo</th>
+              <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-50">Empr.</th>
+              <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
+              <th className="hidden xl:table-cell px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Alterado</th>
               <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
             </tr>
           </thead>
@@ -177,20 +187,35 @@ function TabelaClientes({
                     )}
                   </div>
                 </td>
-                <td className="px-4 py-3">
-                  <span className="font-mono text-gray-600">#{cliente.codigo_cliente}</span>
+                {/* Cliente: nome em cima, codigo e documento embaixo. O
+                    `min-w-0` com `truncate` e o que faz a coluna ENCOLHER em
+                    vez de empurrar a tabela -- sem ele, `truncate` nao tem
+                    efeito dentro de celula de tabela. */}
+                <td className="px-3 py-3 min-w-0 max-w-[16rem]">
+                  <p className="font-medium text-gray-900 truncate">{cliente.nome}</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    <span className="font-mono">#{cliente.codigo_cliente}</span>
+                    {cliente.documento && <> · {cliente.documento}</>}
+                  </p>
                 </td>
-                <td className="px-4 py-3">
-                  <span className="font-medium text-gray-900">{cliente.nome}</span>
+                {/* Contato: telefone em cima, endereco embaixo. O endereco e
+                    a coluna que mais empurrava a largura -- texto livre, sem
+                    limite. */}
+                <td className="px-3 py-3 min-w-0 max-w-[14rem]">
+                  <p className="text-gray-700 truncate">{cliente.telefone_celular || '-'}</p>
+                  {cliente.endereco && (
+                    <p className="text-xs text-gray-500 truncate" title={cliente.endereco}>
+                      {cliente.endereco}
+                    </p>
+                  )}
                 </td>
-                <td className="px-4 py-3 text-gray-600">{cliente.documento || '-'}</td>
-                <td className="px-4 py-3 text-gray-600">{cliente.telefone_celular || '-'}</td>
-                <td className="px-4 py-3 text-gray-600 max-w-xs truncate">{cliente.endereco || '-'}</td>
-                <td className="px-4 py-3 text-gray-600">{cliente.rotas_nomes || '-'}</td>
-                <td className="px-4 py-3 text-right font-medium text-gray-900">
+                <td className="hidden lg:table-cell px-3 py-3 text-gray-600 max-w-[10rem] truncate">
+                  {cliente.rotas_nomes || '-'}
+                </td>
+                <td className="px-3 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
                   {formatarMoeda(cliente.valor_saldo_devedor)}
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-3 py-3 text-center">
                   <div className="inline-flex items-center gap-1 text-sm">
                     {(cliente.qtd_emprestimos_ativos || 0) > 0 && (
                       <span className="inline-flex items-center gap-0.5 text-green-600 font-medium">
@@ -221,17 +246,17 @@ function TabelaClientes({
                     </div>
                   )}
                 </td>
-                <td className="px-4 py-3 text-center">
+                <td className="px-3 py-3 text-center">
                   <BadgeStatus status={cliente.status} />
                 </td>
                 {/* Diz QUE mudou, não o quê — o que mudou está na aba
                     Histórico do cliente. A hora vem no title porque na
                     coluna só a data cabe sem apertar a tabela. */}
-                <td className="px-4 py-3 whitespace-nowrap text-gray-600"
+                <td className="hidden xl:table-cell px-3 py-3 whitespace-nowrap text-gray-600"
                     title={cliente.updated_at ? formatarDataHora(cliente.updated_at) : undefined}>
                   {cliente.updated_at ? formatarData(cliente.updated_at) : '—'}
                 </td>
-                <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                   {podeNovaVenda && (
                     <button
                       onClick={() => onNovaVenda(cliente)}
@@ -250,8 +275,15 @@ function TabelaClientes({
               serve se for preciso rolar até o fim para vê-lo. */}
           <tfoot className="sticky bottom-0 z-10">
             <tr className="bg-gray-100 border-t-2 border-gray-300 font-semibold text-gray-800">
+              {/* UMA CELULA POR COLUNA, cada uma com a MESMA classe
+                  responsiva do seu cabecalho. `colSpan` atravessando
+                  coluna escondida desalinha o rodape: o numero de colunas
+                  muda com a largura, e o total de saldo sairia de baixo da
+                  coluna Saldo. Antes eram colSpan 6 e 4 sobre doze colunas
+                  fixas; com `hidden lg:` e `hidden xl:` isso deixou de
+                  valer. */}
               <td className="px-3 py-3" />
-              <td className="px-4 py-3 whitespace-nowrap" colSpan={6}>
+              <td className="px-3 py-3 whitespace-nowrap" colSpan={2}>
                 {clientes.length} cliente{clientes.length === 1 ? '' : 's'} no filtro
                 {truncada && (
                   <span className="ml-2 font-normal text-xs text-amber-700">
@@ -259,10 +291,14 @@ function TabelaClientes({
                   </span>
                 )}
               </td>
-              <td className="px-4 py-3 text-right whitespace-nowrap tabular-nums">
+              <td className="hidden lg:table-cell px-3 py-3" />
+              <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
                 {formatarMoeda(totalSaldo)}
               </td>
-              <td className="px-4 py-3" colSpan={4} />
+              <td className="px-3 py-3" />
+              <td className="px-3 py-3" />
+              <td className="hidden xl:table-cell px-3 py-3" />
+              <td className="px-3 py-3" />
             </tr>
           </tfoot>
         </table>
