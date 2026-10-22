@@ -21,7 +21,8 @@ import {
   MapPin,
   PanelLeftClose,
   PanelLeftOpen,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Loader2
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
@@ -126,6 +127,28 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, profile, localizacao, temPermissao } = useUser();
   const temLocalizacao = !!localizacao.empresa_id;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // ── Feedback imediato no toque do menu ───────────────────────────────
+  // O PROBLEMA: `ativo` saía só de `usePathname()`, que atualiza DEPOIS de a
+  // navegação assentar. Entre o clique e a página nova montar, a página
+  // velha seguia na tela E o item velho seguia destacado — nada se movia no
+  // lugar onde o dedo tocou, então parecia que o clique não registrou.
+  //
+  // E a espera é real: as páginas disparam as próprias consultas ao montar
+  // (a liquidação, ~13), e `fn_liquidacao_dia_completa` tem média de 558 ms
+  // com cauda até 7 s. O pacote não é o gargalo — a liquidação tem 34,7 kB.
+  //
+  // Guardar o DESTINO PRETENDIDO resolve sem tocar na velocidade: o item
+  // clicado fica ativo na hora e ganha um giro, e `pathname` limpa o estado
+  // quando a rota de fato troca.
+  //
+  // Por que não `useTransition`: ele não envolve a navegação do `<Link>`, que
+  // o Next trata por dentro. E trocar `<Link>` por botão com `router.push`
+  // custaria o que o anchor dá de graça — abrir em nova aba, clique do meio,
+  // leitor de tela. Next 15.1.9 aqui; `useLinkStatus`, que resolveria isso
+  // nativamente, só existe a partir do 15.3.
+  const [indoPara, setIndoPara] = useState<string | null>(null);
+  useEffect(() => { setIndoPara(null); }, [pathname]);
 
   /**
    * A barra recolhida: só os ícones, 64px em vez de 256.
@@ -267,6 +290,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                     );
                   }
 
+                  // Ativo OTIMISTA: o item clicado acende antes de a rota
+                  // trocar. `indoPara` some sozinho quando `pathname` muda.
+                  const indo = indoPara === item.href && !ativo;
+
                   return (
                     <li key={item.key}>
                       <Link
@@ -274,13 +301,19 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                         title={recolhida ? item.label : undefined}
                         className={`
                           ${caixa}
-                          ${ativo
+                          ${ativo || indo
                             ? 'bg-blue-600 text-white'
                             : 'text-gray-300 hover:bg-white/10 hover:text-white'}
+                          ${indo ? 'cursor-progress' : ''}
                         `}
-                        onClick={() => setSidebarOpen(false)}
+                        onClick={() => { setIndoPara(item.href); setSidebarOpen(false); }}
                       >
-                        {item.icon}
+                        {/* O giro SUBSTITUI o ícone em vez de entrar ao lado:
+                            com a barra recolhida só o ícone aparece, e um
+                            segundo elemento não caberia nos 64px. */}
+                        {indo
+                          ? <Loader2 className="w-5 h-5 animate-spin shrink-0" />
+                          : item.icon}
                         <span className={rotulo}>{item.label}</span>
                       </Link>
                     </li>

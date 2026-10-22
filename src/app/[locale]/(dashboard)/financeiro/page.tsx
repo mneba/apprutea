@@ -77,12 +77,15 @@ function LinhaExtrato({
   categorias,
   podeAnular,
   onAnular,
+  anulando,
   onVerComprovante,
 }: { 
   movimento: MovimentoFinanceiro; 
   categorias: CategoriaFinanceira[];
   podeAnular?: boolean;
   onAnular?: (movimento: MovimentoFinanceiro) => void;
+  /** Esta linha esta sendo anulada agora -- trava e avisa. */
+  anulando?: boolean;
   onVerComprovante?: (urls: string[]) => void;
 }) {
   const categoria = categorias.find(c => c.codigo === movimento.categoria);
@@ -210,11 +213,13 @@ function LinhaExtrato({
           {podeAnular && anulavel && !isAnulado && movimento.status !== 'CANCELADO' && (
             <button
               onClick={() => onAnular?.(movimento)}
-              title="Anular movimentação"
-              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors"
+              disabled={anulando}
+              title={anulando ? 'Anulando…' : 'Anular movimentação'}
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50 disabled:cursor-wait disabled:hover:bg-transparent"
             >
-              <Ban className="w-3 h-3" />
-              Anular
+              {anulando
+                ? <><Loader2 className="w-3 h-3 animate-spin" />Anulando…</>
+                : <><Ban className="w-3 h-3" />Anular</>}
             </button>
           )}
         </div>
@@ -454,6 +459,12 @@ export default function FinanceiroPage() {
   });
   const [movimentos, setMovimentos] = useState<MovimentoFinanceiro[]>([]);
   const [contas, setContas] = useState<ContaComDetalhes[]>([]);
+  // Qual linha do extrato esta sendo anulada. Mesmo papel do `estornandoId`
+  // da Liquidacao: travar o botao e mostrar que algo esta acontecendo. Antes
+  // nao havia sinal nenhum -- depois do `confirm`, a tela esperava
+  // `anularMovimentacao` mais TRES recargas sem mexer um pixel, e o usuario
+  // clicava de novo. Era a unica acao de linha do sistema sem trava.
+  const [anulandoId, setAnulandoId] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
   const [comprovante, setComprovante] = useState<string[] | null>(null);
 
@@ -692,6 +703,7 @@ export default function FinanceiroPage() {
 
   const handleAnularMovimentacao = async (movimento: MovimentoFinanceiro) => {
     if (!podeAnular) return;
+    if (anulandoId) return; // uma anulacao por vez: sao tres recargas cada
     const confirmar = window.confirm(
       `Anular esta movimentação de ${movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}?\n\n` +
       `Isto reverte o saldo da conta e o caixa da liquidação. O registro é mantido como ANULADO (histórico).`
@@ -702,6 +714,7 @@ export default function FinanceiroPage() {
     const motivo = window.prompt('Motivo da anulação (opcional):', '');
     if (motivo === null) return; // cancelou
 
+    setAnulandoId(movimento.id);
     try {
       await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
       // Gravou: o cache do módulo não vale mais
@@ -710,6 +723,10 @@ export default function FinanceiroPage() {
     } catch (e: any) {
       console.error('Erro ao anular movimentação:', e);
       alert(e?.message || 'Erro ao anular a movimentação. Tente novamente.');
+    } finally {
+      // `finally`: se a recarga falhar no meio, o botao nao pode ficar
+      // travado para sempre.
+      setAnulandoId(null);
     }
   };
 
@@ -1356,7 +1373,7 @@ export default function FinanceiroPage() {
                   <tr><td colSpan={3} className="px-4 py-12 text-center"><Loader2 className="w-7 h-7 animate-spin text-gray-400 mx-auto" /></td></tr>
                 ) : movimentosFiltrados.length > 0 ? (
                   movimentosFiltrados.map(m => (
-                    <LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} onVerComprovante={(urls) => setComprovante(urls)} />
+                    <LinhaExtrato key={m.id} movimento={m} categorias={categorias} podeAnular={podeAnular} onAnular={handleAnularMovimentacao} anulando={anulandoId === m.id} onVerComprovante={(urls) => setComprovante(urls)} />
                   ))
                 ) : modoFiltroTemporal === 'liquidacao' && !dataLiquidacao ? (
                   <tr><td colSpan={3} className="px-4 py-12 text-center">
