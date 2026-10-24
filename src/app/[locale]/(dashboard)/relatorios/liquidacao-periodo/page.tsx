@@ -59,6 +59,7 @@ import PainelVendas from '@/components/relatorios/PainelVendas';
 import SeletorPeriodo from '@/components/relatorios/SeletorPeriodo';
 import { Link } from '@/i18n/routing';
 import { relatoriosService } from '@/services/relatorios';
+import { useEstadoTela, chaveTela } from '@/lib/estadoTela';
 import { useEscopoInicial } from '@/hooks/useEscopoInicial';
 import type { EstruturaVisivel, LiquidacoesPeriodo, RotaNo, RotaPeriodo } from '@/types/relatorios';
 import { baixarCsv, numCsv } from '@/utils/csv';
@@ -223,29 +224,56 @@ function Totalizador({
 }
 
 export default function LiquidacaoPeriodoPage() {
-  const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
-  const [selecionadas, setSelecionadas] = useState<Set<string>>(new Set());
-  const [de, setDe] = useState(primeiroDoMes());
-  const [ate, setAte] = useState(hojeIso());
+  /**
+   * O ESTADO DESTA TELA SOBREVIVE A SAIR E VOLTAR.
+   *
+   * Relato do Julio em 21/10/2026: ele consultava uma semana, ia conferir
+   * outro relatório e, na volta, tinha de refazer a pesquisa inteira. Esta
+   * tela nunca preservou nada — a de Relatórios > Clientes e o Financeiro já
+   * preservavam desde 17/10, e ela ficou de fora.
+   *
+   * ⚠ A CHAVE NÃO LEVA EMPRESA, e a de Clientes leva. A diferença é
+   * deliberada: este relatório não é de uma empresa. Ele carrega a árvore
+   * visível INTEIRA por `fn_estrutura_visivel` e o usuário marca rotas
+   * livremente, podendo atravessar empresas. Pôr a empresa do seletor na
+   * chave faria trocar o cabeçalho JOGAR FORA um relatório que o cabeçalho
+   * não afeta — reset por um input que a tela ignora.
+   *
+   * (A de Clientes também não filtra por empresa e leva empresa na chave.
+   * Pode estar super-escopada pelo mesmo raciocínio; não mexi, porque mudar
+   * aquilo altera comportamento que ninguém reclamou.)
+   *
+   * O que NÃO é preservado, de propósito: `estrutura` (dado de referência,
+   * rebuscado na montagem), `carregando`, `erro`, `escopoAberto` e
+   * `ajudaAberta`. Guardar `carregando` traria a tela travada em
+   * "carregando" na volta, sem nada carregando.
+   */
+  const chaveEstado = chaveTela('rel-liq-periodo');
 
-  const [dados, setDados] = useState<LiquidacoesPeriodo | null>(null);
+  const [estrutura, setEstrutura] = useState<EstruturaVisivel | null>(null);
+  const [selecionadas, setSelecionadas] = useEstadoTela<Set<string>>(`${chaveEstado}|selecionadas`, () => new Set());
+  const [de, setDe] = useEstadoTela(`${chaveEstado}|de`, primeiroDoMes);
+  const [ate, setAte] = useEstadoTela(`${chaveEstado}|ate`, hojeIso);
+
+  const [dados, setDados] = useEstadoTela<LiquidacoesPeriodo | null>(`${chaveEstado}|dados`, null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  const [aba, setAba] = useState<Aba>('dia');
+  const [aba, setAba] = useEstadoTela<Aba>(`${chaveEstado}|aba`, 'dia');
   const [escopoAberto, setEscopoAberto] = useState(false);
   const [ajudaAberta, setAjudaAberta] = useState(false);
   const caixaEscopo = useRef<HTMLDivElement>(null);
 
   // O recorte usado na última geração, não o marcado agora. Sem isso, mexer na
   // árvore trocaria o conteúdo da lista sem o relatório ter sido refeito.
-  const [escopoGerado, setEscopoGerado] = useState<{ rotas: string[]; de: string; ate: string } | null>(null);
+  const [escopoGerado, setEscopoGerado] =
+    useEstadoTela<{ rotas: string[]; de: string; ate: string } | null>(`${chaveEstado}|escopoGerado`, null);
 
   /**
    * As rotas que estão ENTRANDO NA CONTA agora — subconjunto do que foi
    * gerado. Desligar uma pastilha tira da conta sem tirar do escopo, para a
    * lista de comparação ficar estável enquanto se compara.
    */
-  const [rotasAtivas, setRotasAtivas] = useState<Set<string>>(new Set());
+  const [rotasAtivas, setRotasAtivas] = useEstadoTela<Set<string>>(`${chaveEstado}|rotasAtivas`, () => new Set());
 
   /**
    * Os números POR ROTA da geração cheia, guardados.
@@ -254,7 +282,7 @@ export default function LiquidacaoPeriodoPage() {
    * consulta do subconjunto só devolve as rotas ativas, e sem esta cópia a
    * pastilha desligada ficaria sem número justamente quando se quer comparar.
    */
-  const [porRotaBase, setPorRotaBase] = useState<RotaPeriodo[]>([]);
+  const [porRotaBase, setPorRotaBase] = useEstadoTela<RotaPeriodo[]>(`${chaveEstado}|porRotaBase`, []);
 
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();

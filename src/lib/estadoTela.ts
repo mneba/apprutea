@@ -94,6 +94,33 @@ export function useEstadoTela<T>(
 }
 
 /**
+ * Qual SUBMÓDULO o usuário estava usando dentro de um grupo de menu.
+ *
+ * Pedido do Mauricio em 22/10/2026: *"mantenha o próprio módulo escolhido
+ * aberto, ou seja, em relatórios se eu estava em liquidação por período abra
+ * liquidação por período"*.
+ *
+ * POR QUE ISTO FALTAVA, e por que o relato parecia outra coisa: o Julio
+ * reportou que o relatório gerado "era apagado" ao voltar de Liquidação por
+ * período. O estado NUNCA foi apagado — o item Relatórios do menu aponta
+ * para `/relatorios`, que é uma página ÍNDICE. Ele caía na tela de escolha,
+ * não no relatório dele, e de lá tinha de gerar tudo de novo. O defeito era
+ * de navegação, não de estado.
+ *
+ * Mesmo escopo do resto deste arquivo: memória de módulo, viva enquanto a
+ * aba estiver aberta, morta no F5 — ver a decisão registrada no topo.
+ */
+const submodulos = new Map<string, string>();
+
+export function lembrarSubmodulo(grupo: string, caminho: string): void {
+  submodulos.set(grupo, caminho);
+}
+
+export function ultimoSubmodulo(grupo: string): string | null {
+  return submodulos.get(grupo) ?? null;
+}
+
+/**
  * Esquece o estado guardado. Sem argumento, esquece tudo.
  *
  * @example invalidarEstado('financeiro|')   // só o Financeiro
@@ -101,6 +128,10 @@ export function useEstadoTela<T>(
 export function invalidarEstado(prefixo?: string): void {
   if (!prefixo) {
     estados.clear();
+    // Sem prefixo limpa TUDO, e a memoria de submodulo e estado de tela
+    // como qualquer outro: deixa-la de fora faria `invalidarEstado()`
+    // mentir sobre o que limpou.
+    submodulos.clear();
     return;
   }
   for (const k of Array.from(estados.keys())) {

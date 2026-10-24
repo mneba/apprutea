@@ -27,6 +27,7 @@ import {
 import { Link, useRouter } from '@/i18n/routing';
 import { usePathname } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { lembrarSubmodulo, ultimoSubmodulo } from '@/lib/estadoTela';
 import { UserProvider, useUser } from '@/contexts/UserContext';
 import { MenuNotificacoes } from '@/components/layout/MenuNotificacoes';
 import { SeletorLocalizacao } from '@/components/layout/SeletorLocalizacao';
@@ -149,6 +150,33 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   // nativamente, só existe a partir do 15.3.
   const [indoPara, setIndoPara] = useState<string | null>(null);
   useEffect(() => { setIndoPara(null); }, [pathname]);
+
+  // ── O menu volta para o sub-relatorio que estava aberto ──────────────
+  // Pedido do Mauricio em 22/10/2026. O item Relatorios aponta para
+  // `/relatorios`, que e uma pagina INDICE: quem gerou um relatorio, saiu
+  // para conferir outro e clicou em Relatorios caia na tela de escolha e
+  // tinha de gerar tudo de novo. Foi o que o Julio reportou como "os dados
+  // foram apagados" -- o estado nunca foi apagado, ele e que nao voltava a
+  // tela que o tinha.
+  //
+  // O REGISTRO FICA AQUI, lido do `pathname`, e nao em cada sub-pagina.
+  // Uma pagina nova dentro de /relatorios passa a ser lembrada sem precisar
+  // lembrar de se anunciar -- e lista que cada tela tem de alimentar a mao
+  // e exatamente o formato de erro que este projeto ja pagou varias vezes.
+  const caminhoSemLocale = pathname.replace(/^\/(pt-BR|es)/, '');
+  useEffect(() => {
+    if (caminhoSemLocale.startsWith('/relatorios/')) {
+      lembrarSubmodulo('relatorios', caminhoSemLocale);
+    }
+  }, [caminhoSemLocale]);
+
+  // Ja estando DENTRO de um sub-relatorio, o destino sai do caminho atual e
+  // nao da memoria: a sub-pagina monta DEPOIS de o layout renderizar, entao
+  // na primeira visita a memoria ainda estaria vazia e o item apontaria para
+  // o indice -- atrasado em uma navegacao.
+  const hrefRelatorios = caminhoSemLocale.startsWith('/relatorios/')
+    ? caminhoSemLocale
+    : (ultimoSubmodulo('relatorios') || '/relatorios');
 
   /**
    * A barra recolhida: só os ícones, 64px em vez de 256.
@@ -290,14 +318,18 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                     );
                   }
 
+                  // `ativo` segue saindo de `item.href` (`/relatorios`), que
+                  // casa com os sub-caminhos por prefixo -- so o DESTINO muda.
+                  const destino = item.key === 'relatorios' ? hrefRelatorios : item.href;
+
                   // Ativo OTIMISTA: o item clicado acende antes de a rota
                   // trocar. `indoPara` some sozinho quando `pathname` muda.
-                  const indo = indoPara === item.href && !ativo;
+                  const indo = indoPara === destino && !ativo;
 
                   return (
                     <li key={item.key}>
                       <Link
-                        href={item.href}
+                        href={destino}
                         title={recolhida ? item.label : undefined}
                         className={`
                           ${caixa}
@@ -306,7 +338,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                             : 'text-gray-300 hover:bg-white/10 hover:text-white'}
                           ${indo ? 'cursor-progress' : ''}
                         `}
-                        onClick={() => { setIndoPara(item.href); setSidebarOpen(false); }}
+                        onClick={() => { setIndoPara(destino); setSidebarOpen(false); }}
                       >
                         {/* O giro SUBSTITUI o ícone em vez de entrar ao lado:
                             com a barra recolhida só o ícone aparece, e um
