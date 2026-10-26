@@ -351,21 +351,37 @@ export function ModalExtratoLiquidacao({
           setPagamentos((pagsSem || []) as PagamentoParcela[]);
         }
       } else {
-        // Deduplicar por parcela_id (ou emprestimo+numero, ou cliente+numero)
-        const mapaDedup = new Map<string, any>();
-        for (const p of (pagsData || []) as any[]) {
-          const key = p.parcela_id || `${p.emprestimo_id}-${p.numero_parcela}` || `${p.cliente_id}-${p.numero_parcela}`;
-          const existing = mapaDedup.get(key);
-          const totalAtual = parseFloat(p.valor_pago_total || 0);
-          const totalExistente = existing ? parseFloat(existing.valor_pago_total || 0) : -1;
-          if (!existing || totalAtual > totalExistente) {
-            mapaDedup.set(key, p);
-          }
-        }
-        const deduped = Array.from(mapaDedup.values()).sort(
+        /**
+         * SEM DEDUPLICAÇÃO, e isto é regra de negócio.
+         *
+         * Cada linha é um RECEBIMENTO, e a mesma parcela PODE receber dois no
+         * mesmo dia: pagamento parcial de manhã e o resto à tarde é cobrança
+         * normal, não erro de registro.
+         *
+         * Havia aqui um dedup por `parcela_id` que guardava só o de maior
+         * `valor_pago_total` e descartava o outro. Ele nunca apareceu como
+         * erro porque o dinheiro descartado não sumia da tela: saía de
+         * "Cobrança do dia" e reaparecia logo abaixo como "Diferença não
+         * explicada" — a linha que existe justamente para denunciar dinheiro
+         * movido fora do dia. Ela estava denunciando o próprio cálculo.
+         *
+         * Relatado pelo Julio em 26/10/2026 na 4.1 nayivis vnz: 20,00 de
+         * diferença que ele não conseguia achar no Financeiro. Estavam lá, os
+         * DOIS pagamentos da parcela 15/24 — era o extrato que mostrava um.
+         *
+         * MEDIDO no mesmo dia, e é o que decide remover em vez de ajustar:
+         *   · 14 casos, 316,64, em 9 rotas, desde 10/09/2026;
+         *   · nos 14, os dois pagamentos têm `operacao_id` DIFERENTE, ou seja
+         *     são dois atos do vendedor;
+         *   · linha de fato repetida — mesmo `operacao_id` na mesma parcela —
+         *     são ZERO em 19.698 pagamentos.
+         * O dedup defendia de algo que nunca aconteceu e destruía o que
+         * acontece.
+         */
+        const ordenados = [...((pagsData || []) as any[])].sort(
           (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
-        setPagamentos(deduped as PagamentoParcela[]);
+        setPagamentos(ordenados as PagamentoParcela[]);
       }
 
       // 4. Empréstimos do dia (separa vendas de renegociações)
