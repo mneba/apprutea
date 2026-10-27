@@ -559,17 +559,22 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   // grava o objeto inteiro, então os campos escondidos mantêm o valor
   // carregado em vez de virarem `false` por ausência.
   //
-  // DUAS COISAS IMPORTANTES FICAM AQUI DENTRO, e por isso a seção some em
-  // bloco em vez de ser apagada:
+  // ESCONDER UMA SEÇÃO INTEIRA LEVOU JUNTO UM PARÂMETRO VIVO.
   //
-  //   `validar_valor_max_renovacoes`  é o que decide se renovação acima do
-  //                                   último empréstimo precisa de autorização
-  //                                   do ADMIN — o fluxo inteiro de renovação
-  //                                   pendente depende dele;
-  //   `numero_whatsapp_aprovacoes`    é para onde vão os avisos de aprovação.
+  // `validar_valor_max_renovacoes` estava aqui dentro e decide se renovação
+  // acima do último empréstimo precisa de autorização do ADMIN — o fluxo
+  // inteiro de renovação pendente depende dele, e `fn_renovar_emprestimo`,
+  // `fn_verificar_autorizacao` e `fn_validar_novo_emprestimo` o leem. Ficou sem
+  // tela de 12/10 a 27/10/2026. **Subiu para "Limites de Valores"**, junto dos
+  // outros interruptores de autorização, que é onde alguém o procura.
   //
-  // Precisando mexer num dos dois sem a tela, é UPDATE em `restricoes_vendedor`.
-  // Trazer a seção de volta é trocar esta constante para `true`.
+  // A lição: o nome enganou. Ele carrega "valor_max" e por isso foi lido como
+  // irmão de `valor_max_renovacoes`, que é coluna morta — mas um é o TETO
+  // (inexistente, o teto é o último empréstimo) e o outro é se o teto VALE.
+  //
+  // AINDA FICA AQUI DENTRO, e precisa de UPDATE em `restricoes_vendedor` para
+  // mudar: `numero_whatsapp_aprovacoes`, o número para onde vão os avisos de
+  // aprovação. Trazer a seção de volta é trocar esta constante para `true`.
   const MOSTRAR_OUTRAS_CONFIGURACOES = false;
 
   return (
@@ -1051,12 +1056,38 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         />
                       </div>
 
-                      {/* Renovação NÃO entra aqui: o teto de uma renovação é o
-                          valor do último empréstimo do cliente, então não há
-                          valor a configurar. O único parâmetro é exigir ou não
-                          autorização — fica em "Outras Configurações".
-                          A coluna valor_max_renovacoes segue no banco e é
-                          regravada intacta ao salvar. */}
+                      {/* RENOVAÇÃO: NÃO tem valor a configurar, e TEM um
+                          parâmetro — são coisas diferentes, e confundi-las
+                          custou duas semanas de tela.
+
+                          O teto de uma renovação é sempre o valor do último
+                          empréstimo do cliente, então `valor_max_renovacoes` é
+                          coluna morta de propósito (segue no banco, regravada
+                          intacta ao salvar). Mas `validar_valor_max_renovacoes`
+                          decide se renovação ACIMA desse teto precisa de
+                          autorização do admin, e é o interruptor do fluxo
+                          inteiro de renovação pendente.
+
+                          Ele foi junto quando "Outras Configurações" sumiu em
+                          12/10/2026 — por engano, por carregar "valor_max" no
+                          nome. Ficou duas semanas sem tela. Mora aqui desde
+                          27/10/2026. */}
+                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white md:col-span-2">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={restricoes.validar_valor_max_renovacoes}
+                            onChange={() => updateRestricao('validar_valor_max_renovacoes', !restricoes.validar_valor_max_renovacoes)}
+                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                          />
+                          <RefreshCw className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm font-medium text-gray-700">Exigir Autorização para Renovação</span>
+                        </label>
+                        <p className="text-xs text-gray-500 mt-2 ml-6">
+                          O limite de uma renovação é sempre o valor do último empréstimo do cliente — não há valor a definir.
+                          Marcado, renovação acima desse valor precisa de autorização do admin. Desmarcado, o vendedor libera sozinho.
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -1158,23 +1189,6 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           <Calendar className="w-4 h-4 text-gray-500" />
                           <span className="text-sm font-medium text-gray-700">Renovação no Dia Seguinte se Exceder</span>
                         </label>
-                      </div>
-
-                      <div className="p-4 rounded-xl border-2 border-gray-200 bg-white col-span-2">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={restricoes.validar_valor_max_renovacoes}
-                            onChange={() => updateRestricao('validar_valor_max_renovacoes', !restricoes.validar_valor_max_renovacoes)}
-                            className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                          />
-                          <RefreshCw className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm font-medium text-gray-700">Exigir Autorização para Renovação</span>
-                        </label>
-                        <p className="text-xs text-gray-500 mt-2 ml-6">
-                          O limite de uma renovação é sempre o valor do último empréstimo do cliente.
-                          Marque para que renovações acima desse valor precisem de autorização.
-                        </p>
                       </div>
 
                       <div className="p-4 rounded-xl border-2 border-gray-200 bg-white col-span-2">
