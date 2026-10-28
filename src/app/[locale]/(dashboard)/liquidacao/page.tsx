@@ -2374,7 +2374,19 @@ export default function LiquidacaoDiariaPage() {
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,35%)] gap-3 min-h-0">
 
           {/* COLUNA ESQUERDA (visualmente) — 4 cards, mas movida pra direita via 'order' */}
-          <div className="flex flex-col gap-3 min-h-0 min-w-0 lg:order-2">
+          {/* `overflow-y-auto` é o que torna o card de Movimentos ALCANÇÁVEL em
+              tela baixa. Os quatro cards somam mais altura do que sobra num
+              MacBook Air 13", e a coluna não tinha rolagem própria: a lista de
+              clientes ao lado sempre teve (`flex-1 overflow-y-auto`), esta
+              nunca teve. O excedente ia parar no `overflow-y-hidden` da raiz e
+              simplesmente desaparecia — Cobranças, Empréstimos, Despesas,
+              Receitas e Microseguro ficavam inacessíveis, sem nenhum sinal na
+              tela de que existiam. Reclamação do Mauricio em 28/10/2026.
+
+              Os cards não precisam de `flex-shrink-0`: em coluna flex o mínimo
+              automático de cada item já é a altura do conteúdo, então eles
+              preservam o tamanho e o que sobra vira rolagem, não esmagamento. */}
+          <div className="flex flex-col gap-3 min-h-0 min-w-0 overflow-y-auto lg:order-2">
 
             {/* Caixa */}
             <CardSaldo titulo="Caixa" inicial={liquidacao.caixa_inicial} final={liquidacao.caixa_final} icone={Wallet} corBase="blue"
