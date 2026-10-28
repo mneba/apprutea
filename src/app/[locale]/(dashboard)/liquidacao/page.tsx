@@ -2401,7 +2401,11 @@ export default function LiquidacaoDiariaPage() {
             {/* Meta do dia */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center">
+                {/* `flex-shrink-0` como no cartao de Caixa e nos de Movimentos:
+                    sem ele o icone ESMAGA em cartao estreito (vira um oval) em
+                    vez de deixar o titulo quebrar. Era o unico dos tres cartoes
+                    da coluna sem a trava. */}
+                <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center flex-shrink-0">
                   <Target className="w-3.5 h-3.5 text-blue-600" />
                 </div>
                 <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Meta do Dia</h3>
