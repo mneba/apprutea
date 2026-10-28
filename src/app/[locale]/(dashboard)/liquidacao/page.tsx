@@ -182,7 +182,12 @@ function CardSaldo({
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-[10px] text-gray-500 uppercase tracking-wide font-semibold mb-0.5">{titulo}</p>
-          <div className="flex items-baseline gap-2">
+          {/* `flex-wrap` e o que faz o cartao caber em tela de 13 polegadas.
+              Sem ele a linha tem largura minima igual a SOMA dos cinco spans
+              (~230px) e empurra o delta para fora do cartao -- reclamacao do
+              Mauricio em 28/10/2026, num MacBook Air. Quando sobra espaco o
+              resultado e identico; so quando falta e que "Final" desce. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-[10px] text-gray-400">Inicial</span>
             <span className="text-xs font-medium text-gray-700 tabular-nums">{formatarMoeda(inicial)}</span>
             <span className="text-gray-300">·</span>
@@ -2216,7 +2221,7 @@ export default function LiquidacaoDiariaPage() {
   // page-content já tem padding do layout pai. Aqui criamos altura calculada e overflow-hidden.
 
   return (
-    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 overflow-hidden">
+    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 overflow-x-auto overflow-y-hidden">
 
       {/* Faixa de reabertura */}
       {isLiquidacaoReaberta && liquidacao && (
@@ -2251,7 +2256,7 @@ export default function LiquidacaoDiariaPage() {
       )}
 
       {/* HEADER COMPACTO */}
-      <div className="flex items-center justify-between gap-3 flex-shrink-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 flex-shrink-0">
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-lg font-bold text-gray-900">Liquidação Diária</h1>
@@ -2267,7 +2272,7 @@ export default function LiquidacaoDiariaPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {/* Os dados ficam em cache entre visitas à tela; aqui o usuário força
               a releitura quando quiser garantir que está vendo o mais recente. */}
           <button
@@ -2366,10 +2371,10 @@ export default function LiquidacaoDiariaPage() {
 
       {/* LAYOUT 2 COLUNAS: Clientes à esquerda (65%) / Cards à direita (35%) */}
       {liquidacao && (
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[1fr_35%] gap-3 min-h-0">
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,35%)] gap-3 min-h-0">
 
           {/* COLUNA ESQUERDA (visualmente) — 4 cards, mas movida pra direita via 'order' */}
-          <div className="flex flex-col gap-3 min-h-0 lg:order-2">
+          <div className="flex flex-col gap-3 min-h-0 min-w-0 lg:order-2">
 
             {/* Caixa */}
             <CardSaldo titulo="Caixa" inicial={liquidacao.caixa_inicial} final={liquidacao.caixa_final} icone={Wallet} corBase="blue"
@@ -2601,7 +2606,7 @@ export default function LiquidacaoDiariaPage() {
           </div>
 
           {/* COLUNA DIREITA (visualmente esquerda agora) — CLIENTES */}
-          <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 overflow-hidden lg:order-1">
+          <div className="bg-white rounded-lg border border-gray-200 flex flex-col min-h-0 min-w-0 overflow-hidden lg:order-1">
             {/* Cabeçalho com filtros + busca */}
             <div className="px-3 py-2.5 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center justify-between mb-2">

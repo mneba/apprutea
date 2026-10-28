@@ -43,6 +43,36 @@ interface PagamentoParcela {
   clientes?: { nome: string; consecutivo?: string } | null;
 }
 
+/** O que sobrou de crédito e o que o crédito fechou, por empréstimo. */
+interface CreditoLiquido {
+  /** Excedente que o cliente de fato guardou: gerado menos consumido no dia. */
+  excedente: number;
+  /** Parcelas fechadas por linhas CREDITO, que nao aparecem na lista. */
+  parcelasQuitadas: number;
+  /** Crédito dessas linhas. Sem isto o extrato fecha parcelas sem dinheiro à vista. */
+  creditoOculto: number;
+}
+
+/**
+ * Fragmento que declara o crédito aplicado pelo empréstimo, uma vez só.
+ *
+ * Mesmo texto do aplicativo (`fraseCredito` em `LiquidacaoDetalhes.tsx`). O
+ * extrato do web e o do app são lidos pela mesma pessoa, muitas vezes lado a
+ * lado — palavra diferente para o mesmo número é o que o Julio chamou de
+ * "divergência na interpretação dos valores".
+ */
+function fraseCredito(liq: CreditoLiquido): string {
+  const qtd = liq.parcelasQuitadas;
+  if (liq.creditoOculto > 0) {
+    const un = qtd === 1 ? 'parcela' : 'parcelas';
+    return ` · crédito aplicado: ${formatarMoeda(liq.creditoOculto)}${qtd > 0 ? ` (${qtd} ${un})` : ''}`;
+  }
+  if (qtd > 0) {
+    return ` · quitou +${qtd} parcelas`;
+  }
+  return '';
+}
+
 interface EmprestimoDia {
   id: string;
   valor_principal: number;
@@ -464,6 +494,70 @@ export function ModalExtratoLiquidacao({
     return s + (valorPagoAtual - creditoUsado);
   }, 0);
 
+  // ══════════════════════════════════════════════════════════════════
+  // O CRÉDITO DO DIA, POR EMPRÉSTIMO
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // Pedido do Julio em 23/09 e repetido em 21/10/2026: o extrato do web
+  // tem de dizer o mesmo que o do aplicativo, sobretudo nos movimentos
+  // com crédito. Esta seção é a regra do mobile
+  // (`LiquidacaoDetalhes.tsx`) trazida para cá — mesma conta, mesmas
+  // palavras, para as duas telas nao poderem discordar.
+  //
+  // ⚠ O WEB MOSTRAVA `valor_credito_gerado` CRU, E ISSO MENTE.
+  // Um pagamento de 576,00 numa parcela de 72,00 gera 504,00 de
+  // excedente que a auto-quitação consome no MESMO instante, fechando
+  // 7 parcelas. O extrato dizia "Crédito gerado: 504,00" como se o
+  // cliente tivesse ficado com o valor, e nao mencionava as parcelas.
+  // O que sobrou de verdade é `gerado - consumido`.
+  const creditoDoDiaPorEmprestimo = new Map<
+    string,
+    { consumido: number; oculto: number; parcelas: number }
+  >();
+  for (const pg of pagamentos) {
+    const eid = pg.emprestimo_id;
+    if (!eid) continue;
+    const a = creditoDoDiaPorEmprestimo.get(eid) || { consumido: 0, oculto: 0, parcelas: 0 };
+    const usado = Number(pg.valor_credito_usado || 0);
+    a.consumido += usado;
+    // `oculto`: crédito consumido por linhas CREDITO, que nao aparecem na
+    // lista (o filtro de `pagamentosDinheiro` as remove, e com razão — nao
+    // são caixa). Sem anunciá-lo o extrato fecha 8 parcelas mostrando o
+    // dinheiro de 6, e o operador nao tem de onde tirar a diferença. Foi a
+    // reclamação da Paloma Unhas em 12/09/2026: 360,00 em dinheiro mais
+    // 120,00 de crédito quitaram o empréstimo, e os 120,00 nao apareciam
+    // em lugar nenhum.
+    if (pg.forma_pagamento === 'CREDITO') {
+      a.parcelas += 1;
+      a.oculto += usado;
+    }
+    creditoDoDiaPorEmprestimo.set(eid, a);
+  }
+
+  // Última linha VISÍVEL de cada empréstimo. O resumo do crédito é do
+  // empréstimo, nao do pagamento: repetido em todas as linhas ele
+  // multiplica o que houve — seis linhas dizendo "quitou +2 parcelas"
+  // viram doze.
+  const ultimaLinhaDoEmprestimo = new Map<string, string>();
+  for (const pg of pagamentosDinheiro) {
+    if (pg.emprestimo_id) ultimaLinhaDoEmprestimo.set(pg.emprestimo_id, pg.id);
+  }
+
+  /** Excedente que REALMENTE sobrou, e o resumo do crédito do empréstimo. */
+  const creditoLiquido = (pg: PagamentoParcela) => {
+    const gerado = Number(pg.valor_credito_gerado || 0);
+    const doDia = pg.emprestimo_id
+      ? creditoDoDiaPorEmprestimo.get(pg.emprestimo_id)
+      : undefined;
+    const d = doDia || { consumido: 0, oculto: 0, parcelas: 0 };
+    const ehUltima = !!pg.emprestimo_id && ultimaLinhaDoEmprestimo.get(pg.emprestimo_id) === pg.id;
+    return {
+      excedente: Math.max(0, gerado - d.consumido),
+      parcelasQuitadas: ehUltima ? d.parcelas : 0,
+      creditoOculto: ehUltima ? d.oculto : 0,
+    };
+  };
+
   // Entradas separadas em 3 grupos (exclui ANULADOS do cálculo)
   const registrosEntradas = registros.filter(
     (r) => r.tipo === 'RECEBER' && r.status !== 'CANCELADO' && r.status !== 'ANULADO'
@@ -670,16 +764,16 @@ export function ModalExtratoLiquidacao({
       <div class="sub cinza">── Cobranças em dinheiro (${pagamentosDinheiro.length}) ──</div>
       ${pagamentosDinheiro.map((p, idx) => {
         const nomeCliente = p.clientes?.nome || `Parcela ${p.numero_parcela}`;
-        const excedente = Number(p.valor_credito_gerado || 0);
         const valorPagoAtual = Number(p.valor_pago_atual || p.valor_pago_total || 0);
         const creditoUsado = Number(p.valor_credito_usado || 0);
         const dinheiroRecebido = valorPagoAtual - creditoUsado;
+        const liq = creditoLiquido(p);
         return `<div class="item">
           <div class="item-row">
             <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${nomeCliente}</span>
             <span class="item-val verde">+${formatarMoeda(dinheiroRecebido)}</span>
           </div>
-          <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${excedente > 0 ? ` · Crédito gerado: ${formatarMoeda(excedente)}` : ''}</div>
+          <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${fraseCredito(liq)}${liq.excedente > 0 ? ` · Crédito gerado: ${formatarMoeda(liq.excedente)}` : ''}</div>
           <div class="item-meta">${formatarHora(p.created_at)}${p.forma_pagamento ? ` · ${formatarFormaPagamento(p.forma_pagamento)}` : ''}</div>
         </div>`;
       }).join('')}
@@ -945,7 +1039,7 @@ export function ModalExtratoLiquidacao({
                           ── Cobranças em dinheiro ({pagamentosDinheiro.length}) ──
                         </div>
                         {pagamentosDinheiro.map((p, idx) => (
-                          <CardCobranca key={p.id} p={p} idx={idx} />
+                          <CardCobranca key={p.id} p={p} idx={idx} liq={creditoLiquido(p)} />
                         ))}
                         <div className="flex justify-between items-center px-3 py-2 bg-green-50 rounded mt-2">
                           <span className="text-sm font-semibold text-green-700">TOTAL COBRANÇAS</span>
@@ -1211,9 +1305,19 @@ function CardRenegociacao({ emp, idx }: { emp: EmprestimoDia; idx: number }) {
   );
 }
 
-function CardCobranca({ p, idx }: { p: PagamentoParcela; idx: number }) {
+// `liq` vem de fora porque o resumo do crédito é do EMPRÉSTIMO, nao desta
+// linha: só quem vê a liquidação inteira sabe quanto do excedente foi
+// consumido no mesmo dia e qual é a última linha de cada empréstimo.
+function CardCobranca({
+  p,
+  idx,
+  liq,
+}: {
+  p: PagamentoParcela;
+  idx: number;
+  liq: CreditoLiquido;
+}) {
   const nomeCliente = p.clientes?.nome || `Parcela ${p.numero_parcela}`;
-  const excedente = Number(p.valor_credito_gerado || 0);
   const valorPagoAtual = Number(p.valor_pago_atual || p.valor_pago_total || 0);
   const creditoUsado = Number(p.valor_credito_usado || 0);
   const dinheiroRecebido = valorPagoAtual - creditoUsado;
@@ -1231,7 +1335,8 @@ function CardCobranca({ p, idx }: { p: PagamentoParcela; idx: number }) {
       <div className="text-xs text-gray-600 mt-1">
         Parcela {p.numero_parcela}: {formatarMoeda(Number(p.valor_parcela || 0))}
         {creditoUsado > 0 && ` · ${formatarMoeda(creditoUsado)} com crédito`}
-        {excedente > 0 && ` · Crédito gerado: ${formatarMoeda(excedente)}`}
+        {fraseCredito(liq)}
+        {liq.excedente > 0 && ` · Crédito gerado: ${formatarMoeda(liq.excedente)}`}
       </div>
       <div className="text-[10px] text-gray-400 mt-1">
         {formatarHora(p.created_at)}
