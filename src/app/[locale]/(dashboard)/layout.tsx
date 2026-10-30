@@ -112,7 +112,10 @@ const menuGroups: MenuGroup[] = [
         icon: <FileSpreadsheet className="w-5 h-5" />,
         href: '/importacao',
         sempreAtivo: true,
-        userIds: ['f1a47b2a-1089-46c6-bfa1-397fced89db0'],
+        userIds: [
+          'f1a47b2a-1089-46c6-bfa1-397fced89db0', // Mauricio
+          '21bafbd5-0ac8-4adb-9ddb-7a42c1b6b1e5', // Julio Cesar Jaramillo
+        ],
       },
     ],
   },
