@@ -353,8 +353,13 @@ export interface EmprestimoHistorico {
   taxa_juros: number;
   valor_total: number;
   valor_parcela: number;
-  emprestimo_valor_pago: number;
-  emprestimo_saldo: number;
+  // Nomes como `vw_historico_emprestimos_cliente` de fato os devolve:
+  // `valor_pago` é `emprestimos.total_pago` (COALESCE a 0) e `valor_saldo` é
+  // `emprestimos.valor_saldo`. Até 01/11/2026 este tipo prometia
+  // `emprestimo_valor_pago` e `emprestimo_saldo`, que a view NUNCA teve —
+  // quem os lesse receberia `undefined` sem erro de compilação.
+  valor_pago: number;
+  valor_saldo: number;
   numero_parcelas: number;
   numero_parcelas_pagas: number;
   numero_parcelas_restantes: number;

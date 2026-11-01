@@ -1151,6 +1151,51 @@ export function ModalDetalhesCliente({
   // Tem empréstimo em dia = tem empréstimo ativo E não tem parcela em atraso
   const temEmprestimoEmDia = emprestimosAtivos.length > 0 && !temParcelaEmAtraso;
 
+  // O Resumo Financeiro da aba Dados é DERIVADO dos empréstimos que o próprio
+  // modal carrega, não dos campos do objeto `cliente` que veio de fora.
+  //
+  // Relatado pelo Julio em 12/10/2026: a mesma ficha mostrava números
+  // diferentes conforme a porta de entrada. Pela tela Clientes estava certo;
+  // pela Liquidação Diária o "Total Pago" era SEMPRE 0,00 e o "Total
+  // Emprestado" vinha sem os juros. Medido no Andres Felipe Morales da rota
+  // Prueba Julio 1: pela Liquidação 500/0, pelo Clientes 600/330.
+  //
+  // A causa não estava aqui: `handleAbrirModalCliente` da Liquidação monta um
+  // `ClienteComTotais` SINTÉTICO, com `valor_total_pago: 0` chumbado e
+  // `valor_total_emprestimos` recebendo `valor_principal` (o principal de UMA
+  // parcela do dia, sem juros e sem somar os outros empréstimos do cliente).
+  // A tela de Liberações é a terceira porta e passa a linha crua de
+  // `clientes`, sem agregado nenhum — ali os quatro campos davam zero.
+  //
+  // Consertar cada chamador deixaria três cópias do mesmo cálculo para manter
+  // iguais à mão, que é o formato de erro que este projeto já pagou várias
+  // vezes. Derivando aqui, as três portas passam a mostrar o mesmo número e
+  // a próxima porta nasce certa.
+  //
+  // As fórmulas são as de `fn_buscar_clientes`, que é o que a tela Clientes
+  // mostra — é dela que o Julio pediu paridade:
+  //   valor_total_emprestimos = SUM(valor_total)  de ATIVO + VENCIDO
+  //   valor_total_pago        = SUM(total_pago)   de ATIVO + VENCIDO
+  //   valor_saldo_devedor     = SUM(valor_saldo)  de ATIVO + VENCIDO
+  // E `emprestimosAtivos` é exatamente `status IN ('ATIVO','VENCIDO')`, o
+  // mesmo filtro, então a soma bate por construção.
+  //
+  // ⚠ `valor_pago` aqui é `emprestimos.total_pago`, o acumulador — o MESMO que
+  // a tela Clientes soma. Ele infla com crédito excedente e pode passar do
+  // `valor_total` (ver CLAUDE.md). O `totalPagoReal` deste modal corrige isso
+  // POR EMPRÉSTIMO, na aba Empréstimos. Aqui não se usa de propósito: o
+  // pedido era mostrar o mesmo número da tela Clientes, e trocar a fórmula
+  // faria o resumo divergir dela outra vez — só pelo outro lado.
+  const totaisEmCobranca = {
+    // Mesmo número do contador da aba "Empréstimos Ativos", logo acima na
+    // tela. Na Liquidação isto vinha chumbado em 1, mesmo com o cliente
+    // tendo vários.
+    quantidade: emprestimosAtivos.length,
+    emprestado: emprestimosAtivos.reduce((s, e) => s + (Number(e.valor_total) || 0), 0),
+    pago: emprestimosAtivos.reduce((s, e) => s + (Number(e.valor_pago) || 0), 0),
+    saldo: emprestimosAtivos.reduce((s, e) => s + (Number(e.valor_saldo) || 0), 0),
+  };
+
   // Carregar dados completos do cliente
   useEffect(() => {
     if (isOpen && cliente?.id) {
@@ -1685,19 +1730,19 @@ export function ModalDetalhesCliente({
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div>
                           <p className="text-xs text-gray-500">Empréstimos Ativos</p>
-                          <p className="text-xl font-bold text-blue-600">{cliente.qtd_emprestimos_ativos}</p>
+                          <p className="text-xl font-bold text-blue-600">{totaisEmCobranca.quantidade}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">Total Emprestado</p>
-                          <p className="text-xl font-bold text-gray-900">{formatarMoeda(cliente.valor_total_emprestimos)}</p>
+                          <p className="text-xl font-bold text-gray-900">{formatarMoeda(totaisEmCobranca.emprestado)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">Total Pago</p>
-                          <p className="text-xl font-bold text-green-600">{formatarMoeda(cliente.valor_total_pago)}</p>
+                          <p className="text-xl font-bold text-green-600">{formatarMoeda(totaisEmCobranca.pago)}</p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">Saldo Devedor</p>
-                          <p className="text-xl font-bold text-amber-600">{formatarMoeda(cliente.valor_saldo_devedor)}</p>
+                          <p className="text-xl font-bold text-amber-600">{formatarMoeda(totaisEmCobranca.saldo)}</p>
                         </div>
                       </div>
                       {(cliente.parcelas_atrasadas || 0) > 0 && (
