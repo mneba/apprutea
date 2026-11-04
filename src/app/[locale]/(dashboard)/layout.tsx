@@ -22,6 +22,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   FileSpreadsheet,
+  Gauge,
   Loader2
 } from 'lucide-react';
 import { Link, useRouter } from '@/i18n/routing';
@@ -32,6 +33,7 @@ import { UserProvider, useUser } from '@/contexts/UserContext';
 import { MenuNotificacoes } from '@/components/layout/MenuNotificacoes';
 import { SeletorLocalizacao } from '@/components/layout/SeletorLocalizacao';
 import { ModalGerenciarUsuario } from '@/components/usuarios';
+import { painelControleService } from '@/services/painelControle';
 
 interface MenuItem {
   key: string;
@@ -53,6 +55,13 @@ interface MenuItem {
    * Mauricio em 15/10/2026 ficou para depois.
    */
   userIds?: string[];
+  /**
+   * Visível apenas para quem está em `licenca_operadores`, perguntado ao
+   * banco por `fn_licenca_sou_operador`. Diferente de `userIds`, aqui o gate
+   * de verdade JÁ está no banco: as funções recusam quem não é operador, e o
+   * menu só evita mostrar um item que daria "acesso restrito".
+   */
+  operador?: boolean;
 }
 
 interface MenuGroup {
@@ -103,6 +112,10 @@ const menuGroups: MenuGroup[] = [
       // próprio recorte (empresa e rota), então travá-la no seletor global
       // seria trancar justamente quem precisa olhar o sistema inteiro.
       { key: 'auditoria', label: 'Auditoria', icon: <ScrollText className="w-5 h-5" />, href: '/auditoria', roles: ['SUPER_ADMIN'], sempreAtivo: true },
+      // Painel do sistema inteiro: `sempreAtivo` porque não depende de
+      // empresa escolhida. Não usa `roles`: há SUPER_ADMIN dono de empresa,
+      // e quem vê é decidido por `licenca_operadores`.
+      { key: 'controle', label: 'Controle', icon: <Gauge className="w-5 h-5" />, href: '/controle', sempreAtivo: true, operador: true },
       // Ferramenta interna de migração do sistema legado. `sempreAtivo`
       // porque ela escolhe a própria rota, e `userIds` porque é operação
       // de desenvolvedor, não função do produto.
@@ -131,6 +144,16 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   const { user, profile, localizacao, temPermissao } = useUser();
   const temLocalizacao = !!localizacao.empresa_id;
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Uma pergunta por usuário logado. Enquanto não responde, o item fica
+  // escondido — o lado seguro do erro, como o `userIds`.
+  const [souOperador, setSouOperador] = useState(false);
+  useEffect(() => {
+    if (!user?.id) { setSouOperador(false); return; }
+    let vivo = true;
+    painelControleService.souOperador().then(ok => { if (vivo) setSouOperador(ok); });
+    return () => { vivo = false; };
+  }, [user?.id]);
 
   // ── Feedback imediato no toque do menu ───────────────────────────────
   // O PROBLEMA: `ativo` saía só de `usePathname()`, que atualiza DEPOIS de a
@@ -294,6 +317,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   // ter carregado. Sem id ainda, o item fica escondido — o
                   // lado seguro do erro.
                   .filter(item => !item.userIds || item.userIds.includes(user?.id || ''))
+                  .filter(item => !item.operador || souOperador)
                   .map((item) => {
                   const habilitado = (temLocalizacao || item.sempreAtivo) &&
                     (!item.modulo || temPermissao(item.modulo));
