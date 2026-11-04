@@ -234,7 +234,10 @@ export function ModalNovaVenda({
       setActiveTab(isNovoCliente ? 'cliente' : 'emprestimo');
       setErro('');
       
-      // Data padrão: amanhã
+      // Valor PROVISÓRIO, só para o campo não abrir vazio. A sugestão de
+      // verdade é a liquidação + 1 e chega no efeito que busca a liquidação
+      // aberta da rota, logo abaixo. O relógio fica como último recurso para
+      // rota sem dia aberto -- e aí a venda está bloqueada de qualquer forma.
       const amanha = new Date();
       amanha.setDate(amanha.getDate() + 1);
       setDataPrimeiroVencimento(amanha.toISOString().split('T')[0]);
@@ -335,14 +338,37 @@ export function ModalNovaVenda({
       setChecandoLiquidacao(true);
       try {
         const supabase = createClient();
+        // `data_liquidacao` entra na MESMA consulta que já existia: é o DIA
+        // OPERACIONAL da rota, e é dele que sai a sugestão de vencimento.
         const { data, error } = await supabase
           .from('liquidacoes_diarias')
-          .select('id')
+          .select('id, data_liquidacao')
           .eq('rota_id', rotaId)
           .in('status', ['ABERTO', 'REABERTO'])
           .limit(1);
         if (!cancelado) {
-          setLiquidacaoAberta(!error && Array.isArray(data) && data.length > 0);
+          const aberta = !error && Array.isArray(data) && data.length > 0;
+          setLiquidacaoAberta(aberta);
+
+          // A SUGESTÃO É SEMPRE A LIQUIDAÇÃO + 1 (Mauricio, 03/11/2026), e o
+          // dia do mês acompanha — se os dois discordarem, quem decide no
+          // banco é o dia (`fn_datas_parcelas`) e a data ficaria por nada.
+          //
+          // ⚠ Até 03/11/2026 esta tela usava `new Date()`: o RELÓGIO DO
+          // NAVEGADOR de quem estivesse olhando, no lugar da liquidação, no
+          // exato ponto em que a data do empréstimo nasce. Com o admin no
+          // Brasil e a rota na Colômbia (UTC−5) eram dias diferentes depois
+          // das 19h. Ver CLAUDE.md, "A liquidação é a régua do tempo".
+          const dataOperacional = aberta ? data![0].data_liquidacao : null;
+          if (dataOperacional) {
+            const d = new Date(String(dataOperacional).substring(0, 10) + 'T12:00:00');
+            d.setDate(d.getDate() + 1);
+            const y = d.getFullYear();
+            const m = String(d.getMonth() + 1).padStart(2, '0');
+            const dia = String(d.getDate()).padStart(2, '0');
+            setDataPrimeiroVencimento(`${y}-${m}-${dia}`);
+            setDiaMesCobranca(d.getDate());
+          }
         }
       } catch {
         if (!cancelado) setLiquidacaoAberta(null);

@@ -38,6 +38,7 @@ import {
   ArrowDownAZ,
   ListOrdered,
   Ban,
+  CircleDashed,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { liquidacaoService } from '@/services/liquidacao';
@@ -699,17 +700,26 @@ function CardDiaNaoTrabalhavel({ data, motivo }: { data: Date; motivo: MotivoBlo
 // PÁGINA PRINCIPAL
 // =====================================================
 
-type FiltroLista = 'TODOS' | 'PAGOS' | 'NAO_PAGOS' | 'NOVOS' | 'RENOVADOS' | 'RENEGOCIADOS' | 'QUITADOS';
+type FiltroLista = 'TODOS' | 'PAGOS' | 'PARCIAIS' | 'NAO_PAGOS' | 'NOVOS' | 'RENOVADOS' | 'RENEGOCIADOS' | 'QUITADOS';
 
 interface EventoCliente {
-  tipo: 'PAGOU' | 'NAO_PAGOU' | 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO' | 'QUITADO' | 'CANCELADO';
+  // `PAGOU_PARCIAL` é tipo PRÓPRIO, não uma flag dentro de `PAGOU`. Era
+  // `isParcial`, e o parcial precisa de chip e de contagem próprios — o
+  // Julio pediu os dois em 12/10/2026 —, o que uma flag não dá.
+  tipo: 'PAGOU' | 'PAGOU_PARCIAL' | 'NAO_PAGOU' | 'NOVO' | 'RENOVACAO' | 'RENEGOCIACAO' | 'QUITADO' | 'CANCELADO';
   parcelasPagas?: number;
   totalParcelas?: number;
   numeroParcelaPaga?: number;
   valorPago?: number;
+  // Quanto a parcela seguiu devendo DEPOIS do pagamento daquele dia. Sai de
+  // `pagamentos_parcelas.valor_saldo`, que é o retrato gravado no ato — e não
+  // do saldo atual da parcela, que pagamento posterior já mudou.
+  valorFalta?: number;
   valorEmprestimo?: number;
   numeroParcelasEmprestimo?: number;
-  isParcial?: boolean; // ⭐ indica se foi pagamento parcial (não quitou a parcela)
+  // Quantas parcelas a quitação baixou. É isto que explica o salto de número
+  // do dia: na Barcelona 10/10 duas quitações baixaram 10 e 9 parcelas.
+  parcelasQuitadasDia?: number;
 }
 
 // ============================================================
@@ -771,6 +781,25 @@ interface ResumoDia {
   pagantes: Set<string>;
   clientesQuitaram: number;
 
+  // O DETALHE por cliente, que a lista de "Clientes do Dia" usa para
+  // classificar o evento. Ela classificava pelo `status_dia` da RPC, e
+  // `status_dia` NÃO consegue dizer "pagou em parte": o gatilho
+  // `atualizar_saldo_parcela` grava `VENCIDO` em parcela paga pela metade
+  // cujo vencimento passou, nunca `PARCIAL` (medido em 01/11/2026: 15
+  // parcelas `PARCIAL` em 45.834, 0,03%). Por isso o parcial caía em
+  // "Não pagou" — dinheiro recebido contado como não recebido.
+  // É a mesma regra que o extrato passou a usar em 21/10/2026: a verdade do
+  // dia está nos pagamentos vivos, não no status da parcela.
+  porCliente: Map<string, {
+    recebido: number;         // líquido do dia, já sem crédito usado
+    parcelasTocadas: number;
+    parcelasQuitadas: number; // destas, as que zeraram
+    temQuitacao: boolean;     // houve operação de QUITACAO no dia
+    // A parcela que seguiu devendo. Só a primeira: a linha da lista mostra
+    // uma, e quem pagou parte de duas parcelas no mesmo dia é raro.
+    parcial?: { numero: number; falta: number };
+  }>;
+
   // o que o vendedor fez
   recebimentos: number;      // operações
   recebQuitacao: number;     // quantas foram quitação de empréstimo
@@ -790,6 +819,7 @@ interface ResumoDia {
 
 const RESUMO_DIA_VAZIO: ResumoDia = {
   pagantes: new Set<string>(),
+  porCliente: new Map(),
   clientesQuitaram: 0, recebimentos: 0, recebQuitacao: 0, parcelasTocadas: 0,
   parcelasQuitadas: 0, parcelasParciais: 0, recebidoDoDia: 0,
   recebidoVencidas: 0, recebidoFuturas: 0, creditoUsado: 0,
@@ -837,8 +867,12 @@ export default function LiquidacaoDiariaPage() {
   const [emprestimos, setEmprestimos] = useState({ total: 0, quantidade: 0, novos: 0, renovacoes: 0, juros: 0 });
   const [metaDia, setMetaDia] = useState(0);
 
+  // `liquidacao_id` é o que separa as duas metades desta lista: os empréstimos
+  // CRIADOS nesta liquidação (novo, renovação, renegociação) e os que só estão
+  // aqui porque o cliente quitou algo — estes últimos são buscados por status
+  // ATUAL e podem ter nascido meses antes.
   const [emprestimosDoDia, setEmprestimosDoDia] = useState<Array<{
-    id: string; cliente_id: string; valor_principal: number; numero_parcelas: number; tipo_emprestimo: string; status: string; clientes?: { nome: string };
+    id: string; cliente_id: string; valor_principal: number; numero_parcelas: number; tipo_emprestimo: string; status: string; liquidacao_id?: string | null; clientes?: { nome: string };
   }>>([]);
 
   const [dataSelecionada, setDataSelecionada] = useState<Date>(new Date());
@@ -956,7 +990,6 @@ export default function LiquidacaoDiariaPage() {
         clientes,
         emps,
         empsNovosRes,
-        statusClientesRes,
         receitasRes,
         ajustesRes,
         cobrancasRes,
@@ -970,9 +1003,8 @@ export default function LiquidacaoDiariaPage() {
         liquidacaoService.buscarEmprestimosDoDia(liq.id),
         supabase
           .from('emprestimos')
-          .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status, clientes!inner(nome)')
+          .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status, liquidacao_id, clientes!inner(nome)')
           .eq('liquidacao_id', liq.id),
-        supabase.rpc('fn_clientes_parcela_status_liquidacao', { p_liquidacao_id: liq.id }),
         supabase
           .from('financeiro')
           .select('id, categoria, descricao, valor, forma_pagamento, data_lancamento, created_at')
@@ -1002,9 +1034,15 @@ export default function LiquidacaoDiariaPage() {
               // dinheiro é DO DIA, de atrasada ou de futura — e a meta é só do
               // dia. O FK é nomeado explicitamente, como em
               // ModalExtratoLiquidacao, para o postgrest não ter de adivinhar.
+              // `valor_saldo` e `numero_parcela` são da LINHA DE PAGAMENTO, não
+              // da parcela: são o retrato do ato, e é só isso que permite dizer
+              // "faltou X" num dia já fechado. A parcela em si já mudou — a do
+              // Francisco Joilson hoje marca 300,00 pagos numa parcela de
+              // 150,00, porque ele pagou mais depois de 10/10.
               .select(`
                 cliente_id, parcela_id, operacao_id, tipo_operacao,
                 status_parcela_atual, valor_pago_atual, valor_credito_usado,
+                valor_saldo, numero_parcela,
                 emprestimo_parcelas!pagamentos_parcelas_parcela_id_fkey(data_vencimento)
               `)
               .eq('liquidacao_id', liq.id)
@@ -1018,7 +1056,6 @@ export default function LiquidacaoDiariaPage() {
       setEmprestimos(emps);
 
       const empsNovos = empsNovosRes.data;
-      const statusClientes = statusClientesRes.data;
 
       // Receitas
       const receitasItens = receitasRes.data || [];
@@ -1079,6 +1116,7 @@ export default function LiquidacaoDiariaPage() {
       const parcQuitadas = new Set<string>();
       const cliPagaram = new Set<string>();
       const cliQuitaram = new Set<string>();
+      const detPorCliente = new Map<string, ResumoDia['porCliente'] extends Map<string, infer V> ? V : never>();
       let creditoUsadoDia = 0;
       let recebidoDoDia = 0;
       let recebidoVencidas = 0;
@@ -1098,6 +1136,22 @@ export default function LiquidacaoDiariaPage() {
           if (p.cliente_id) cliQuitaram.add(p.cliente_id);
         }
         creditoUsadoDia += Number(p.valor_credito_usado || 0);
+
+        // Detalhe por cliente, para a lista classificar pelo DINHEIRO.
+        if (p.cliente_id) {
+          const d = detPorCliente.get(p.cliente_id) || {
+            recebido: 0, parcelasTocadas: 0, parcelasQuitadas: 0, temQuitacao: false,
+          };
+          d.recebido += Number(p.valor_pago_atual || 0) - Number(p.valor_credito_usado || 0);
+          d.parcelasTocadas += 1;
+          if (p.status_parcela_atual === 'PAGO') d.parcelasQuitadas += 1;
+          else if (!d.parcial) {
+            // Ficou devendo. `valor_saldo` da linha é o que sobrou NO ATO.
+            d.parcial = { numero: Number(p.numero_parcela || 0), falta: Number(p.valor_saldo || 0) };
+          }
+          if (p.tipo_operacao === 'QUITACAO') d.temQuitacao = true;
+          detPorCliente.set(p.cliente_id, d);
+        }
 
         // Crédito usado sai do líquido: não é dinheiro novo, é crédito que o
         // cliente já tinha sendo consumido. É a mesma fórmula de
@@ -1125,6 +1179,7 @@ export default function LiquidacaoDiariaPage() {
 
       const resumoDiaCalc: ResumoDia = {
         pagantes: cliPagaram,
+        porCliente: detPorCliente,
         clientesQuitaram: cliQuitaram.size,
         recebimentos: ops.size,
         recebQuitacao: opsQuit.size,
@@ -1149,19 +1204,28 @@ export default function LiquidacaoDiariaPage() {
       setQtdNotasLiquidacao(countNotasRes.count || 0);
 
       // ── ONDA 2: queries que dependem dos resultados da onda 1 ──
-      const clientesQuitados = new Set(
-        (statusClientes || [])
-          .filter((s: any) => s.parcela_status === 'QUITADO')
-          .map((s: any) => s.cliente_id)
-      );
+      //
+      // Aqui havia uma terceira consulta, e ela SAIU em 01/11/2026 junto com a
+      // `fn_clientes_parcela_status_liquidacao` que a alimentava. Ela buscava
+      // os empréstimos `QUITADO` dos clientes do dia para rotular a quitação —
+      // mas por status ATUAL do empréstimo, porque a função decidia com
+      // `WHEN e.status = 'QUITADO'`. Resultado: todo cliente cujo empréstimo
+      // esteja quitado HOJE era rotulado "Quitou empréstimo" numa liquidação
+      // de semanas atrás, e saía de "Pagos".
+      //
+      // Medido em 25 liquidações de outubro: a 9.1 Yorge em 21/10 marcava 10
+      // clientes assim com ZERO quitações no dia; a 13.1 Alpha em 19/10, 9 com
+      // zero; a Barcelona em 10/10, 11 contra 2 reais.
+      //
+      // Agora a quitação sai de `temQuitacao` — a operação `QUITACAO` dos
+      // pagamentos daquele dia, que a página já carregava. As duas consultas
+      // não tinham mais trabalho: medido nas mesmas 25 liquidações, os
+      // empréstimos que elas traziam acrescentavam **0 clientes** à lista em
+      // todas, porque quem pagou já vem pelo braço B de
+      // `fn_clientes_da_liquidacao`.
       const clienteIds = [...new Set(clientes.map(c => c.cliente_id))];
 
-      const [quitadosRes, fotosRes, notasLiqRes, notasOutrasRes] = await Promise.all([
-        clientesQuitados.size > 0
-          ? supabase.from('emprestimos')
-              .select('id, cliente_id, valor_principal, numero_parcelas, tipo_emprestimo, status')
-              .in('cliente_id', Array.from(clientesQuitados)).eq('status', 'QUITADO')
-          : Promise.resolve({ data: [] as any[] }),
+      const [fotosRes, notasLiqRes, notasOutrasRes] = await Promise.all([
         clienteIds.length > 0
           ? supabase.from('clientes').select('id, foto_url').in('id', clienteIds)
           : Promise.resolve({ data: [] as any[] }),
@@ -1173,11 +1237,9 @@ export default function LiquidacaoDiariaPage() {
           : Promise.resolve({ data: [] as any[] }),
       ]);
 
-      // Combinar empréstimos (novos + quitados, sem duplicatas)
+      // Só os empréstimos CRIADOS nesta liquidação. Os quitados saíram daqui
+      // junto com a consulta deles — ver o comentário na onda 2.
       const empsTodos = [...(empsNovos || [])];
-      for (const eq of (quitadosRes.data || [])) {
-        if (!empsTodos.find(e => e.id === eq.id)) empsTodos.push(eq);
-      }
       setEmprestimosDoDia(empsTodos as any);
 
       // Fotos
@@ -1970,22 +2032,33 @@ export default function LiquidacaoDiariaPage() {
       if (!existente || scoreEmp(emp) > scoreEmp(existente)) empPorCliente.set(emp.cliente_id, emp);
     }
 
-    const pagosPorCliente = new Map<string, { somaValor: number; parcelas: number[]; totalParcelas: number; temParcial: boolean }>();
+    // Quem pagou e QUANTO sai de `resumoDia.porCliente`, que é somado dos
+    // pagamentos vivos da liquidação. Da lista vem só o que ela sabe melhor:
+    // o total de parcelas do empréstimo e qual parcela está em pauta, para o
+    // rótulo poder dizer "2/4".
+    //
+    // Antes a classificação saía de `c.status_dia`, e três coisas quebravam:
+    //   · parcial virava "Não pagou" — `status_dia` não tem como ser
+    //     'PARCIAL' depois do vencimento (ver o comentário em `ResumoDia`);
+    //   · o valor exibido era `c.valor_pago_parcela`, que é o ACUMULADO da
+    //     parcela e não o do dia. A parcela 2 do Francisco Joilson hoje
+    //     marca 300,00 numa parcela de 150,00;
+    //   · a lista discordava do extrato, que já contava pelo dinheiro.
+    const pagPorCliente = resumoDia.porCliente;
+    const totalParcPorCliente = new Map<string, number>();
+    const parcelaEmPauta = new Map<string, number>();
     const naoPagosPorCliente = new Map<string, { numero: number; total: number }>();
 
     for (const c of clientesDia) {
-      if (c.status_dia === 'PAGO' || c.status_dia === 'PARCIAL') {
-        const atual = pagosPorCliente.get(c.cliente_id) || { somaValor: 0, parcelas: [], totalParcelas: c.numero_parcelas ?? 0, temParcial: false };
-        atual.somaValor += Number(c.valor_pago_parcela || 0);
-        if (c.numero_parcela != null) atual.parcelas.push(c.numero_parcela);
-        atual.totalParcelas = c.numero_parcelas ?? atual.totalParcelas;
-        // ⭐ Marca se alguma parcela é PARCIAL (não totalmente paga)
-        if (c.status_dia === 'PARCIAL') atual.temParcial = true;
-        pagosPorCliente.set(c.cliente_id, atual);
-      } else {
-        if (!naoPagosPorCliente.has(c.cliente_id)) {
-          naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela ?? 0, total: c.numero_parcelas });
-        }
+      if (c.numero_parcelas != null && !totalParcPorCliente.has(c.cliente_id)) {
+        totalParcPorCliente.set(c.cliente_id, c.numero_parcelas);
+      }
+      if (c.numero_parcela != null && !parcelaEmPauta.has(c.cliente_id)) {
+        parcelaEmPauta.set(c.cliente_id, c.numero_parcela);
+      }
+      // Não pagou = não entrou dinheiro dele no dia. Nada de status.
+      if (!pagPorCliente.has(c.cliente_id) && !naoPagosPorCliente.has(c.cliente_id)) {
+        naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela ?? 0, total: c.numero_parcelas });
       }
     }
 
@@ -1996,20 +2069,75 @@ export default function LiquidacaoDiariaPage() {
 
     for (const cid of todosClienteIds) {
       const emp = empPorCliente.get(cid);
+      const pagDoCliente = pagPorCliente.get(cid);
+      // Operação de empréstimo só manda no rótulo se ela aconteceu NESTE dia.
+      // Sem esta guarda, os 9 clientes da Barcelona 10/10 que apenas pagaram
+      // uma parcela — e cujo empréstimo foi quitado SEMANAS DEPOIS — apareciam
+      // como quitação ou como renovação, e desapareciam de "Pagos". Era a
+      // terceira causa do "Pagos 12 contra 17 do extrato" que o Julio relatou.
+      const empDoDia = emp && emp.liquidacao_id && emp.liquidacao_id === liquidacao?.id ? emp : undefined;
       // ⭐ Empréstimo cancelado: mostrar como cancelado
-      if (emp?.status === 'CANCELADO') { mapa.set(cid, { tipo: 'CANCELADO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
-      if (emp?.status === 'QUITADO') { mapa.set(cid, { tipo: 'QUITADO', valorEmprestimo: Number(emp.valor_principal || 0) }); continue; }
-      if (emp?.tipo_emprestimo === 'NOVO') { mapa.set(cid, { tipo: 'NOVO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
-      if (emp?.tipo_emprestimo === 'RENOVACAO') { mapa.set(cid, { tipo: 'RENOVACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
-      if (emp?.tipo_emprestimo === 'RENEGOCIACAO') { mapa.set(cid, { tipo: 'RENEGOCIACAO', valorEmprestimo: Number(emp.valor_principal || 0), numeroParcelasEmprestimo: emp.numero_parcelas }); continue; }
-      const pag = pagosPorCliente.get(cid);
-      if (pag && pag.somaValor > 0) { mapa.set(cid, { tipo: 'PAGOU', parcelasPagas: pag.parcelas.length, totalParcelas: pag.totalParcelas, numeroParcelaPaga: pag.parcelas[0], valorPago: pag.somaValor, isParcial: pag.temParcial }); continue; }
+      if (empDoDia?.status === 'CANCELADO') { mapa.set(cid, { tipo: 'CANCELADO', valorEmprestimo: Number(empDoDia.valor_principal || 0), numeroParcelasEmprestimo: empDoDia.numero_parcelas }); continue; }
+      // Quitação mostra o RECEBIDO NO DIA e quantas parcelas baixou, não o
+      // principal do empréstimo. O Cleber quitou um empréstimo de 400,00
+      // pagando 240,00 e o Wesley um de 300,00 pagando 110,00 — relatado pelo
+      // Julio em 12/10/2026, e eram 330,00 de dinheiro que nunca entrou.
+      //
+      // E `valor_principal` aqui nem era confiável: a consulta traz TODOS os
+      // empréstimos `QUITADO` do cliente e `scoreEmp` empata entre eles, então
+      // qual aparecia era sorte. O Cleber tem dois — o de 400,00 que ele quitou
+      // e a renovação de 500,00 que pegou no mesmo dia e quitou depois.
+      // Mostrar o dinheiro do dia tira a ambiguidade em vez de escolher.
+      // Quem manda aqui é `temQuitacao`, dos pagamentos do dia — NÃO o status
+      // do empréstimo. O empréstimo quitado nasceu antes desta liquidação
+      // (o do Cleber é de 28/09), então `empDoDia` não serve para detectá-lo.
+      if (pagDoCliente?.temQuitacao) {
+        mapa.set(cid, {
+          tipo: 'QUITADO',
+          valorPago: pagDoCliente.recebido,
+          parcelasQuitadasDia: pagDoCliente.parcelasTocadas,
+        });
+        continue;
+      }
+      if (empDoDia?.tipo_emprestimo === 'NOVO') { mapa.set(cid, { tipo: 'NOVO', valorEmprestimo: Number(empDoDia.valor_principal || 0), numeroParcelasEmprestimo: empDoDia.numero_parcelas }); continue; }
+      if (empDoDia?.tipo_emprestimo === 'RENOVACAO') { mapa.set(cid, { tipo: 'RENOVACAO', valorEmprestimo: Number(empDoDia.valor_principal || 0), numeroParcelasEmprestimo: empDoDia.numero_parcelas }); continue; }
+      if (empDoDia?.tipo_emprestimo === 'RENEGOCIACAO') { mapa.set(cid, { tipo: 'RENEGOCIACAO', valorEmprestimo: Number(empDoDia.valor_principal || 0), numeroParcelasEmprestimo: empDoDia.numero_parcelas }); continue; }
+      const pag = pagDoCliente;
+      if (pag && pag.recebido > 0) {
+        const total = totalParcPorCliente.get(cid);
+        // Parcial só quando NENHUMA parcela foi quitada no dia. Quem quitou
+        // duas e deixou uma terceira pela metade pagou — e cabe em "Pagos",
+        // senão o chip Parciais passaria a significar "tocou numa parcela sem
+        // fechá-la", que não é a pergunta do vendedor.
+        if (pag.parcial && pag.parcelasQuitadas === 0) {
+          mapa.set(cid, {
+            tipo: 'PAGOU_PARCIAL',
+            numeroParcelaPaga: pag.parcial.numero || parcelaEmPauta.get(cid),
+            totalParcelas: total,
+            valorPago: pag.recebido,
+            valorFalta: pag.parcial.falta,
+          });
+        } else {
+          mapa.set(cid, {
+            tipo: 'PAGOU',
+            parcelasPagas: pag.parcelasTocadas,
+            totalParcelas: total,
+            numeroParcelaPaga: parcelaEmPauta.get(cid),
+            valorPago: pag.recebido,
+          });
+        }
+        continue;
+      }
       const np = naoPagosPorCliente.get(cid);
       if (np) mapa.set(cid, { tipo: 'NAO_PAGOU', numeroParcelaPaga: np.numero, totalParcelas: np.total });
     }
 
     return mapa;
-  }, [clientesDia, emprestimosDoDia]);
+    // `resumoDia.porCliente` TEM de estar aqui: é dele que sai a classificação
+    // agora. Sem a dependência o memo não recalcula e a lista congela na
+    // classificação do carregamento anterior, sem erro nenhum — é a mesma
+    // armadilha que o resumo do mobile pagou (ver CLAUDE.md).
+  }, [clientesDia, emprestimosDoDia, resumoDia.porCliente, liquidacao?.id]);
 
   const clientesComEvento = useMemo(() => {
     const seen = new Set<string>();
@@ -2110,10 +2238,11 @@ export default function LiquidacaoDiariaPage() {
   // Contagens seguem o escopo — senão os chips mostrariam números que não
   // batem com a lista exibida logo abaixo.
   const contagens = useMemo(() => {
-    let pagos = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0, cancelados = 0;
+    let pagos = 0, parciais = 0, naoPagos = 0, novos = 0, renovados = 0, renegociados = 0, quitados = 0, cancelados = 0;
     for (const { evento: ev } of clientesNoEscopo) {
       if (!ev) continue;
       if (ev.tipo === 'PAGOU') pagos++;
+      else if (ev.tipo === 'PAGOU_PARCIAL') parciais++;
       else if (ev.tipo === 'NAO_PAGOU') naoPagos++;
       else if (ev.tipo === 'NOVO') novos++;
       else if (ev.tipo === 'RENOVACAO') renovados++;
@@ -2121,7 +2250,7 @@ export default function LiquidacaoDiariaPage() {
       else if (ev.tipo === 'QUITADO') quitados++;
       else if (ev.tipo === 'CANCELADO') cancelados++;
     }
-    return { todos: clientesNoEscopo.length, pagos, naoPagos, novos, renovados, renegociados, quitados, cancelados };
+    return { todos: clientesNoEscopo.length, pagos, parciais, naoPagos, novos, renovados, renegociados, quitados, cancelados };
   }, [clientesNoEscopo]);
 
   const clientesFiltrados = useMemo(() => {
@@ -2129,6 +2258,7 @@ export default function LiquidacaoDiariaPage() {
       if (filtroLista !== 'TODOS') {
         if (!evento) return false;
         if (filtroLista === 'PAGOS' && evento.tipo !== 'PAGOU') return false;
+        if (filtroLista === 'PARCIAIS' && evento.tipo !== 'PAGOU_PARCIAL') return false;
         if (filtroLista === 'NAO_PAGOS' && evento.tipo !== 'NAO_PAGOU') return false;
         if (filtroLista === 'NOVOS' && evento.tipo !== 'NOVO') return false;
         if (filtroLista === 'RENOVADOS' && evento.tipo !== 'RENOVACAO') return false;
@@ -2665,6 +2795,10 @@ export default function LiquidacaoDiariaPage() {
               <div className="flex flex-wrap gap-1 mb-2">
                 <ChipFiltro label="Todos" qtd={contagens.todos} ativo={filtroLista === 'TODOS'} onClick={() => setFiltroLista('TODOS')} cor="blue" />
                 <ChipFiltro label="Pagos" qtd={contagens.pagos} ativo={filtroLista === 'PAGOS'} onClick={() => setFiltroLista('PAGOS')} cor="green" />
+                {/* Parcial entre Pagos e Não Pagos, em âmbar, porque é onde ele
+                    está: recebeu dinheiro e segue devendo. Pedido do Julio em
+                    12/10/2026 — antes esses clientes contavam como Não Pagos. */}
+                <ChipFiltro label="Parciais" qtd={contagens.parciais} ativo={filtroLista === 'PARCIAIS'} onClick={() => setFiltroLista('PARCIAIS')} cor="amber" />
                 <ChipFiltro label="Não Pagos" qtd={contagens.naoPagos} ativo={filtroLista === 'NAO_PAGOS'} onClick={() => setFiltroLista('NAO_PAGOS')} cor="red" />
                 <ChipFiltro label="Novos" qtd={contagens.novos} ativo={filtroLista === 'NOVOS'} onClick={() => setFiltroLista('NOVOS')} cor="emerald" />
                 <ChipFiltro label="Renov." qtd={contagens.renovados} ativo={filtroLista === 'RENOVADOS'} onClick={() => setFiltroLista('RENOVADOS')} cor="blue2" />
@@ -3147,12 +3281,13 @@ function ChipFiltro({
   qtd: number;
   ativo: boolean;
   onClick: () => void;
-  cor: 'blue' | 'green' | 'red' | 'emerald' | 'blue2' | 'purple' | 'teal';
+  cor: 'blue' | 'green' | 'amber' | 'red' | 'emerald' | 'blue2' | 'purple' | 'teal';
 }) {
   const desabilitado = qtd === 0;
   const coresAtivas: Record<string, string> = {
     blue: 'bg-blue-600 text-white border-blue-600',
     green: 'bg-green-600 text-white border-green-600',
+    amber: 'bg-amber-500 text-white border-amber-500',
     red: 'bg-red-600 text-white border-red-600',
     emerald: 'bg-emerald-600 text-white border-emerald-600',
     blue2: 'bg-blue-500 text-white border-blue-500',
@@ -3162,6 +3297,7 @@ function ChipFiltro({
   const coresInativas: Record<string, string> = {
     blue: 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50',
     green: 'bg-white text-green-700 border-green-200 hover:bg-green-50',
+    amber: 'bg-white text-amber-700 border-amber-200 hover:bg-amber-50',
     red: 'bg-white text-red-700 border-red-200 hover:bg-red-50',
     emerald: 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50',
     blue2: 'bg-white text-blue-700 border-blue-200 hover:bg-blue-50',
@@ -3198,22 +3334,37 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
       </span>
     );
   }
-  if (evento.tipo === 'QUITADO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />Quitou empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
+  if (evento.tipo === 'QUITADO') {
+    const n = evento.parcelasQuitadasDia || 0;
+    return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><CheckCircle2 className="w-3.5 h-3.5" />
+      {n > 0 ? `Quitou ${n} parcela${n === 1 ? '' : 's'}` : 'Quitou empréstimo'} · {formatarMoeda(evento.valorPago || 0)}
+    </span>;
+  }
   if (evento.tipo === 'CANCELADO') return <span className="text-gray-500 font-medium inline-flex items-center gap-1"><Ban className="w-3.5 h-3.5" />Empréstimo cancelado · {formatarMoeda(evento.valorEmprestimo || 0)}</span>;
   if (evento.tipo === 'NOVO') return <span className="text-emerald-700 font-medium inline-flex items-center gap-1"><Plus className="w-3.5 h-3.5" />Novo empréstimo · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'RENOVACAO') return <span className="text-blue-700 font-medium inline-flex items-center gap-1"><RefreshCw className="w-3.5 h-3.5" />Renovação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
   if (evento.tipo === 'RENEGOCIACAO') return <span className="text-purple-700 font-medium inline-flex items-center gap-1"><Undo2 className="w-3.5 h-3.5" />Renegociação · {formatarMoeda(evento.valorEmprestimo || 0)} em {evento.numeroParcelasEmprestimo}x</span>;
+  // Parcial tem COR PRÓPRIA — âmbar, nem o verde de pago nem o vermelho de não
+  // pago, porque não é nenhum dos dois. E mostra o valor DO DIA mais o que
+  // ficou faltando: formato escolhido pelo Mauricio em 01/11/2026.
+  //
+  // O "de R$ X" do total da parcela ficou de fora de propósito. O Julio o
+  // sugeriu, mas ele engana quando o cliente já pagou em dias anteriores: o
+  // lucas bezerra pagou 110,00 numa parcela de 540,00 da qual já havia pago
+  // 220,00 — "110,00 de 540,00" faria parecer que faltam 430,00 quando
+  // faltam 210,00.
+  if (evento.tipo === 'PAGOU_PARCIAL') {
+    const comParcela = evento.numeroParcelaPaga != null && evento.totalParcelas != null;
+    return <span className="text-amber-600 font-medium inline-flex items-center gap-1"><CircleDashed className="w-3.5 h-3.5" />
+      Pagou parcialmente{comParcela ? ` ${evento.numeroParcelaPaga}/${evento.totalParcelas}` : ''} · {formatarMoeda(evento.valorPago || 0)}
+      <span className="text-amber-700/70 font-normal">· falta {formatarMoeda(evento.valorFalta || 0)}</span>
+    </span>;
+  }
   if (evento.tipo === 'PAGOU') {
     const qtdParc = evento.parcelasPagas || 1;
-    let txt: string;
-    if (qtdParc > 1) {
-      txt = `${qtdParc} parcelas pagas · ${formatarMoeda(evento.valorPago || 0)}`;
-    } else if (evento.isParcial) {
-      // ⭐ Pagamento parcial - não quitou a parcela
-      txt = `Pagou parcial ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
-    } else {
-      txt = `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
-    }
+    const txt = qtdParc > 1
+      ? `${qtdParc} parcelas pagas · ${formatarMoeda(evento.valorPago || 0)}`
+      : `Pagou parcela ${evento.numeroParcelaPaga}/${evento.totalParcelas} · ${formatarMoeda(evento.valorPago || 0)}`;
     return <span className="text-green-700 font-medium inline-flex items-center gap-1"><Check className="w-3.5 h-3.5" />{txt}</span>;
   }
   if (evento.tipo === 'NAO_PAGOU') return <span className="text-red-600 font-medium inline-flex items-center gap-1"><X className="w-3.5 h-3.5" />Não pagou parcela {evento.numeroParcelaPaga}/{evento.totalParcelas}</span>;
@@ -3224,6 +3375,7 @@ function getCorAvatar(evento?: EventoCliente): string {
   if (!evento) return 'bg-gray-100 text-gray-600';
   switch (evento.tipo) {
     case 'PAGOU': return 'bg-green-100 text-green-700';
+    case 'PAGOU_PARCIAL': return 'bg-amber-100 text-amber-700';
     case 'NAO_PAGOU': return 'bg-red-100 text-red-700';
     case 'NOVO': return 'bg-emerald-100 text-emerald-700';
     case 'RENOVACAO': return 'bg-blue-100 text-blue-700';

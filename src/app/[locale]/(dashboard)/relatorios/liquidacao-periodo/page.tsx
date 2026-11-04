@@ -420,6 +420,28 @@ export default function LiquidacaoPeriodoPage() {
   const margem = c && c.recebido > 0 ? (c.ganancia / c.recebido) * 100 : 0;
 
   /**
+   * "3 empréstimos · 4 novos" foi lido como contradição, e era uma: o
+   * empréstimo CANCELADO entrava na contagem de cliente e não na de
+   * empréstimo (Julio, 03/11/2026 — ver
+   * sql/2026-11-03_contagem_de_venda_sem_cancelado.sql).
+   *
+   * Com o número certo, "novos" sozinho ao lado do total ainda se lê como
+   * duas medidas da mesma coisa. Mostrar as TRÊS parcelas resolve, porque
+   * a soma fecha com o total e o leitor pode conferir. As zeradas saem:
+   * "· 0 renegociações" é ruído em quase todo período.
+   */
+  const composicaoVenda = c
+    ? ([
+        ['novos', c.clientes_novos],
+        ['renovações', c.clientes_renovados],
+        ['renegociações', c.clientes_renegociados],
+      ] as const)
+        .filter(([, n]) => (n ?? 0) > 0)
+        .map(([rotulo, n]) => `${int(n)} ${rotulo}`)
+        .join(' · ')
+    : '';
+
+  /**
    * Transferência, ajuste, aporte e microseguro são raros: a maioria dos
    * períodos não tem nenhum. Coluna de zeros ocupa largura que as outras
    * precisam e some do olhar, por isso só aparecem quando há. No CSV vão
@@ -670,7 +692,7 @@ export default function LiquidacaoPeriodoPage() {
                 <Totalizador
                   icone={ArrowUpFromLine} selo="bg-blue-50 text-blue-600"
                   nome="Venda" valor={fmt(c?.emprestado)}
-                  sub={`${int(c?.qtd_emprestimos)} empréstimos · ${int(c?.clientes_novos)} novos`}
+                  sub={`${int(c?.qtd_emprestimos)} empréstimos${composicaoVenda ? ` · ${composicaoVenda}` : ''}`}
                   ativo={aba === 'venda'} onClick={() => setAba('venda')}
                 />
                 <Totalizador

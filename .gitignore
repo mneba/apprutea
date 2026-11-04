@@ -1,1 +1,5 @@
 node_modules
+
+# Copia local das fotos que estavam em base64, feita pelo script de
+# migracao de 03/11/2026. 19 MB. Guarde fora do repo e apague daqui.
+_fotos_base64_20261103/

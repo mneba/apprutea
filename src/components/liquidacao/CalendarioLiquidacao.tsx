@@ -333,7 +333,7 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
   // deles dá React #310 — "Rendered more hooks than during the previous
   // render" —, que neste projeto já virou tela branca no Financeiro. Ver
   // CLAUDE.md, "Retorno antecipado vem DEPOIS de todos os hooks".
-  const [clientesDoDia, setClientesDoDia] = useState<{ naLista: number; pagaram: number } | null>(null);
+  const [clientesDoDia, setClientesDoDia] = useState<{ naLista: number; pagaram: number; parcelasPagas: number } | null>(null);
 
   // NÃO PAGOS CONTEMPLA TODOS OS QUE APARECEM NO DIA — regra do Mauricio em
   // 21/10/2026: os que vencem naquele dia E os que só estão na lista por
@@ -354,7 +354,11 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
       const supabase = createClient();
       const [listaRes, pagosRes] = await Promise.all([
         supabase.rpc('fn_clientes_da_liquidacao', { p_liquidacao_id: liqId }),
-        supabase.from('pagamentos_parcelas').select('cliente_id')
+        // `status_parcela_atual` é o retrato gravado NO ATO do pagamento, e é
+        // ele que diz se aquela parcela FECHOU no dia. Vem na mesma consulta
+        // que já estava aqui — "Parcelas pagas" passou a ser derivado sem
+        // custo nenhum.
+        supabase.from('pagamentos_parcelas').select('cliente_id, status_parcela_atual')
           .eq('liquidacao_id', liqId).eq('estornado', false),
       ]);
       if (!vivo) return;
@@ -372,7 +376,16 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
       // negativos.
       pagaram.forEach((id) => naLista.add(id));
 
-      setClientesDoDia({ naLista: naLista.size, pagaram: pagaram.size });
+      // Parcelas que FECHARAM no dia. Era `liquidacoes_diarias.pagamentos_pagos`,
+      // e o acumulador erra: medido em 01/11/2026, 21 dias divergem, e os dois
+      // piores são dias de IMPORTAÇÃO, onde ele fica em **0** com 55 e 25
+      // parcelas pagas de verdade (7.2 SeuGiro e 7.3 SeuGiro2, ambas em 14/10).
+      // É o mesmo padrão que o CLAUDE.md registra para `clientes_pagos`: a
+      // carga escreve direto na tabela e não passa por quem incrementa.
+      const parcelasPagas = ((pagosRes.data || []) as any[])
+        .filter((r) => r.status_parcela_atual === 'PAGO').length;
+
+      setClientesDoDia({ naLista: naLista.size, pagaram: pagaram.size, parcelasPagas });
     })().catch(() => { if (vivo) setClientesDoDia(null); });
 
     return () => { vivo = false; };
@@ -448,9 +461,10 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
   const temMicroseguro = microInicial > 0 || microFinal > 0 || microseguroDia > 0;
 
   // PAGAMENTOS
-  // `pagamentos_pagos` conta PARCELAS quitadas, não clientes. `naoPagos` saiu:
-  // `pagamentos_nao_pagos` é cópia de `clientes_iniciais` (ver a seção abaixo).
-  const pagos = liquidacao.pagamentos_pagos || 0;
+  // As duas linhas desta seção são DERIVADAS dos pagamentos vivos do dia.
+  // `pagamentos_pagos` saiu em 01/11/2026 — ver `clientesDoDia` acima; e
+  // `pagamentos_nao_pagos` saiu antes, por ser cópia de `clientes_iniciais`.
+  // Nenhum acumulador de `liquidacoes_diarias` alimenta mais esta seção.
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-5">
@@ -539,15 +553,17 @@ export function ResumoDiaCalendario({ liquidacao, data, loading }: ResumoDiaCale
           As duas linhas que ficaram dizem uma coisa cada, e "de N" deixa o
           universo à vista em vez de o leitor ter de supô-lo. */}
       <SecaoBalanco titulo="Pagamentos do Dia">
-        <Linha
-          label="✅ Parcelas pagas"
-          valor={
-            <span>
-              <span className="text-green-600 font-bold">{pagos}</span>
-              <span className="text-gray-400 ml-1 text-xs">parcela(s)</span>
-            </span>
-          }
-        />
+        {clientesDoDia && (
+          <Linha
+            label="✅ Parcelas pagas"
+            valor={
+              <span>
+                <span className="text-green-600 font-bold">{clientesDoDia.parcelasPagas}</span>
+                <span className="text-gray-400 ml-1 text-xs">parcela(s)</span>
+              </span>
+            }
+          />
+        )}
         {clientesDoDia && (
           <Linha
             label="❌ Não pagos"
