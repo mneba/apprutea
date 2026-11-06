@@ -163,12 +163,12 @@ export default function LoginPage() {
                   />
                   <span className="text-sm text-gray-600">{t('rememberMe')}</span>
                 </label>
-                <button
-                  type="button"
+                <Link
+                  href="/esqueci-senha"
                   className="text-sm text-blue-600 hover:text-blue-700 font-medium"
                 >
                   {t('forgotPassword')}
-                </button>
+                </Link>
               </div>
 
               <Button

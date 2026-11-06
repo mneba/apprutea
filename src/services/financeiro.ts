@@ -399,7 +399,7 @@ export const financeiroService = {
       return { success: false, error: 'O saldo final é igual ao saldo atual. Nenhum ajuste necessário.' };
     }
     
-    const observacoesCompletas = `Saldo anterior: R$ ${saldoAtual.toFixed(2)} → Saldo final: R$ ${input.saldo_final.toFixed(2)}. ${input.observacoes || ''}`.trim();
+    const observacoesCompletas = `Saldo anterior: $ ${saldoAtual.toFixed(2)} → Saldo final: $ ${input.saldo_final.toFixed(2)}. ${input.observacoes || ''}`.trim();
     
     // Tentar com ajustar_saldo_conta
     const { data, error } = await supabase.rpc('ajustar_saldo_conta', {

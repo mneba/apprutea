@@ -10,7 +10,7 @@ export default function DashboardPage() {
 
   const cards = [
     { title: 'Total de Clientes', value: '1.234', change: '+12%', changeType: 'positive' as const, icon: Users, color: 'blue' },
-    { title: 'Recaudo do Mês', value: 'R$ 45.320', change: '+8.2%', changeType: 'positive' as const, icon: DollarSign, color: 'green' },
+    { title: 'Recaudo do Mês', value: '$ 45.320', change: '+8.2%', changeType: 'positive' as const, icon: DollarSign, color: 'green' },
     { title: 'Sessões Abertas', value: '12', change: '3 aguardando', changeType: 'neutral' as const, icon: Clock, color: 'yellow' },
     { title: 'Taxa de Recaudo', value: '87.5%', change: '-2.1%', changeType: 'negative' as const, icon: TrendingUp, color: 'purple' },
   ];

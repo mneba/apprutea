@@ -909,7 +909,7 @@ export function ModalNovaVenda({
                     Valor Principal *
                   </label>
                   <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
                     <input
                       ref={valorPrincipalRef}
                       type="number"
@@ -1091,7 +1091,7 @@ export function ModalNovaVenda({
                 </label>
                 {temMicroseguro && (
                   <div className="relative mt-2">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
+                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500">$</span>
                     <input
                       type="number"
                       step="0.01"

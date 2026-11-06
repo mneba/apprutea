@@ -102,9 +102,44 @@
     "forgotPassword": {
       "title": "Recuperar Senha",
       "subtitle": "Digite seu e-mail para receber o link de recuperação",
+      "email": "E-mail",
+      "emailPlaceholder": "seu@email.com",
       "submitButton": "Enviar link",
+      "submitting": "Enviando...",
       "backToLogin": "Voltar para login",
-      "emailSent": "E-mail enviado! Verifique sua caixa de entrada."
+      "emailSent": "Verifique seu e-mail",
+      "emailSentHint": "Se este e-mail estiver cadastrado, você receberá um link para criar uma nova senha. Abra o link neste mesmo navegador.",
+      "rateLimit": "Muitas tentativas. Aguarde alguns minutos e tente novamente.",
+      "error": "Não foi possível enviar o e-mail. Tente novamente.",
+      "errors": {
+        "emailRequired": "E-mail é obrigatório",
+        "emailInvalid": "E-mail inválido"
+      }
+    },
+    "resetPassword": {
+      "title": "Nova Senha",
+      "subtitle": "Escolha uma nova senha para sua conta",
+      "password": "Nova senha",
+      "passwordPlaceholder": "Mínimo 6 caracteres",
+      "confirmPassword": "Confirmar nova senha",
+      "confirmPasswordPlaceholder": "Digite a senha novamente",
+      "submitButton": "Salvar nova senha",
+      "submitting": "Salvando...",
+      "checking": "Verificando o link...",
+      "success": "Senha alterada!",
+      "successHint": "Entre com a sua nova senha.",
+      "goToLogin": "Ir para o login",
+      "invalidLink": "Link inválido ou expirado",
+      "invalidLinkHint": "O link pode ter expirado, já ter sido usado ou ter sido aberto em outro navegador. Peça um novo.",
+      "requestNew": "Pedir novo link",
+      "backToLogin": "Voltar para login",
+      "samePassword": "A nova senha precisa ser diferente da atual.",
+      "weakPassword": "Senha muito fraca. Escolha uma senha mais forte.",
+      "error": "Não foi possível alterar a senha. Tente novamente.",
+      "errors": {
+        "passwordMinLength": "Senha deve ter no mínimo 6 caracteres",
+        "passwordMismatch": "As senhas não conferem"
+      }
     }
   },
   "dashboard": {

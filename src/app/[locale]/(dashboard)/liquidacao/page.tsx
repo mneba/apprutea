@@ -3348,7 +3348,7 @@ function MascaraEvento({ evento, cliente }: { evento?: EventoCliente; cliente: C
   // pago, porque não é nenhum dos dois. E mostra o valor DO DIA mais o que
   // ficou faltando: formato escolhido pelo Mauricio em 01/11/2026.
   //
-  // O "de R$ X" do total da parcela ficou de fora de propósito. O Julio o
+  // O "de $ X" do total da parcela ficou de fora de propósito. O Julio o
   // sugeriu, mas ele engana quando o cliente já pagou em dias anteriores: o
   // lucas bezerra pagou 110,00 numa parcela de 540,00 da qual já havia pago
   // 220,00 — "110,00 de 540,00" faria parecer que faltam 430,00 quando
