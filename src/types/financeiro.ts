@@ -38,6 +38,40 @@ export interface ContaComDetalhes extends Conta {
   microseguro_nome?: string;
 }
 
+/**
+ * O nome a MOSTRAR de uma conta.
+ *
+ * ⚠ NÃO use `conta.nome` na tela. Ele é uma CÓPIA de `rotas.nome`, gravada
+ * por `criar_conta_rota_e_microseguro` no INSERT e — até 07/11/2026 — nunca
+ * atualizada quando a rota era renomeada. 57 das 152 contas de rota estavam
+ * com o nome congelado, e o modal de Nova Entrada da PrimeCred oferecia
+ * "Conta Rota Apolo - Santa, Seir y Julio" para a rota `1.1 ANGELICA`.
+ *
+ * Havia uma rota `15.2 Apolo` DE VERDADE em outra empresa, com conta de nome
+ * quase igual: escolher a rota errada no lançamento era erro possível e
+ * silencioso.
+ *
+ * `sql/2026-11-07_nome_da_conta_segue_a_rota.sql` reparou o dado e instalou
+ * o gatilho que mantém a cópia. Esta função é a segunda linha de defesa, de
+ * propósito: lendo o nome vivo, a tela de dinheiro fica certa mesmo se
+ * aquele gatilho cair um dia.
+ *
+ * `fn_buscar_contas_dropdown` já devolvia `rota_nome` e `microseguro_nome` —
+ * a resposta certa estava no payload e a interface a ignorava.
+ */
+export function nomeDaConta(c: ContaComDetalhes): string {
+  // ⚠ Os DOIS tipos derivam de `rota_nome`, que é o único nome vivo aqui.
+  // `microseguro_nome` NÃO serve: `microseguros.nome` é uma terceira cópia
+  // de `rotas.nome`, gravada como `'Microseguro ' || rota.nome` no mesmo
+  // INSERT e congelada pelo mesmo motivo — 28 dos 76 estavam desatualizados
+  // em 07/11/2026. Cair nela seria trocar uma cópia velha por outra.
+  if (c.tipo_conta === 'ROTA') return c.rota_nome || c.nome;
+  if (c.tipo_conta === 'MICROSEGURO') {
+    return c.rota_nome ? `Microseguro ${c.rota_nome}` : (c.microseguro_nome || c.nome);
+  }
+  return c.nome; // EMPRESA: o nome é próprio, não é cópia de nada.
+}
+
 // =====================================================
 // INTERFACES DE CATEGORIAS
 // =====================================================

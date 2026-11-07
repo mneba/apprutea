@@ -56,6 +56,7 @@ import type {
   RotaDetalhe,
   MicroseguroDetalhe,
 } from '@/types/financeiro';
+import { nomeDaConta } from '@/types/financeiro';
 
 // =====================================================
 // TIPOS LOCAIS
@@ -1065,7 +1066,7 @@ export default function FinanceiroPage() {
                         <button key={c.id} onClick={() => handleTrocarConta(c)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                           <Building2 className="w-4 h-4 text-blue-600" />
-                          <span className="truncate">{c.nome}</span>
+                          <span className="truncate">{nomeDaConta(c)}</span>
                         </button>
                       ))}
                     </>
@@ -1078,7 +1079,7 @@ export default function FinanceiroPage() {
                         <button key={c.id} onClick={() => handleTrocarConta(c)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                           <MapPin className="w-4 h-4 text-emerald-600" />
-                          <span className="truncate">{c.nome}</span>
+                          <span className="truncate">{nomeDaConta(c)}</span>
                         </button>
                       ))}
                     </>
@@ -1091,7 +1092,7 @@ export default function FinanceiroPage() {
                         <button key={c.id} onClick={() => handleTrocarConta(c)}
                           className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaFiltro === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}>
                           <Shield className="w-4 h-4 text-amber-600" />
-                          <span className="truncate">{c.nome}</span>
+                          <span className="truncate">{nomeDaConta(c)}</span>
                         </button>
                       ))}
                     </>
@@ -1415,7 +1416,7 @@ export default function FinanceiroPage() {
               <Wallet className="w-3.5 h-3.5 text-blue-600" />
             </div>
             <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide truncate">
-              {contaSelecionada ? `Saldos · ${contaSelecionada.nome}` : 'Saldos'}
+              {contaSelecionada ? `Saldos · ${nomeDaConta(contaSelecionada)}` : 'Saldos'}
             </h3>
           </div>
 
@@ -1440,7 +1441,7 @@ export default function FinanceiroPage() {
                    <MapPin className="w-3.5 h-3.5 text-emerald-600" />}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] text-gray-500 uppercase font-semibold truncate">{contaSelecionada.nome}</p>
+                  <p className="text-[10px] text-gray-500 uppercase font-semibold truncate">{nomeDaConta(contaSelecionada)}</p>
                   <p className="text-[10px] text-gray-400">ajustar saldo</p>
                 </div>
                 <span className={`text-base font-bold tabular-nums ${((contaSelecionada as any).saldo_atual ?? 0) < 0 ? 'text-red-600' : 'text-gray-900'}`}>

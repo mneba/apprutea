@@ -33,6 +33,7 @@ import {
   Camera,
   Trash2,
 } from 'lucide-react';
+import { nomeDaConta } from '@/types/financeiro';
 import type { ContaComDetalhes, CategoriaFinanceira } from '@/types/financeiro';
 
 // =====================================================
@@ -356,21 +357,21 @@ export function ModalNovaMovimentacao({
               <optgroup label="🏢 Empresa">
                 {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="🛣️ Rotas">
                 {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </option>
                 ))}
               </optgroup>
               <optgroup label="🛡️ Microseguros">
                 {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (
                   <option key={c.id} value={c.id}>
-                    {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </option>
                 ))}
               </optgroup>
@@ -658,7 +659,7 @@ export function ModalTransferencia({
               <option value="">Selecione a conta de origem</option>
               {contas.map(c => (
                 <option key={c.id} value={c.id}>
-                  {getIconeConta(c.tipo_conta)} {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </option>
               ))}
             </select>
@@ -691,7 +692,7 @@ export function ModalTransferencia({
               <option value="">Selecione a conta de destino</option>
               {contasDestinoFiltradas.map(c => (
                 <option key={c.id} value={c.id}>
-                  {getIconeConta(c.tipo_conta)} {c.nome} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </option>
               ))}
             </select>
@@ -755,11 +756,11 @@ export function ModalTransferencia({
               <h4 className="font-medium text-blue-900 mb-3">Resumo da Transferência</h4>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-blue-700">{contaOrigemObj.nome}:</span>
+                  <span className="text-blue-700">{nomeDaConta(contaOrigemObj)}:</span>
                   <span className="text-red-600 font-medium">- {parseFloat(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-blue-700">{contaDestinoObj.nome}:</span>
+                  <span className="text-blue-700">{nomeDaConta(contaDestinoObj)}:</span>
                   <span className="text-green-600 font-medium">+ {parseFloat(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
                 </div>
               </div>
@@ -941,7 +942,7 @@ export function ModalAjusteSaldo({
               <option value="">Selecione a conta</option>
               {contas.map(c => (
                 <option key={c.id} value={c.id}>
-                  {getIconeConta(c.tipo_conta)} {c.nome} - Saldo: {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - Saldo: {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </option>
               ))}
             </select>
