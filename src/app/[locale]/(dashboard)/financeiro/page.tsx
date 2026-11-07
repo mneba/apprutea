@@ -445,6 +445,9 @@ export default function FinanceiroPage() {
   const [modalMovimentacao, setModalMovimentacao] = useState(false);
   const [modalTransferencia, setModalTransferencia] = useState(false);
   const [modalAjuste, setModalAjuste] = useState(false);
+  // Qual conta o Ajuste de Saldo abriu. Vazio = aberto sem cartão (nenhum
+  // caminho da tela faz isso hoje), e aí o seletor do modal fica livre.
+  const [ajusteContaId, setAjusteContaId] = useState('');
   const [modalVerRotas, setModalVerRotas] = useState(false);
   const [modalVerMicroseguros, setModalVerMicroseguros] = useState(false);
 
@@ -901,7 +904,11 @@ export default function FinanceiroPage() {
     .reduce((acc, m) => acc + m.valor, 0);
 
   // Preparar itens para os cards detalhados
-  const rotasItens = saldos.rotas_detalhe?.map(r => ({ nome: r.rota_nome, valor: r.saldo })) || [];
+  // `rotaId` viaja junto para o cartao saber QUAL conta travar no ajuste —
+  // ver a nota em cima de `abrirAjuste`.
+  const rotasItens = saldos.rotas_detalhe?.map(r => ({
+    nome: r.rota_nome, valor: r.saldo, rotaId: r.rota_id,
+  })) || [];
   const microsegurosItens = saldos.microseguros_detalhe?.map(m => ({ 
     nome: m.rota_nome ? `${m.microseguro_nome} (${m.rota_nome})` : m.microseguro_nome, 
     valor: m.saldo 
@@ -936,7 +943,28 @@ export default function FinanceiroPage() {
 
   // Se a rota do contexto define uma conta-rota, ela é o default do seletor
   const contaSelecionada = contas.find((c) => c.id === contaFiltro) || null;
-  const nomeContaSelecionada = contaSelecionada?.nome || (modoRota && rotaNome ? rotaNome : 'Todas as contas');
+  const nomeContaSelecionada = (contaSelecionada ? nomeDaConta(contaSelecionada) : '')
+    || (modoRota && rotaNome ? rotaNome : 'Todas as contas');
+
+  /**
+   * Abre o Ajuste de Saldo JÁ PRESO a uma conta.
+   *
+   * ⚠ Pedido do Mauricio em 07/11/2026: *"se o usuário clicar na rota para
+   * corrigir o saldo o modal não deve permitir alterar a rota"*.
+   *
+   * Antes, TODOS os cartões chamavam `setModalAjuste(true)` sem dizer qual
+   * conta — o modal abria no `contaPadraoId`, que é o filtro do topo e
+   * costuma estar vazio. Então clicar em "Rota X · ajustar saldo" não só
+   * deixava trocar de rota: ele nem começava na rota X. O cartão dizia uma
+   * coisa e o modal fazia outra.
+   */
+  const abrirAjuste = (contaId: string | undefined) => {
+    setAjusteContaId(contaId || '');
+    setModalAjuste(true);
+  };
+
+  const contaDaRota = (rId: string | undefined) =>
+    contasAcessiveis.find(c => c.tipo_conta === 'ROTA' && (c as any).rota_id === rId)?.id;
 
   // A conta selecionada permite ver por liquidação? (só ROTA tem liquidação)
   // "Todas as contas" mantém habilitado (usa a rota do contexto).
@@ -1429,7 +1457,7 @@ export default function FinanceiroPage() {
             ) : contaSelecionada ? (
               // Conta específica selecionada: mostra só ela
               <button
-                onClick={() => setModalAjuste(true)}
+                onClick={() => abrirAjuste(contaSelecionada.id)}
                 className="w-full px-3 py-3 hover:bg-gray-50 transition-colors flex items-center gap-2 text-left"
               >
                 <div className={`w-7 h-7 rounded-md flex items-center justify-center flex-shrink-0 ${
@@ -1452,7 +1480,7 @@ export default function FinanceiroPage() {
               <>
                 {!modoRota && (
                   <button
-                    onClick={() => setModalAjuste(true)}
+                    onClick={() => abrirAjuste(contasAcessiveis.find(c => c.tipo_conta === 'EMPRESA')?.id)}
                     className="w-full px-3 py-2.5 hover:bg-blue-50/50 transition-colors flex items-center gap-2 text-left"
                   >
                     <div className="w-7 h-7 bg-blue-50 rounded-md flex items-center justify-center flex-shrink-0">
@@ -1468,10 +1496,13 @@ export default function FinanceiroPage() {
                   </button>
                 )}
 
-                {(modoRota ? [{ nome: rotaNome || 'Rota', valor: saldos.saldo_rotas }] : rotasItens).slice(0, modoRota ? 1 : 3).map((r, i) => (
+                {(modoRota
+                    ? [{ nome: rotaNome || 'Rota', valor: saldos.saldo_rotas, rotaId: rotaId || undefined }]
+                    : rotasItens
+                  ).slice(0, modoRota ? 1 : 3).map((r, i) => (
                   <button
                     key={i}
-                    onClick={() => setModalAjuste(true)}
+                    onClick={() => abrirAjuste(contaDaRota(r.rotaId))}
                     className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left"
                   >
                     <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center flex-shrink-0">
@@ -1687,12 +1718,15 @@ export default function FinanceiroPage() {
         contas={contasAcessiveis}
         onSalvar={handleSalvarTransferencia}
       />
+      {/* ⚠ `ajusteContaId`, NAO `contaFiltro`: o modal abre na conta do cartao
+          que foi clicado, e `contaTravada` impede trocar. Ver `abrirAjuste`. */}
       <ModalAjusteSaldo
         isOpen={modalAjuste}
         onClose={() => setModalAjuste(false)}
         contas={contasAcessiveis}
         onSalvar={handleSalvarAjuste}
-        contaPadraoId={contaFiltro}
+        contaPadraoId={ajusteContaId || contaFiltro}
+        contaTravada={!!ajusteContaId}
       />
 
       {/* Modal Ver Todas Rotas */}

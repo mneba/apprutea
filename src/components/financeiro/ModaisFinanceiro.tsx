@@ -6,6 +6,31 @@ import { useState, useEffect } from 'react';
 // ela desliga o vinculo para elas e grava `liquidacao_id` nulo de proposito.
 // A lista e COPIADA DELA, que e a autoridade -- se mudar la, muda aqui,
 // senao a guarda de handleSalvar passa a barrar operacao legitima.
+// As formas de pagamento, com o ROTULO junto do valor.
+//
+// ⚠ Os valores sao os que `fn_criar_movimentacao` grava em
+// `financeiro.forma_pagamento` -- nao traduza nem reordene por estetica sem
+// conferir la.
+const FORMAS_PAGAMENTO = [
+  { valor: 'DINHEIRO',      rotulo: 'Dinheiro' },
+  { valor: 'PIX',           rotulo: 'PIX' },
+  { valor: 'TRANSFERENCIA', rotulo: 'Transferência' },
+  { valor: 'CARTAO',        rotulo: 'Cartão' },
+] as const;
+
+const rotuloForma = (v: string) =>
+  FORMAS_PAGAMENTO.find(f => f.valor === v)?.rotulo || v;
+
+const getIconeForma = (v: string) => {
+  switch (v) {
+    case 'DINHEIRO':      return <Banknote    className="w-4 h-4 text-green-600 flex-shrink-0" />;
+    case 'PIX':           return <Smartphone  className="w-4 h-4 text-teal-600 flex-shrink-0" />;
+    case 'TRANSFERENCIA': return <Landmark    className="w-4 h-4 text-blue-600 flex-shrink-0" />;
+    case 'CARTAO':        return <CreditCard  className="w-4 h-4 text-purple-600 flex-shrink-0" />;
+    default:              return <Wallet      className="w-4 h-4 text-gray-500 flex-shrink-0" />;
+  }
+};
+
 const CATEGORIAS_SEM_LIQUIDACAO = [
   'EMPRESTIMO',
   'ESTORNO_PAGAMENTO',
@@ -32,6 +57,12 @@ import {
   Upload,
   Camera,
   Trash2,
+  ChevronDown,
+  Banknote,
+  Smartphone,
+  Landmark,
+  CreditCard,
+  Lock,
 } from 'lucide-react';
 import { nomeDaConta } from '@/types/financeiro';
 import type { ContaComDetalhes, CategoriaFinanceira } from '@/types/financeiro';
@@ -76,6 +107,10 @@ export function ModalNovaMovimentacao({
   const [liquidacaoAberta, setLiquidacaoAberta] = useState<any | null>(null);
   const [liquidacaoSelId, setLiquidacaoSelId] = useState<string>(''); // '' = usar a aberta
   const [loadingLiq, setLoadingLiq] = useState(false);
+  // O seletor de conta e um menu proprio, nao um <select> nativo -- ver o
+  // comentario em cima do JSX dele.
+  const [seletorContaAberto, setSeletorContaAberto] = useState(false);
+  const [seletorFormaAberto, setSeletorFormaAberto] = useState(false);
 
   const contaSelecionada = contas.find(c => c.id === contaId);
   const categoriasFiltradas = categorias.filter(c => {
@@ -229,10 +264,13 @@ export function ModalNovaMovimentacao({
   // Ícone e cor baseados no tipo de conta
   const getIconeConta = (tipoConta: string) => {
     switch (tipoConta) {
-      case 'EMPRESA': return <Building2 className="w-4 h-4 text-blue-600" />;
-      case 'ROTA': return <MapPin className="w-4 h-4 text-green-600" />;
-      case 'MICROSEGURO': return <Shield className="w-4 h-4 text-purple-600" />;
-      default: return <Wallet className="w-4 h-4 text-gray-600" />;
+      // flex-shrink-0: estes icones vivem em linhas `flex` ao lado de um nome
+      // de rota longo. Na web o padrao de um filho flex e ENCOLHER, entao sem
+      // isto o icone vira um risco achatado quando o nome nao cabe.
+      case 'EMPRESA': return <Building2 className="w-4 h-4 text-blue-600 flex-shrink-0" />;
+      case 'ROTA': return <MapPin className="w-4 h-4 text-green-600 flex-shrink-0" />;
+      case 'MICROSEGURO': return <Shield className="w-4 h-4 text-purple-600 flex-shrink-0" />;
+      default: return <Wallet className="w-4 h-4 text-gray-600 flex-shrink-0" />;
     }
   };
 
@@ -348,34 +386,75 @@ export function ModalNovaMovimentacao({
               <Wallet className="w-4 h-4 text-gray-500" />
               Conta *
             </label>
-            <select
-              value={contaId}
-              onChange={(e) => { setContaId(e.target.value); setCategoria(''); }}
-              className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione uma conta</option>
-              <optgroup label="🏢 Empresa">
-                {contas.filter(c => c.tipo_conta === 'EMPRESA').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="🛣️ Rotas">
-                {contas.filter(c => c.tipo_conta === 'ROTA').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </option>
-                ))}
-              </optgroup>
-              <optgroup label="🛡️ Microseguros">
-                {contas.filter(c => c.tipo_conta === 'MICROSEGURO').map(c => (
-                  <option key={c.id} value={c.id}>
-                    {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </option>
-                ))}
-              </optgroup>
-            </select>
+            {/*
+              ⚠ Menu proprio, nao um <select> nativo.
+
+              O pedido do Mauricio em 07/11/2026 foi trocar os emojis por
+              icones. Dentro de um <select> isso nao tem meio-termo: o rotulo
+              de um <optgroup> e um ATRIBUTO de texto, e <option> so renderiza
+              texto -- nenhum dos dois aceita SVG. Emoji estava ali justamente
+              por ser a unica "figura" que cabe num atributo.
+
+              Entao o <select> saiu. O padrao e o mesmo do seletor de conta do
+              topo da pagina do Financeiro: um botao, uma camada `fixed` que
+              fecha ao clicar fora, e o painel por cima dela.
+
+              O z-index e alto de proposito -- este menu vive DENTRO de um
+              modal que ja esta em z-50.
+            */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setSeletorContaAberto(v => !v)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                {contaSelecionada
+                  ? getIconeConta(contaSelecionada.tipo_conta)
+                  : <Wallet className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                <span className={`flex-1 truncate ${contaSelecionada ? 'text-gray-900' : 'text-gray-400'}`}>
+                  {contaSelecionada ? nomeDaConta(contaSelecionada) : 'Selecione uma conta'}
+                </span>
+                <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              </button>
+
+              {seletorContaAberto && (
+                <>
+                  <div className="fixed inset-0 z-[60]" onClick={() => setSeletorContaAberto(false)} />
+                  <div className="absolute left-0 right-0 mt-1 z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
+                    {([
+                      { tipo: 'EMPRESA',     titulo: 'Empresa' },
+                      { tipo: 'ROTA',        titulo: 'Rotas' },
+                      { tipo: 'MICROSEGURO', titulo: 'Microseguros' },
+                    ] as const).map(grupo => {
+                      const doGrupo = contas.filter(c => c.tipo_conta === grupo.tipo);
+                      if (doGrupo.length === 0) return null;
+                      return (
+                        <div key={grupo.tipo}>
+                          <p className="flex items-center gap-1.5 px-3 pt-2 pb-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                            {getIconeConta(grupo.tipo)}
+                            {grupo.titulo}
+                          </p>
+                          {doGrupo.map(c => (
+                            <button
+                              key={c.id}
+                              type="button"
+                              onClick={() => { setContaId(c.id); setCategoria(''); setSeletorContaAberto(false); }}
+                              className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaId === c.id ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                            >
+                              {getIconeConta(c.tipo_conta)}
+                              <span className="flex-1 truncate">{nomeDaConta(c)}</span>
+                              <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
+                                {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
             {contaSelecionada && (
               <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
                 {getIconeConta(contaSelecionada.tipo_conta)}
@@ -441,16 +520,36 @@ export function ModalNovaMovimentacao({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
               <label className="block text-sm font-medium text-gray-700 mb-2">Forma de Pagamento</label>
-              <select
-                value={formaPagamento}
-                onChange={(e) => setFormaPagamento(e.target.value)}
-                className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="DINHEIRO">💵 Dinheiro</option>
-                <option value="PIX">📱 PIX</option>
-                <option value="TRANSFERENCIA">🏦 Transferência</option>
-                <option value="CARTAO">💳 Cartão</option>
-              </select>
+              {/* Mesmo motivo do seletor de conta: <option> nao renderiza SVG. */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSeletorFormaAberto(v => !v)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                >
+                  {getIconeForma(formaPagamento)}
+                  <span className="flex-1 truncate text-gray-900">{rotuloForma(formaPagamento)}</span>
+                  <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </button>
+                {seletorFormaAberto && (
+                  <>
+                    <div className="fixed inset-0 z-[60]" onClick={() => setSeletorFormaAberto(false)} />
+                    <div className="absolute left-0 right-0 mt-1 z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+                      {FORMAS_PAGAMENTO.map(f => (
+                        <button
+                          key={f.valor}
+                          type="button"
+                          onClick={() => { setFormaPagamento(f.valor); setSeletorFormaAberto(false); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${formaPagamento === f.valor ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'}`}
+                        >
+                          {getIconeForma(f.valor)}
+                          <span className="flex-1 truncate">{f.rotulo}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
             <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
@@ -807,18 +906,29 @@ interface ModalAjusteSaldoProps {
    * certo: nao ha conta para supor.
    */
   contaPadraoId?: string;
+  /**
+   * Quando o modal abre a partir do cartao de UMA conta, a conta nao pode ser
+   * trocada aqui dentro: o usuario clicou em "Rota X · ajustar saldo" e e o
+   * saldo da rota X que ele quer corrigir.
+   *
+   * Pedido do Mauricio em 07/11/2026. Antes o seletor ficava livre, e pior:
+   * o modal nem comecava na conta do cartao, porque todos os cartoes
+   * chamavam o modal sem dizer qual era.
+   */
+  contaTravada?: boolean;
   isOpen: boolean;
   onClose: () => void;
   contas: ContaComDetalhes[];
   onSalvar: (dados: any) => Promise<void>;
 }
 
-export function ModalAjusteSaldo({ 
-  isOpen, 
-  onClose, 
+export function ModalAjusteSaldo({
+  isOpen,
+  onClose,
   contas,
   onSalvar,
   contaPadraoId,
+  contaTravada,
 }: ModalAjusteSaldoProps) {
   const [contaId, setContaId] = useState('');
   const [saldoFinal, setSaldoFinal] = useState('');
@@ -826,6 +936,7 @@ export function ModalAjusteSaldo({
   const [observacoes, setObservacoes] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [seletorContaAberto, setSeletorContaAberto] = useState(false);
 
   const contaSelecionada = contas.find(c => c.id === contaId);
   const saldoAtual = contaSelecionada?.saldo_atual || 0;
@@ -880,13 +991,14 @@ export function ModalAjusteSaldo({
     }
   };
 
-  // Ícone baseado no tipo de conta
+  // Ícone baseado no tipo de conta. flex-shrink-0 porque ele divide a linha
+  // com um nome de rota longo, e na web o padrão de um filho flex é ENCOLHER.
   const getIconeConta = (tipoConta: string) => {
     switch (tipoConta) {
-      case 'EMPRESA': return '🏢';
-      case 'ROTA': return '🛣️';
-      case 'MICROSEGURO': return '🛡️';
-      default: return '💰';
+      case 'EMPRESA': return <Building2 className="w-4 h-4 text-blue-600 flex-shrink-0" />;
+      case 'ROTA': return <MapPin className="w-4 h-4 text-emerald-600 flex-shrink-0" />;
+      case 'MICROSEGURO': return <Shield className="w-4 h-4 text-amber-600 flex-shrink-0" />;
+      default: return <Wallet className="w-4 h-4 text-gray-500 flex-shrink-0" />;
     }
   };
 
@@ -921,9 +1033,11 @@ export function ModalAjusteSaldo({
           <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-xl border border-amber-200">
             <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
             <div>
-              <p className="text-sm font-medium text-amber-800">Como funciona</p>
+              <p className="text-sm font-medium text-amber-800">O valor que você digitar passa a ser o saldo da conta</p>
               <p className="text-sm text-amber-700 mt-0.5">
-                Informe o <strong>saldo correto</strong> que a conta deveria ter. O sistema calculará automaticamente a diferença e registrará o ajuste.
+                O sistema <strong>não soma nem subtrai</strong> do saldo atual: ele assume
+                que o número informado é o correto, grava-o como saldo final e lança a
+                diferença como ajuste. Confira antes de salvar.
               </p>
             </div>
           </div>
@@ -934,18 +1048,55 @@ export function ModalAjusteSaldo({
               <Wallet className="w-4 h-4 text-amber-500" />
               Conta *
             </label>
-            <select
-              value={contaId}
-              onChange={(e) => setContaId(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-gray-200 bg-white focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
-            >
-              <option value="">Selecione a conta</option>
-              {contas.map(c => (
-                <option key={c.id} value={c.id}>
-                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - Saldo: {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                </option>
-              ))}
-            </select>
+            {contaTravada && contaSelecionada ? (
+              /* Travada: linha fixa, sem seletor. Ver a prop `contaTravada`. */
+              <div className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-gray-50">
+                {getIconeConta(contaSelecionada.tipo_conta)}
+                <span className="flex-1 truncate font-medium text-gray-900">
+                  {nomeDaConta(contaSelecionada)}
+                </span>
+                <Lock className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
+              </div>
+            ) : (
+              /* Livre: menu proprio. <option> nao renderiza SVG, entao um
+                 <select> so aceitaria emoji -- ver ModalNovaMovimentacao. */
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setSeletorContaAberto(v => !v)}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+                >
+                  {contaSelecionada
+                    ? getIconeConta(contaSelecionada.tipo_conta)
+                    : <Wallet className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                  <span className={`flex-1 truncate ${contaSelecionada ? 'text-gray-900' : 'text-gray-400'}`}>
+                    {contaSelecionada ? nomeDaConta(contaSelecionada) : 'Selecione a conta'}
+                  </span>
+                  <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                </button>
+                {seletorContaAberto && (
+                  <>
+                    <div className="fixed inset-0 z-[60]" onClick={() => setSeletorContaAberto(false)} />
+                    <div className="absolute left-0 right-0 mt-1 z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
+                      {contas.map(c => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => { setContaId(c.id); setSeletorContaAberto(false); }}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-gray-50 ${contaId === c.id ? 'bg-amber-50 text-amber-700 font-medium' : 'text-gray-700'}`}
+                        >
+                          {getIconeConta(c.tipo_conta)}
+                          <span className="flex-1 truncate">{nomeDaConta(c)}</span>
+                          <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
+                            {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Saldos */}
@@ -961,7 +1112,7 @@ export function ModalAjusteSaldo({
               <div className="p-4 rounded-xl border-2 border-amber-200 bg-amber-50">
                 <label className="flex items-center gap-2 text-sm font-medium text-amber-700 mb-2">
                   <DollarSign className="w-4 h-4" />
-                  Saldo Correto (Novo) *
+                  Saldo final da conta *
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
@@ -975,6 +1126,9 @@ export function ModalAjusteSaldo({
                     className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-amber-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"
                   />
                 </div>
+                <p className="text-xs text-amber-700 mt-1.5">
+                  É este o valor que a conta vai passar a ter.
+                </p>
               </div>
             </div>
           )}
@@ -986,13 +1140,22 @@ export function ModalAjusteSaldo({
                 ? 'bg-green-50 border-green-200' 
                 : 'bg-red-50 border-red-200'
             }`}>
-              <p className="text-sm font-medium mb-1">
-                {diferenca > 0 ? '⬆️ Ajuste de Entrada' : '⬇️ Ajuste de Saída'}
+              <p className="flex items-center gap-1.5 text-sm font-medium mb-1">
+                {diferenca > 0
+                  ? <><TrendingUp className="w-4 h-4 text-green-600 flex-shrink-0" /> Ajuste de Entrada</>
+                  : <><TrendingDown className="w-4 h-4 text-red-600 flex-shrink-0" /> Ajuste de Saída</>}
               </p>
               <p className={`text-2xl font-bold ${
                 diferenca > 0 ? 'text-green-700' : 'text-red-700'
               }`}>
                 {diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              </p>
+              {/* A frase que o Mauricio pediu em 07/11/2026: o usuario tem de
+                  sair daqui sabendo que o numero digitado VIRA o saldo. */}
+              <p className="text-sm text-gray-700 mt-2">
+                Ao salvar, <strong>{nomeDaConta(contaSelecionada)}</strong> passa de{' '}
+                {saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para{' '}
+                <strong>{saldoFinalNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>.
               </p>
             </div>
           )}
