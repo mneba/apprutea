@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Building2,
   MapPin,
@@ -226,17 +226,33 @@ export default function OrganizacaoPage() {
     carregarCidadesDaHierarquia();
   }, [hierarquiaIdEmpresa]);
 
+  // O MESMO recorte que o seletor mestre aplica. Sem ele a Organização
+  // contava e listava rotas que o usuário não consegue selecionar: o dono da
+  // PrimeCred via 11 aqui e 2 no seletor (07/11/2026).
+  //
+  // SUPER_ADMIN passa `[]` — vazio significa "sem restrição" em todo o
+  // sistema, e é por isso que o curto-circuito dele não precisa de um
+  // caminho próprio.
+  //
+  // Ele entra na CHAVE DO CACHE também: a permissão pode mudar na mesma aba
+  // (ModalGerenciarUsuario), e um resumo guardado sob a permissão antiga
+  // sobreviveria à troca sem erro nenhum.
+  const rotasPermitidas: string[] = useMemo(
+    () => (isSuperAdmin ? [] : ((profile as any)?.rotas_ids || [])),
+    [isSuperAdmin, profile]
+  );
+
   const carregarDados = async (opts?: { forcar?: boolean }) => {
     const forcar = opts?.forcar;
     // SUPER_ADMIN: resumo geral | Outros: resumo da própria empresa
     const empresaIdParaResumo = isSuperAdmin ? undefined : (empresaIdSelecionada || empresaIdDoUsuario);
-    const kResumo = chave('organizacao:resumo', hierarquiaId, empresaIdParaResumo);
+    const kResumo = chave('organizacao:resumo', hierarquiaId, empresaIdParaResumo, rotasPermitidas);
 
     if (!temCache(kResumo)) setLoading(true);
     try {
       const resumo = await comCache(
         kResumo,
-        () => organizacaoService.buscarResumoGeral(hierarquiaId || undefined, empresaIdParaResumo || undefined),
+        () => organizacaoService.buscarResumoGeral(hierarquiaId || undefined, empresaIdParaResumo || undefined, rotasPermitidas),
         { forcar }
       );
       setResumoGeral(resumo);
@@ -251,8 +267,8 @@ export default function OrganizacaoPage() {
         if (empresa) {
           setEmpresaSelecionada(empresa);
           const rotasData = await comCache(
-            chave('organizacao:rotas', empresaIdSelecionada),
-            () => organizacaoService.listarRotasPorEmpresa(empresaIdSelecionada),
+            chave('organizacao:rotas', empresaIdSelecionada, rotasPermitidas),
+            () => organizacaoService.listarRotasPorEmpresa(empresaIdSelecionada, rotasPermitidas),
             { forcar }
           );
           setRotas(rotasData);
@@ -261,8 +277,8 @@ export default function OrganizacaoPage() {
       } else if (hierarquiaId) {
         // Sem empresa selecionada → mostrar lista de empresas
         const empresasData = await comCache(
-          chave('organizacao:empresas', hierarquiaId),
-          () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId),
+          chave('organizacao:empresas', hierarquiaId, rotasPermitidas),
+          () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId, rotasPermitidas),
           { forcar }
         );
         setEmpresas(empresasData);
@@ -279,7 +295,7 @@ export default function OrganizacaoPage() {
   const handleSelecionarEmpresa = async (empresa: EmpresaResumo) => {
     setLoading(true);
     try {
-      const rotasData = await organizacaoService.listarRotasPorEmpresa(empresa.id);
+      const rotasData = await organizacaoService.listarRotasPorEmpresa(empresa.id, rotasPermitidas);
       setRotas(rotasData);
       setEmpresaSelecionada(empresa);
       setViewMode('rotas');
@@ -407,7 +423,7 @@ export default function OrganizacaoPage() {
       // Recarregar dados — a rota mudou, então o cache do módulo não vale
       invalidarCache('organizacao:');
       if (viewMode === 'rotas' && empresaSelecionada) {
-        const rotasData = await organizacaoService.listarRotasPorEmpresa(empresaSelecionada.id);
+        const rotasData = await organizacaoService.listarRotasPorEmpresa(empresaSelecionada.id, rotasPermitidas);
         setRotas(rotasData);
       } else {
         carregarDados({ forcar: true });

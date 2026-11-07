@@ -16,7 +16,17 @@ export const organizacaoService = {
   // RESUMO GERAL
   // ============================================
 
-  async buscarResumoGeral(hierarquiaId?: string, empresaId?: string): Promise<ResumoGeral> {
+  // `rotasPermitidas` é o MESMO recorte que o seletor mestre aplica
+  // (`profile.rotas_ids`), e existe porque sem ele a Organização mostrava um
+  // número que o usuário não alcança em nenhuma outra tela — o Juan Salvador,
+  // dono da PrimeCred, via 11 aqui e 2 no seletor, em 07/11/2026. Eram sete
+  // pares usuário × empresa nessa situação.
+  //
+  // Vazio ou ausente = SEM restrição, que é a semântica que o sistema inteiro
+  // já usa para `rotas_ids` ("vazio = todas as rotas da empresa"). Quem chama
+  // passa `[]` para SUPER_ADMIN.
+  async buscarResumoGeral(hierarquiaId?: string, empresaId?: string, rotasPermitidas?: string[]): Promise<ResumoGeral> {
+    const recortar = (rotasPermitidas?.length ?? 0) > 0;
     let totalEmpresas = 0;
     let totalRotas = 0;
     let totalClientes = 0;
@@ -28,11 +38,13 @@ export const organizacaoService = {
     if (empresaId) {
       totalEmpresas = 1;
 
-      const { count: countRotas } = await supabase
+      let qRotasEmpresa = supabase
         .from('rotas')
         .select('id', { count: 'exact', head: true })
         .eq('empresa_id', empresaId)
         .eq('status', 'ATIVA');
+      if (recortar) qRotasEmpresa = qRotasEmpresa.in('id', rotasPermitidas!);
+      const { count: countRotas } = await qRotasEmpresa;
       totalRotas = countRotas || 0;
 
       const { count: countClientes } = await supabase
@@ -79,6 +91,8 @@ export const organizacaoService = {
       .from('rotas')
       .select('id', { count: 'exact', head: true })
       .eq('status', 'ATIVA');
+
+    if (recortar) queryRotas = queryRotas.in('id', rotasPermitidas!);
 
     if (hierarquiaId) {
       // Buscar empresas da hierarquia primeiro
@@ -147,7 +161,12 @@ export const organizacaoService = {
   // EMPRESAS
   // ============================================
 
-  async listarEmpresasPorHierarquia(hierarquiaId: string): Promise<EmpresaResumo[]> {
+  // `rotasPermitidas`: mesmo recorte de `buscarResumoGeral`. Vazio = todas.
+  // `total_clientes` sai da soma de `quantidade_clientes` das rotas, então ele
+  // acompanha o recorte sozinho — sem isso, a empresa mostraria os clientes
+  // de rotas que o usuário não vê.
+  async listarEmpresasPorHierarquia(hierarquiaId: string, rotasPermitidas?: string[]): Promise<EmpresaResumo[]> {
+    const recortar = (rotasPermitidas?.length ?? 0) > 0;
     // Buscar empresas com cidade
     const { data: empresas, error } = await supabase
       .from('empresas')
@@ -172,11 +191,13 @@ export const organizacaoService = {
     const empresasComResumo: EmpresaResumo[] = await Promise.all(
       empresas.map(async (empresa: any) => {
         // Buscar rotas da empresa com quantidade_clientes
-        const { data: rotasEmpresa } = await supabase
+        let qRotas = supabase
           .from('rotas')
           .select('id, quantidade_clientes')
           .eq('empresa_id', empresa.id)
           .eq('status', 'ATIVA');
+        if (recortar) qRotas = qRotas.in('id', rotasPermitidas!);
+        const { data: rotasEmpresa } = await qRotas;
 
         const totalRotas = rotasEmpresa?.length || 0;
         
@@ -534,9 +555,15 @@ export const organizacaoService = {
   // ROTAS
   // ============================================
 
-  async listarRotasPorEmpresa(empresaId: string): Promise<RotaResumo[]> {
+  // `rotasPermitidas`: mesmo recorte de `buscarResumoGeral`. Vazio = todas.
+  // Ela LISTA os cartões, e sem o recorte a tela desenhava rotas que o
+  // usuário não consegue selecionar no seletor mestre — pior que o número
+  // errado, porque ele clica e não vai a lugar nenhum.
+  async listarRotasPorEmpresa(empresaId: string, rotasPermitidas?: string[]): Promise<RotaResumo[]> {
+    const recortar = (rotasPermitidas?.length ?? 0) > 0;
+
     // Buscar rotas com vendedor e quantidade_clientes
-    const { data: rotas, error } = await supabase
+    let qRotas = supabase
       .from('rotas')
       .select(`
         id,
@@ -557,6 +584,10 @@ export const organizacaoService = {
       `)
       .eq('empresa_id', empresaId)
       .order('nome');
+
+    if (recortar) qRotas = qRotas.in('id', rotasPermitidas!);
+
+    const { data: rotas, error } = await qRotas;
 
     if (error) {
       console.error('Erro ao listar rotas:', error);

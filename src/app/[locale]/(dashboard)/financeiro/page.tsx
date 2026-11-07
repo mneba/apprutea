@@ -1663,10 +1663,18 @@ export default function FinanceiroPage() {
           `contas.find(c => c.id === contaFiltro)`, entao com o filtro vazio
           ela tambem e nula. Dois caminhos para o mesmo valor sugerem um
           segundo criterio, e nao ha. */}
+      {/* ⚠ `contasAcessiveis`, NAO `contas`. O seletor de conta do topo da
+          pagina ja filtrava por permissao desde sempre; os tres modais
+          recebiam a lista CRUA de `fn_buscar_contas_dropdown`, que devolve
+          todas as contas da empresa. Entao um ADMIN restrito a 2 rotas nao
+          via as outras 9 no topo e conseguia LANCAR nelas pelo modal —
+          inclusive transferir e ajustar saldo. Achado em 07/11/2026,
+          procurando a causa oposta (rotas que NAO apareciam).
+          Uma lista so, e ela e a que respeita o acesso. */}
       <ModalNovaMovimentacao
         isOpen={modalMovimentacao}
         onClose={() => setModalMovimentacao(false)}
-        contas={contas}
+        contas={contasAcessiveis}
         categorias={categorias}
         onSalvar={handleSalvarMovimentacao}
         contaPadraoId={contaFiltro}
@@ -1675,13 +1683,13 @@ export default function FinanceiroPage() {
       <ModalTransferencia
         isOpen={modalTransferencia}
         onClose={() => setModalTransferencia(false)}
-        contas={contas}
+        contas={contasAcessiveis}
         onSalvar={handleSalvarTransferencia}
       />
       <ModalAjusteSaldo
         isOpen={modalAjuste}
         onClose={() => setModalAjuste(false)}
-        contas={contas}
+        contas={contasAcessiveis}
         onSalvar={handleSalvarAjuste}
         contaPadraoId={contaFiltro}
       />
