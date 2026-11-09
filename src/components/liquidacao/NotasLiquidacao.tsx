@@ -77,8 +77,28 @@ function formatarDataHora(data: string): string {
   });
 }
 
+/**
+ * Data PURA (`YYYY-MM-DD`) — é o tipo de `notas.data_referencia`, que é coluna
+ * `date`, e o que `diaOperacional(liquidacao)` entrega na prop.
+ *
+ * ⚠ NÃO use `new Date(data)` aqui. O JS parseia data-só como MEIA-NOITE UTC,
+ * que em São Paulo (UTC−3) é 21h do dia ANTERIOR — então a nota da liquidação
+ * de 10/10 aparecia como 09/10. Relatado pelo Julio em 12/10/2026, nas duas
+ * liquidações que ele citou, e conferido RODANDO: saía `09/10/26` e `21/09/26`,
+ * os dois números dele caractere por caractere. Erra nos QUATRO fusos da
+ * operação (Sao_Paulo, Manaus, Bogota, Lima), porque todos ficam a oeste de
+ * Greenwich.
+ *
+ * O meio-dia LOCAL é a convenção do projeto para data pura: fica longe das
+ * duas bordas do dia em qualquer fuso. Mesma régua da ficha do empréstimo.
+ *
+ * Para TIMESTAMP existe `formatarDataHora` acima, que é o uso certo de
+ * `new Date(...)` — confundir os dois é o que trouxe este bug.
+ */
 function formatarDataCurta(data: string): string {
-  return new Date(data).toLocaleDateString('pt-BR', {
+  const iso = String(data || '').substring(0, 10);
+  if (iso.length !== 10) return '-';
+  return new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', {
     day: '2-digit',
     month: '2-digit',
     year: '2-digit',

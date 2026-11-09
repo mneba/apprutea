@@ -40,6 +40,9 @@ interface PagamentoParcela {
   cliente_id: string;
   parcela_id: string | null;
   emprestimo_id: string | null;
+  /** O ATO do vendedor. Uma operacao pode cobrir varias parcelas. */
+  operacao_id: string | null;
+  tipo_operacao: string | null;
   clientes?: { nome: string; consecutivo?: string } | null;
 }
 
@@ -71,6 +74,41 @@ function fraseCredito(liq: CreditoLiquido): string {
     return ` · quitou +${qtd} parcelas`;
   }
   return '';
+}
+
+/**
+ * "5 parcelas (11 a 15)" — ou os numeros soltos, quando nao sao seguidos.
+ *
+ * Mesmo texto do aplicativo (`fraseParcelas` em `LiquidacaoDetalhes.tsx`),
+ * pelo mesmo motivo de `fraseCredito`: os dois extratos sao lidos lado a
+ * lado.
+ */
+function fraseParcelas(nums: number[]): string {
+  const un = nums.length === 1 ? 'parcela' : 'parcelas';
+  const seguidos = nums.every((n, i) => i === 0 || n === nums[i - 1] + 1);
+  const quais =
+    seguidos && nums.length > 1 ? `${nums[0]} a ${nums[nums.length - 1]}` : nums.join(', ');
+  return `${nums.length} ${un} (${quais})`;
+}
+
+/** Um ATO do vendedor, com as parcelas que ele cobriu. */
+interface Recebimento {
+  key: string;
+  linhas: PagamentoParcela[];
+  /** O que entrou no caixa na operacao: a soma das linhas que ela substitui. */
+  dinheiro: number;
+  nomeCliente: string;
+  parcelas: number[];
+  quitacao: boolean;
+  /** Mantem a linha por parcela: operacao com credito, ou de uma parcela so. */
+  detalhar: boolean;
+}
+
+/** Uma linha da lista: o grupo colapsado, ou uma parcela dele. */
+interface ItemCobranca {
+  grupo?: Recebimento;
+  p?: PagamentoParcela;
+  rec: Recebimento;
 }
 
 interface EmprestimoDia {
@@ -348,7 +386,7 @@ export function ModalExtratoLiquidacao({
         .select(`
           id, numero_parcela, valor_pago_total, valor_pago_atual, valor_parcela,
           valor_credito_gerado, valor_credito_usado, forma_pagamento, created_at,
-          cliente_id, parcela_id, emprestimo_id,
+          cliente_id, parcela_id, emprestimo_id, operacao_id, tipo_operacao,
           clientes!pagamentos_parcelas_cliente_id_fkey(nome, consecutivo)
         `)
         .eq('liquidacao_id', liquidacao.id)
@@ -359,7 +397,7 @@ export function ModalExtratoLiquidacao({
         // Fallback sem join
         const { data: pagsSem } = await supabase
           .from('pagamentos_parcelas')
-          .select('id, numero_parcela, valor_pago_total, valor_pago_atual, valor_parcela, valor_credito_gerado, valor_credito_usado, forma_pagamento, created_at, cliente_id, parcela_id, emprestimo_id')
+          .select('id, numero_parcela, valor_pago_total, valor_pago_atual, valor_parcela, valor_credito_gerado, valor_credito_usado, forma_pagamento, created_at, cliente_id, parcela_id, emprestimo_id, operacao_id, tipo_operacao')
           .eq('liquidacao_id', liquidacao.id)
           .eq('estornado', false)
           .order('created_at', { ascending: true });
@@ -557,6 +595,105 @@ export function ModalExtratoLiquidacao({
       creditoOculto: ehUltima ? d.oculto : 0,
     };
   };
+
+  // ══════════════════════════════════════════════════════════════════
+  // O EXTRATO LISTA RECEBIMENTOS, NÃO PARCELAS
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // `pagamentos_parcelas` tem uma linha por PARCELA. Uma quitação de 5
+  // parcelas de 61,33 virava cinco linhas de 61,33 — e nenhuma delas é um
+  // valor que passou pela mão de alguém. O que passou foi UM dinheiro de
+  // 306,65.
+  //
+  // Relatado pelo Julio em 07/11/2026: o extrato é o que se confere contra
+  // caixa e banco, e ali o valor da operação não existia em lugar nenhum.
+  //
+  // `operacao_id` é o ato do vendedor — 1 para 1 com o lançamento em
+  // `financeiro` —, preenchido em 100% dos pagamentos desde 2024.
+  //
+  // MEDIDO em 07/11/2026, sobre as 18.591 operações com liquidação:
+  //   · 1.237 cobrem mais de uma parcela, e geram 7.530 linhas;
+  //   · a 5.1 Sebastian em 17/10 mostrava 135 linhas para 48 recebimentos;
+  //   · uma operação NUNCA atravessa cliente, empréstimo nem liquidação —
+  //     ZERO exceções em 19.849. É isto que torna o agrupamento seguro.
+  //
+  // ⚠ O TOTAL NÃO MUDA. O dinheiro se distribui por linha, então a soma do
+  // grupo é a soma das linhas que ele substitui, e `totalCobrancas` continua
+  // saindo de `pagamentosDinheiro`. É mudança de apresentação: o extrato
+  // fecha no mesmo número de antes.
+  //
+  // ⚠ E O DIA COMUM NÃO MUDA DE APARÊNCIA: 17.354 das 18.591 operações têm
+  // uma parcela só e seguem renderizadas exatamente como hoje.
+  //
+  // ⚠ A MESMA REGRA VIVE NO APP (`LiquidacaoDetalhes.tsx`). Se um dos dois
+  // agrupasse e o outro não, o vendedor passaria a conferir dois extratos
+  // diferentes do mesmo dia — que é pior que o defeito original.
+  const recebimentos: Recebimento[] = (() => {
+    const porOp = new Map<string, PagamentoParcela[]>();
+    for (const pg of pagamentosDinheiro) {
+      // Sem `operacao_id` a linha vira o seu próprio recebimento: é o
+      // comportamento de antes, e nada desaparece da tela.
+      const k = pg.operacao_id || pg.id;
+      const arr = porOp.get(k);
+      if (arr) arr.push(pg);
+      else porOp.set(k, [pg]);
+    }
+    // A ordem é a de `pagamentosDinheiro`, que já vem por `created_at`: o
+    // Map preserva a ordem de inserção.
+    return [...porOp.entries()].map(([key, linhas]) => {
+      const dinheiro = linhas.reduce(
+        (acc, pg) =>
+          acc +
+          Number(pg.valor_pago_atual || pg.valor_pago_total || 0) -
+          Number(pg.valor_credito_usado || 0),
+        0
+      );
+
+      // ⚠ CRÉDITO SEGUE DETALHADO, a pedido do Julio — e é também o único
+      // caso em que a soma seria ambígua: 378 operações têm duas formas de
+      // pagamento, e são exatamente a mistura dinheiro + crédito.
+      //
+      // A pergunta é feita pelo GRUPO *e* pelo empréstimo no dia. Pelo grupo
+      // não basta: as linhas de forma CREDITO estão fora de
+      // `pagamentosDinheiro` (e com razão — não são caixa), então um grupo
+      // pode parecer limpo e ainda assim ter crédito aplicado nele, que é a
+      // nota que `fraseCredito` acrescenta à última linha visível do
+      // empréstimo. Colapsar esse grupo engoliria a nota.
+      const eid = linhas[0].emprestimo_id;
+      const doDia = (eid ? creditoDoDiaPorEmprestimo.get(eid) : undefined) || {
+        consumido: 0,
+        oculto: 0,
+        parcelas: 0,
+      };
+      const temCredito =
+        doDia.consumido > 0 ||
+        doDia.oculto > 0 ||
+        linhas.some((pg) => Number(pg.valor_credito_gerado || 0) > 0);
+
+      return {
+        key,
+        linhas,
+        dinheiro,
+        nomeCliente: linhas[0].clientes?.nome || `Parcela ${linhas[0].numero_parcela}`,
+        parcelas: linhas.map((pg) => Number(pg.numero_parcela || 0)).sort((x, y) => x - y),
+        quitacao: linhas.some((pg) => pg.tipo_operacao === 'QUITACAO'),
+        // Uma parcela só já É um recebimento: nada a agrupar, e a linha de
+        // hoje diz mais (mostra o valor da parcela).
+        detalhar: temCredito || linhas.length === 1,
+      };
+    });
+  })();
+
+  /**
+   * A lista que a tela percorre, numerada de 1 a N.
+   *
+   * Grupo colapsado entra como UM item; grupo detalhado entra como as suas
+   * linhas, cada uma renderizada como antes. Assim o caso com crédito não
+   * muda nada, que é o que o Julio pediu.
+   */
+  const itensCobranca: ItemCobranca[] = recebimentos.flatMap((rec): ItemCobranca[] =>
+    rec.detalhar ? rec.linhas.map((pg) => ({ p: pg, rec })) : [{ grupo: rec, rec }]
+  );
 
   // Entradas separadas em 3 grupos (exclui ANULADOS do cálculo)
   const registrosEntradas = registros.filter(
@@ -758,19 +895,37 @@ export function ModalExtratoLiquidacao({
   <div class="row"><span>Renovações</span><span>${resumoOp.renovados}</span></div>
   <div class="row"><span>Renegociações</span><span>${resumoOp.renegociados}</span></div>
 
-  <div class="secao">Detalhes Entradas (${pagamentosDinheiro.length + entradasOutras.length})</div>
+  <div class="secao">Detalhes Entradas (${recebimentos.length + entradasOutras.length})</div>
   ${pagamentosDinheiro.length === 0 && entradasOutras.length === 0 ? `<div class="sub cinza">Nenhuma entrada</div>` : `
     ${pagamentosDinheiro.length > 0 ? `
-      <div class="sub cinza">── Cobranças em dinheiro (${pagamentosDinheiro.length}) ──</div>
-      ${pagamentosDinheiro.map((p, idx) => {
-        const nomeCliente = p.clientes?.nome || `Parcela ${p.numero_parcela}`;
+      <div class="sub cinza">── Cobranças em dinheiro (${recebimentos.length}) ──</div>
+      ${itensCobranca.map((item, idx) => {
+        const num = String(idx + 1).padStart(2, '0');
+
+        // Recebimento que cobriu varias parcelas: o valor da OPERACAO em
+        // cima, que e o que se confere contra o caixa.
+        if (item.grupo) {
+          const rec = item.grupo;
+          const base = rec.linhas[0];
+          return `<div class="item">
+          <div class="item-row">
+            <span class="item-cat">${num} ${rec.nomeCliente}</span>
+            <span class="item-val" style="color:${rec.quitacao ? '#7C3AED' : '#059669'}">+${formatarMoeda(rec.dinheiro)}</span>
+          </div>
+          <div class="item-sub">${fraseParcelas(rec.parcelas)}${rec.quitacao ? ' · quitação' : ''}</div>
+          <div class="item-meta">${formatarHora(base.created_at)}${base.forma_pagamento ? ` · ${formatarFormaPagamento(base.forma_pagamento)}` : ''}</div>
+        </div>`;
+        }
+
+        const p = item.p!;
+        const nomeCliente = item.rec.nomeCliente;
         const valorPagoAtual = Number(p.valor_pago_atual || p.valor_pago_total || 0);
         const creditoUsado = Number(p.valor_credito_usado || 0);
         const dinheiroRecebido = valorPagoAtual - creditoUsado;
         const liq = creditoLiquido(p);
         return `<div class="item">
           <div class="item-row">
-            <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${nomeCliente}</span>
+            <span class="item-cat">${num} ${nomeCliente}</span>
             <span class="item-val verde">+${formatarMoeda(dinheiroRecebido)}</span>
           </div>
           <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${fraseCredito(liq)}${liq.excedente > 0 ? ` · Crédito gerado: ${formatarMoeda(liq.excedente)}` : ''}</div>
@@ -1026,7 +1181,7 @@ export function ModalExtratoLiquidacao({
 
               {/* Detalhes entradas */}
               <Secao
-                titulo={`Detalhes Entradas (${pagamentosDinheiro.length + entradasOutras.length})`}
+                titulo={`Detalhes Entradas (${recebimentos.length + entradasOutras.length})`}
                 cor="text-green-700"
               >
                 {pagamentosDinheiro.length === 0 && entradasOutras.length === 0 ? (
@@ -1035,12 +1190,22 @@ export function ModalExtratoLiquidacao({
                   <>
                     {pagamentosDinheiro.length > 0 && (
                       <>
+                        {/* A contagem é de RECEBIMENTOS — atos do vendedor —, não de parcelas. */}
                         <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 mt-2">
-                          ── Cobranças em dinheiro ({pagamentosDinheiro.length}) ──
+                          ── Cobranças em dinheiro ({recebimentos.length}) ──
                         </div>
-                        {pagamentosDinheiro.map((p, idx) => (
-                          <CardCobranca key={p.id} p={p} idx={idx} liq={creditoLiquido(p)} />
-                        ))}
+                        {itensCobranca.map((item, idx) =>
+                          item.grupo ? (
+                            <CardRecebimento key={item.grupo.key} rec={item.grupo} idx={idx} />
+                          ) : (
+                            <CardCobranca
+                              key={item.p!.id}
+                              p={item.p!}
+                              idx={idx}
+                              liq={creditoLiquido(item.p!)}
+                            />
+                          )
+                        )}
                         <div className="flex justify-between items-center px-3 py-2 bg-green-50 rounded mt-2">
                           <span className="text-sm font-semibold text-green-700">TOTAL COBRANÇAS</span>
                           <span className="text-sm font-bold text-green-700">
@@ -1341,6 +1506,42 @@ function CardCobranca({
       <div className="text-[10px] text-gray-400 mt-1">
         {formatarHora(p.created_at)}
         {p.forma_pagamento && ` · ${formatarFormaPagamento(p.forma_pagamento)}`}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * UM RECEBIMENTO QUE COBRIU VARIAS PARCELAS.
+ *
+ * O valor da OPERACAO em cima — que e o que se confere contra o caixa e o
+ * banco — e a quantidade de parcelas embaixo. Pedido do Julio em
+ * 07/11/2026: "mostrar primeiro o valor realmente recebido na operacao e
+ * abaixo apenas informar que corresponde a 5 parcelas".
+ */
+function CardRecebimento({ rec, idx }: { rec: Recebimento; idx: number }) {
+  const base = rec.linhas[0];
+  // Quitacao tem cor propria: e ela que explica todo salto de numero do dia.
+  const corValor = rec.quitacao ? 'text-purple-600' : 'text-green-600';
+  const borda = rec.quitacao ? 'border-purple-400' : 'border-green-400';
+
+  return (
+    <div className={`p-3 bg-green-50 rounded-lg border-l-4 ${borda}`}>
+      <div className="flex justify-between items-baseline">
+        <span className="text-sm font-semibold text-gray-900">
+          {String(idx + 1).padStart(2, '0')} {rec.nomeCliente}
+        </span>
+        <span className={`text-sm font-bold ${corValor} whitespace-nowrap pl-2`}>
+          +{formatarMoeda(rec.dinheiro)}
+        </span>
+      </div>
+      <div className="text-xs text-gray-600 mt-1">
+        {fraseParcelas(rec.parcelas)}
+        {rec.quitacao && ' · quitação'}
+      </div>
+      <div className="text-[10px] text-gray-400 mt-1">
+        {formatarHora(base.created_at)}
+        {base.forma_pagamento && ` · ${formatarFormaPagamento(base.forma_pagamento)}`}
       </div>
     </div>
   );

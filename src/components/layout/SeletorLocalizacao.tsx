@@ -28,8 +28,8 @@ export function SeletorLocalizacao() {
     (profile.rotas_ids || []).length <= 1 &&
     localizacao.rota_id !== null // Só oculta se já tiver selecionado
   );
-  const [isOpen, setIsOpen] = useState(false);
-
+  const [isOpen, setIsOpen] = useState(false);
+
   // O campo de busca recebe o foco quando o seletor abre: quem clica ali
   // está procurando alguma coisa, e obrigar um segundo clique no campo é
   // cobrar pedágio. `requestAnimationFrame` porque o input só existe
@@ -225,12 +225,21 @@ export function SeletorLocalizacao() {
     cidadeId ? empresas.filter((e) => e.cidade_id === cidadeId) : [];
 
   // ============================================================
-  // BUSCA GLOBAL DE ROTAS (SUPER_ADMIN)
+  // BUSCA DE ROTAS E EMPRESAS
   // ============================================================
-  // `rotas` não tem empresa_id — o vínculo mora em `empresas.rotas_ids`.
-  // Então o índice é montado ao contrário: percorre as empresas e resolve
-  // cada rota_id, o que já entrega o caminho completo país › estado ›
-  // cidade › empresa para exibir e para gravar na localização de uma vez.
+  // ⚠ O comentário que estava aqui dizia que "`rotas` não tem empresa_id".
+  // TEM — é a coluna, e é a FONTE do vínculo. `empresas.rotas_ids` é uma
+  // CÓPIA, que até 07/11/2026 só era mantida no INSERT: rota movida de
+  // empresa ficava na antiga, rota apagada deixava o id na lista. Foi esse
+  // comentário que fez a lista virar a régua aqui.
+  //
+  // Hoje a cópia é mantida por `tr_rota_sincroniza_empresa`
+  // (sql/2026-11-07_rota_empresa_uma_regua.sql), então o índice abaixo está
+  // correto — mas montá-lo a partir de `rota.empresa_id` seria mais direto, e
+  // fica pendente porque exige mexer no tipo `Rota` e no serviço.
+  //
+  // O índice é montado percorrendo as EMPRESAS, o que já entrega o caminho
+  // país › estado › cidade › empresa para exibir e para gravar de uma vez.
   const indiceRotas = useMemo(() => {
     if (rotasTodas.length === 0) return [];
 
@@ -260,6 +269,24 @@ export function SeletorLocalizacao() {
     // de um usuário comum contém apenas as rotas das empresas dele.
   }, [rotasTodas, empresas, cidades, hierarquias]);
 
+  // Índice de EMPRESAS, para a busca achar a empresa mesmo quando o termo não
+  // bate com nenhuma rota — inclusive empresa sem rota nenhuma, que pelo
+  // índice de rotas seria invisível.
+  //
+  // Pedido do Julio em 07/11/2026: *"a busca não facilita localizar pelo nome
+  // da empresa"*. O índice de rotas JÁ procurava no nome da empresa
+  // (`${rota.nome} ${empresa.nome}`), mas o resultado sempre saía em forma de
+  // ROTA, com a empresa espremida no fim do caminho geográfico. Procurar
+  // funcionava; encontrar, não.
+  const indiceEmpresas = useMemo(() => {
+    return empresas.map((empresa) => ({
+      empresa,
+      hierarquia: hierarquias.find((h) => h.id === empresa.hierarquia_id) || null,
+      cidade: empresa.cidade_id ? cidades.find((c) => c.id === empresa.cidade_id) || null : null,
+      busca: normalizarBusca(empresa.nome),
+    }));
+  }, [empresas, hierarquias, cidades]);
+
   const termoBusca = normalizarBusca(buscaRota);
   const buscandoRota = termoBusca.length > 0;
 
@@ -268,6 +295,13 @@ export function SeletorLocalizacao() {
     if (!buscandoRota) return [];
     return indiceRotas.filter((item) => item.busca.includes(termoBusca));
   }, [buscandoRota, indiceRotas, termoBusca]);
+
+  const resultadosEmpresas = useMemo(() => {
+    if (!buscandoRota) return [];
+    return indiceEmpresas.filter((item) => item.busca.includes(termoBusca));
+  }, [buscandoRota, indiceEmpresas, termoBusca]);
+
+  const semResultado = resultadosBusca.length === 0 && resultadosEmpresas.length === 0;
 
   // Selecionar empresa - SÓ FECHA SE NÃO TIVER ROTAS
   const handleSelecionarEmpresa = async (empresa: Empresa) => {
@@ -497,7 +531,7 @@ export function SeletorLocalizacao() {
                   type="text"
                   value={buscaRota}
                   onChange={(e) => setBuscaRota(e.target.value)}
-                  placeholder={isSuperAdmin ? 'Buscar rota em todas as empresas...' : 'Buscar rota...'}
+                  placeholder="Buscar empresa ou rota..."
                   className="w-full pl-9 pr-9 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent focus:bg-white"
                 />
                 {buscaRota && (
@@ -514,8 +548,22 @@ export function SeletorLocalizacao() {
             </div>
           )}
 
-          {/* Content */}
-          <div className="p-3 max-h-96 overflow-y-auto">
+          {/*
+            Content.
+
+            ⚠ A árvore ENCOLHE depois que uma empresa é escolhida, para a
+            lista de rotas lá embaixo crescer. Pedido do Julio em 07/11/2026:
+            *"depois de selecionar país, cidade e empresa, ampliar a área da
+            lista de rotas em vez de manter um scroll muito pequeno"*.
+
+            O raciocínio: antes de escolher a empresa, a árvore é a tarefa;
+            depois, ela é só contexto e a rota passa a ser a tarefa. A altura
+            total do painel fica parecida (384+160 antes, 208+288 agora), o
+            que importa porque ele não pode passar da viewport.
+          */}
+          <div className={`p-3 overflow-y-auto ${
+            localizacao.empresa && !buscandoRota ? 'max-h-52' : 'max-h-96'
+          }`}>
             {loading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
@@ -523,56 +571,120 @@ export function SeletorLocalizacao() {
             ) : buscandoRota ? (
               /* Resultados da busca substituem a árvore de países */
               <div className="space-y-1">
-                {resultadosBusca.length === 0 ? (
+                {semResultado ? (
                   <div className="text-center py-8 text-gray-500">
                     <Search className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    <p className="text-sm">Nenhuma rota encontrada</p>
-                    <p className="text-xs text-gray-400 mt-1">Tente outro trecho do nome</p>
+                    <p className="text-sm">Nada encontrado</p>
+                    <p className="text-xs text-gray-400 mt-1">Tente outro trecho do nome da empresa ou da rota</p>
                   </div>
                 ) : (
                   <>
-                    <div className="px-1 pb-1 text-xs text-gray-400">
-                      {resultadosBusca.length}{' '}
-                      {resultadosBusca.length === 1 ? 'rota encontrada' : 'rotas encontradas'}
-                    </div>
-                    {resultadosBusca.slice(0, LIMITE_RESULTADOS).map((item) => {
-                      const caminho = [
-                        item.hierarquia?.pais,
-                        item.hierarquia?.estado,
-                        item.cidade?.nome,
-                        item.empresa.nome,
-                      ].filter(Boolean).join(' › ');
-                      const selecionada = localizacao.rota_id === item.rota.id
-                        && localizacao.empresa_id === item.empresa.id;
+                    {/* EMPRESAS primeiro: quem digita o nome de uma empresa
+                        quer a empresa, e antes só recebia as rotas dela. */}
+                    {resultadosEmpresas.length > 0 && (
+                      <>
+                        <div className="px-1 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide">
+                          {resultadosEmpresas.length}{' '}
+                          {resultadosEmpresas.length === 1 ? 'empresa' : 'empresas'}
+                        </div>
+                        {resultadosEmpresas.map((item) => {
+                          const local = [
+                            item.hierarquia?.pais,
+                            item.hierarquia?.estado,
+                            item.cidade?.nome,
+                          ].filter(Boolean).join(' › ');
+                          const selecionada = localizacao.empresa_id === item.empresa.id;
 
-                      return (
-                        <button
-                          key={`${item.empresa.id}-${item.rota.id}`}
-                          onClick={() => handleSelecionarResultadoBusca(item)}
-                          className={`
-                            w-full flex items-start gap-2 px-3 py-2 rounded-lg text-left transition-colors
-                            ${selecionada
-                              ? 'bg-green-100 text-green-700 border border-green-300'
-                              : 'hover:bg-gray-100 text-gray-700'}
-                          `}
-                        >
-                          <Navigation className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-sm font-medium truncate" title={item.rota.nome}>
-                              {item.rota.nome}
-                            </span>
-                            <span className="block text-xs text-gray-500 truncate" title={caminho}>
-                              {caminho}
-                            </span>
-                          </span>
-                          {selecionada && <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />}
-                        </button>
-                      );
-                    })}
-                    {resultadosBusca.length > LIMITE_RESULTADOS && (
-                      <div className="px-3 py-2 text-xs text-gray-400 italic">
-                        Mostrando {LIMITE_RESULTADOS} de {resultadosBusca.length}. Refine a busca.
-                      </div>
+                          return (
+                            <button
+                              key={item.empresa.id}
+                              onClick={() => {
+                                // Posiciona a árvore antes, como
+                                // `handleSelecionarResultadoBusca` faz: o
+                                // próprio `handleSelecionarEmpresa` limpa a
+                                // busca, então a árvore reaparece na hora e
+                                // tem de reaparecer no lugar certo.
+                                setPaisSelecionado(item.hierarquia?.pais || null);
+                                setHierarquiaIdSelecionada(item.empresa.hierarquia_id || null);
+                                setCidadeIdSelecionada(item.cidade?.id || null);
+                                handleSelecionarEmpresa(item.empresa);
+                              }}
+                              className={`
+                                w-full flex items-start gap-2 px-3 py-2 rounded-lg text-left transition-colors
+                                ${selecionada
+                                  ? 'bg-green-100 text-green-700 border border-green-300'
+                                  : 'hover:bg-gray-100 text-gray-700'}
+                              `}
+                            >
+                              <Building2 className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-gray-500" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-semibold truncate" title={item.empresa.nome}>
+                                  {item.empresa.nome}
+                                </span>
+                                {local && (
+                                  <span className="block text-xs text-gray-400 truncate" title={local}>
+                                    {local}
+                                  </span>
+                                )}
+                              </span>
+                              {selecionada && <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                            </button>
+                          );
+                        })}
+                      </>
+                    )}
+
+                    {resultadosBusca.length > 0 && (
+                      <>
+                        <div className={`px-1 pb-1 text-[11px] font-semibold text-gray-400 uppercase tracking-wide ${resultadosEmpresas.length > 0 ? 'pt-2' : ''}`}>
+                          {resultadosBusca.length}{' '}
+                          {resultadosBusca.length === 1 ? 'rota' : 'rotas'}
+                        </div>
+                        {resultadosBusca.slice(0, LIMITE_RESULTADOS).map((item) => {
+                          // ⚠ A EMPRESA sai do caminho e ganha linha própria, em
+                          // negrito. Antes ela era o último pedaço de
+                          // "Brasil › São Paulo › São Paulo › PrimeCred", e com
+                          // `truncate` era justamente ela que sumia primeiro —
+                          // o pedido do Julio em 07/11/2026.
+                          const local = [
+                            item.hierarquia?.pais,
+                            item.hierarquia?.estado,
+                            item.cidade?.nome,
+                          ].filter(Boolean).join(' › ');
+                          const selecionada = localizacao.rota_id === item.rota.id
+                            && localizacao.empresa_id === item.empresa.id;
+
+                          return (
+                            <button
+                              key={`${item.empresa.id}-${item.rota.id}`}
+                              onClick={() => handleSelecionarResultadoBusca(item)}
+                              className={`
+                                w-full flex items-start gap-2 px-3 py-2 rounded-lg text-left transition-colors
+                                ${selecionada
+                                  ? 'bg-green-100 text-green-700 border border-green-300'
+                                  : 'hover:bg-gray-100 text-gray-700'}
+                              `}
+                            >
+                              <Navigation className="w-3.5 h-3.5 mt-0.5 flex-shrink-0 text-blue-600" />
+                              <span className="min-w-0 flex-1">
+                                <span className="block text-sm font-medium truncate" title={item.rota.nome}>
+                                  {item.rota.nome}
+                                </span>
+                                <span className="block text-xs truncate" title={`${item.empresa.nome}${local ? ' · ' + local : ''}`}>
+                                  <span className="font-semibold text-gray-600">{item.empresa.nome}</span>
+                                  {local && <span className="text-gray-400"> · {local}</span>}
+                                </span>
+                              </span>
+                              {selecionada && <Check className="w-4 h-4 flex-shrink-0 mt-0.5" />}
+                            </button>
+                          );
+                        })}
+                        {resultadosBusca.length > LIMITE_RESULTADOS && (
+                          <div className="px-3 py-2 text-xs text-gray-400 italic">
+                            Mostrando {LIMITE_RESULTADOS} de {resultadosBusca.length}. Refine a busca.
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 )}
@@ -688,16 +800,20 @@ export function SeletorLocalizacao() {
                                                   key={empresa.id}
                                                   onClick={() => handleSelecionarEmpresa(empresa)}
                                                   className={`
-                                                    w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors
+                                                    w-full flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold transition-colors
                                                     ${localizacao.empresa_id === empresa.id
                                                       ? 'bg-green-100 text-green-700 border border-green-300'
-                                                      : 'hover:bg-gray-100 text-gray-600'}
+                                                      : 'hover:bg-gray-100 text-gray-800'}
                                                   `}
                                                 >
-                                                  <Building2 className="w-3 h-3" />
-                                                  {empresa.nome}
+                                                  {/* Negrito e cor mais forte que a cidade acima: pedido do
+                                                      Julio em 07/11/2026, *"a rota fica mais evidente que a
+                                                      empresa"*. A empresa é o nível em que o erro custa caro
+                                                      — entrar na rota certa da empresa errada. */}
+                                                  <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
+                                                  <span className="truncate">{empresa.nome}</span>
                                                   {localizacao.empresa_id === empresa.id && (
-                                                    <Check className="w-3 h-3 ml-auto" />
+                                                    <Check className="w-3.5 h-3.5 ml-auto flex-shrink-0" />
                                                   )}
                                                 </button>
                                               ))}
@@ -740,11 +856,20 @@ export function SeletorLocalizacao() {
                 </div>
               ) : rotas.length > 0 ? (
                 <>
-                  <div className="text-xs text-gray-500 mb-2">Selecione a rota (opcional):</div>
+                  <div className="text-xs text-gray-500 mb-2 flex items-center gap-1.5">
+                    <span className="font-semibold text-gray-700 truncate">{localizacao.empresa.nome}</span>
+                    <span className="text-gray-400">·</span>
+                    <span>selecione a rota ({rotas.length})</span>
+                  </div>
 
                   {/* Teto de altura: com dezenas de rotas o wrap crescia para
-                      fora da viewport e as últimas ficavam inalcançáveis. */}
-                  <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto pr-1">
+                      fora da viewport e as últimas ficavam inalcançáveis.
+                      ⚠ Era `max-h-40` (160px) — o "scroll muito pequeno" do
+                      relato do Julio em 07/11/2026. Com 11 rotas de nome longo
+                      cabiam ~3 fileiras de pílulas, e a rolagem interna num
+                      wrap de pílulas é fácil de não notar. A árvore acima
+                      encolheu para pagar por este espaço. */}
+                  <div className="flex flex-wrap gap-2 max-h-72 overflow-y-auto pr-1">
                     <button
                       onClick={handleLimparRota}
                       className={`

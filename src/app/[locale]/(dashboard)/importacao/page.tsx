@@ -331,9 +331,29 @@ export default function ImportacaoPage() {
                 <p><span className="text-blue-600">Empresa:</span> {rota.empresas?.nome || '(sem nome)'}</p>
                 <p><span className="text-blue-600">Vendedor:</span> {rota.vendedores?.nome || '(rota sem vendedor)'}</p>
                 {!rota.vendedor_id && (
-                  <p className="text-red-700 font-medium">
-                    Esta rota não tem vendedor. A importação exige um — corrija a rota antes.
-                  </p>
+                  /*
+                    ⚠ Esta mensagem é a PRIMEIRA linha de defesa, não a única.
+                    Relato do Julio em 06/11/2026: a rota sem vendedor dava
+                    "erro técnico" e levou tempo para alguém descobrir o
+                    motivo. A causa estava no banco — `fn_importacao_criar`
+                    conferia com `IS DISTINCT FROM`, e NULL IS DISTINCT FROM
+                    NULL é FALSO, então o nulo passava e estourava lá adiante
+                    na constraint NOT NULL, com a mensagem crua do Postgres.
+                    Corrigido em sql/2026-11-07_importacao_exige_vendedor.sql.
+
+                    Aqui a mensagem aparece ANTES de a pessoa tentar; lá ela
+                    cobre quem chegou por outro caminho (Retomar, RPC direta)
+                    ou perdeu o vendedor no meio.
+                  */
+                  <div className="mt-2 p-2 bg-red-50 border border-red-200 rounded-md">
+                    <p className="text-red-800 font-medium">
+                      É necessário cadastrar ou vincular um vendedor antes de continuar a migração.
+                    </p>
+                    <p className="text-red-700 text-xs mt-0.5">
+                      A rota <strong>{rota.nome}</strong> não tem vendedor. Faça o vínculo em
+                      Vendedores e volte aqui — a importação grava os empréstimos no nome dele.
+                    </p>
+                  </div>
                 )}
               </div>
             )}

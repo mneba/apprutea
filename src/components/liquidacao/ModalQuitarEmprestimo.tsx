@@ -16,13 +16,29 @@ import {
 // TIPOS
 // =====================================================
 
+// O CONTRATO É DE `fn_quitar_emprestimo`, e é ela que manda. Os três campos
+// de conta abaixo são exatamente as três variáveis dela, com os mesmos nomes:
+//
+//   v_saldo_bruto         = Σ valor_saldo das parcelas EM ABERTO
+//   v_credito_a_usar      = LEAST(crédito, saldo_bruto)
+//   v_dinheiro_necessario = saldo_bruto − credito_a_usar
+//
+// E ela RECUSA `p_valor_pagamento` diferente do dinheiro necessário por mais
+// de 0,01 — nas duas direções. Então a tela não tem liberdade de cálculo: ou
+// repete a conta da função, ou o botão não funciona.
 interface DadosQuitacao {
   emprestimo_id: string;
   cliente_nome: string;
-  valor_saldo: number;        // emprestimos.valor_saldo
-  credito_disponivel: number; // SUM(saldo_excedente)
-  saldo_real: number;         // valor_saldo - credito_disponivel
-  valor_dinheiro: number;     // MAX(saldo_real - credito_disponivel, 0)
+  /** Σ `valor_saldo` das parcelas em aberto — o BRUTO, sem desconto nenhum. */
+  saldo_bruto: number;
+  /** Σ `saldo_excedente` das parcelas. */
+  credito_disponivel: number;
+  /** O que a função vai consumir de crédito: nunca mais que o saldo bruto. */
+  credito_a_usar: number;
+  /** O que o cliente tem de entregar em dinheiro. */
+  valor_dinheiro: number;
+  /** Por que a função recusaria, ou null. Medido ANTES de habilitar o botão. */
+  impedimento: string | null;
 }
 
 interface Props {
@@ -39,10 +55,12 @@ interface Props {
 // HELPERS
 // =====================================================
 
+// `$` e as duas casas — regra do Mauricio, 04/11/2026. O sistema opera em
+// mais de um país e não existe campo de moeda no schema.
 function formatarMoeda(valor: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
+  return '$ ' + new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(valor || 0);
 }
 
@@ -90,41 +108,63 @@ export function ModalQuitarEmprestimo({
     try {
       const supabase = (await import('@/lib/supabase/client')).createClient();
       
-      // Buscar saldo do empréstimo
-      const { data: emprestimo, error: errEmp } = await supabase
-        .from('emprestimos')
-        .select('id, valor_saldo')
-        .eq('id', emprestimoId)
-        .single();
-      
-      if (errEmp) throw errEmp;
-      if (!emprestimo) throw new Error('Empréstimo não encontrado');
-      
-      // Buscar crédito disponível (saldo_excedente das parcelas)
+      // UMA consulta, na mesma tabela da função: as duas somas saem daqui.
+      //
+      // ⚠ Isto lia `emprestimos.valor_saldo` e subtraía o crédito. Era
+      // desconto DUPLO — aquela coluna já vem líquida, porque o gatilho
+      // `atualizar_saldo_emprestimo` faz `GREATEST(0, Σ abertas − crédito)`.
+      // Na Camila Rafaela dava `max(35 − 135, 0)` = 0, e a tela mandava 0 em
+      // `p_valor_pagamento`; a função recusava com "Dinheiro necessário: 35".
+      // Quitar pelo web um empréstimo COM crédito nunca funcionou — são 23
+      // empréstimos nessa situação hoje.
+      //
+      // A função, essa, já tinha sido consertada do mesmo erro: ver o
+      // "⭐⭐⭐ CORREÇÃO CENTRAL" no corpo dela.
       const { data: parcelas, error: errParcelas } = await supabase
         .from('emprestimo_parcelas')
-        .select('saldo_excedente')
-        .eq('emprestimo_id', emprestimoId)
-        .gt('saldo_excedente', 0);
-      
+        .select('status, valor_saldo, saldo_excedente')
+        .eq('emprestimo_id', emprestimoId);
+
       if (errParcelas) throw errParcelas;
-      
-      const creditoDisponivel = (parcelas || []).reduce(
-        (acc, p) => acc + (parseFloat(p.saldo_excedente) || 0), 
-        0
-      );
-      
-      const valorSaldo = parseFloat(emprestimo.valor_saldo) || 0;
-      const saldoReal = Math.max(valorSaldo - creditoDisponivel, 0);
-      const valorDinheiro = Math.max(saldoReal - creditoDisponivel, 0);
-      
+      if (!parcelas || parcelas.length === 0) {
+        throw new Error('Empréstimo sem parcelas');
+      }
+
+      const ABERTAS = ['PENDENTE', 'PARCIAL', 'VENCIDO'];
+      const saldoBruto = parcelas
+        .filter((p) => ABERTAS.includes(p.status))
+        .reduce((acc, p) => acc + (parseFloat(p.valor_saldo) || 0), 0);
+      // O `> 0` repete o `WHERE ep.saldo_excedente > 0` da função. Hoje dá no
+      // mesmo — medido: 51.826 parcelas, zero nulas e zero negativas, menor
+      // valor 0,00 —, mas somar tudo seria uma divergência esperando um dado
+      // negativo aparecer. Duas réguas no mesmo fluxo é o formato de erro que
+      // este projeto já pagou várias vezes.
+      const creditoDisponivel = parcelas
+        .filter((p) => (parseFloat(p.saldo_excedente) || 0) > 0)
+        .reduce((acc, p) => acc + (parseFloat(p.saldo_excedente) || 0), 0);
+
+      const creditoAUsar = Math.min(creditoDisponivel, saldoBruto);
+      const valorDinheiro = saldoBruto - creditoAUsar;
+
+      // As duas recusas da função, antecipadas — com o mesmo texto, para o
+      // operador não ver uma coisa na tela e outra no erro.
+      let impedimento: string | null = null;
+      if (saldoBruto <= 0) {
+        impedimento = 'Não há parcelas em aberto para quitar.';
+      } else if (creditoDisponivel > saldoBruto + 0.01) {
+        impedimento = `Crédito (${formatarMoeda(creditoDisponivel)}) maior que as parcelas `
+          + `em aberto (${formatarMoeda(saldoBruto)}). Resolva a sobra de `
+          + `${formatarMoeda(creditoDisponivel - saldoBruto)} antes de quitar.`;
+      }
+
       setDados({
         emprestimo_id: emprestimoId,
         cliente_nome: clienteNome,
-        valor_saldo: valorSaldo,
+        saldo_bruto: saldoBruto,
         credito_disponivel: creditoDisponivel,
-        saldo_real: saldoReal,
-        valor_dinheiro: Math.max(saldoReal, 0), // Valor que precisa pagar em dinheiro
+        credito_a_usar: creditoAUsar,
+        valor_dinheiro: valorDinheiro,
+        impedimento,
       });
       
     } catch (err: any) {
@@ -137,6 +177,7 @@ export function ModalQuitarEmprestimo({
 
   const handleConfirmarQuitacao = async () => {
     if (!dados || !liquidacaoId) return;
+    if (dados.impedimento) return;
     
     setProcessando(true);
     setErro(null);
@@ -144,9 +185,14 @@ export function ModalQuitarEmprestimo({
     try {
       const supabase = (await import('@/lib/supabase/client')).createClient();
       
-      // Calcular valores para a função
-      const valorPagamento = dados.valor_dinheiro; // Valor em dinheiro necessário
-      const valorCredito = Math.min(dados.credito_disponivel, dados.saldo_real); // Crédito a usar
+      // `p_valor_pagamento` tem de ser EXATO: a função recusa fora de ±0,01.
+      //
+      // `p_valor_credito` está na assinatura e a função o IGNORA — ela calcula
+      // o próprio `v_credito_a_usar`, porque o crédito nunca pode sobrar
+      // depois da quitação (foi a escolha do operador que apagava crédito, no
+      // caso thalles). Mandamos o valor certo de qualquer forma.
+      const valorPagamento = dados.valor_dinheiro;
+      const valorCredito = dados.credito_a_usar;
       
       const { data, error } = await supabase.rpc('fn_quitar_emprestimo', {
         p_emprestimo_id: emprestimoId,
@@ -250,13 +296,15 @@ export function ModalQuitarEmprestimo({
 
               {/* Valores */}
               <div className="space-y-3">
+                {/* A conta se lê de cima para baixo e FECHA:
+                    parcelas em aberto − crédito a usar = dinheiro. */}
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Wallet className="w-5 h-5 text-gray-400" />
-                    <span className="text-gray-600">Saldo devedor</span>
+                    <span className="text-gray-600">Parcelas em aberto</span>
                   </div>
                   <span className="font-semibold text-gray-900">
-                    {formatarMoeda(dados.valor_saldo)}
+                    {formatarMoeda(dados.saldo_bruto)}
                   </span>
                 </div>
 
@@ -264,10 +312,15 @@ export function ModalQuitarEmprestimo({
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <CreditCard className="w-5 h-5 text-blue-500" />
-                      <span className="text-blue-700">Crédito disponível</span>
+                      <span className="text-blue-700">
+                        Crédito a usar
+                        {dados.credito_a_usar < dados.credito_disponivel
+                          ? ` (de ${formatarMoeda(dados.credito_disponivel)})`
+                          : ''}
+                      </span>
                     </div>
                     <span className="font-semibold text-blue-700">
-                      - {formatarMoeda(dados.credito_disponivel)}
+                      - {formatarMoeda(dados.credito_a_usar)}
                     </span>
                   </div>
                 )}
@@ -305,14 +358,27 @@ export function ModalQuitarEmprestimo({
                 </div>
               </div>
 
-              {/* Aviso */}
-              <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
-                <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                <div className="text-sm text-amber-800">
-                  <p className="font-medium">Atenção!</p>
-                  <p>Todas as parcelas restantes serão marcadas como pagas. Esta ação é irreversível.</p>
+              {/* Aviso — ou o motivo pelo qual a função vai recusar. Dizer
+                  isto ANTES do clique é a diferença entre "não posso quitar
+                  porque o crédito excede a dívida" e um erro vermelho depois
+                  de apertar um botão verde. */}
+              {dados.impedimento ? (
+                <div className="flex items-start gap-3 p-4 bg-red-50 rounded-lg border border-red-200">
+                  <AlertTriangle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-red-800">
+                    <p className="font-medium">Não é possível quitar agora</p>
+                    <p>{dados.impedimento}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-start gap-3 p-4 bg-amber-50 rounded-lg border border-amber-200">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <p className="font-medium">Atenção!</p>
+                    <p>Todas as parcelas restantes serão marcadas como pagas. Esta ação é irreversível.</p>
+                  </div>
+                </div>
+              )}
 
               {/* Erro */}
               {erro && (
@@ -336,8 +402,8 @@ export function ModalQuitarEmprestimo({
             </button>
             <button
               onClick={handleConfirmarQuitacao}
-              disabled={processando}
-              className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              disabled={processando || !!dados.impedimento}
+              className="flex-1 px-4 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
             >
               {processando ? (
                 <>

@@ -48,6 +48,7 @@ import { AnexosCliente } from '@/components/clientes/AnexosCliente';
 import { LightboxImagem } from '@/components/liquidacao/CardsFinanceiros';
 import { CardEdicaoEmprestimo } from '@/components/emprestimos/CardEdicaoEmprestimo';
 import { ModalQuitarEmprestimo } from '@/components/liquidacao/ModalQuitarEmprestimo';
+import { ModalFichaEmprestimo } from '@/components/emprestimos/ModalFichaEmprestimo';
 import { ModalSuspenderCliente } from '@/components/clientes/ModalSuspenderCliente';
 import { usePermissaoModulo } from '@/hooks/usePermissaoModulo';
 import { useUser } from '@/contexts/UserContext';
@@ -371,6 +372,7 @@ function CardEmprestimo({
   onRecarregar,
   onRenegociar,
   onQuitar,
+  onFicha,
   podeQuitar = false,
   liquidacaoId,
   clienteNome,
@@ -389,6 +391,8 @@ function CardEmprestimo({
   onRecarregar?: () => void;
   onRenegociar?: (emprestimoId: string) => void;
   onQuitar?: (emprestimoId: string, clienteNome: string) => void;
+  /** Abre a ficha completa — mesma RPC e mesmos numeros da tela do app. */
+  onFicha?: (emprestimoId: string) => void;
   podeQuitar?: boolean;
   liquidacaoId?: string;
   clienteNome?: string;
@@ -448,6 +452,22 @@ function CardEmprestimo({
       {/* Conteúdo Expandido */}
       {expandido && (
         <div className="border-t border-gray-200 bg-gray-50 p-4">
+          {/* A ficha vale para QUALQUER empréstimo, inclusive quitado: é onde
+              estão a linha do tempo, os estornos e a conferência das contas.
+              Por isso o botão não depende de `podeQuitar` nem de dia aberto. */}
+          {onFicha && (
+            <div className="flex justify-end mb-3">
+              <button
+                type="button"
+                onClick={() => onFicha(emprestimo.emprestimo_id)}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-50"
+              >
+                <FileText className="w-4 h-4" />
+                Ver ficha completa
+              </button>
+            </div>
+          )}
+
           {/* Resumo Financeiro */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="bg-white p-3 rounded-lg">
@@ -1143,6 +1163,10 @@ export function ModalDetalhesCliente({
   // Verificar permissão para quitar
   const podeQuitar = ['SUPER_ADMIN', 'ADMIN', 'MONITOR'].includes(tipoUsuario || '');
 
+  // Ficha do empréstimo. Guarda o id, não um booleano: o modal busca pela RPC
+  // e a cadeia é navegável dentro dele.
+  const [fichaAberta, setFichaAberta] = useState<string | null>(null);
+
   // Calcular se tem parcela em atraso baseado nos empréstimos ativos
   // Se algum empréstimo está VENCIDO, significa que tem parcelas em atraso
   const temParcelaEmAtraso = emprestimosAtivos.some(emp => emp.emprestimo_status === 'VENCIDO') || 
@@ -1793,6 +1817,7 @@ export function ModalDetalhesCliente({
                           // TODO: Implementar modal de renegociação
                         }}
                         onQuitar={handleAbrirModalQuitar}
+                        onFicha={setFichaAberta}
                         podeQuitar={podeQuitar}
                         liquidacaoId={liquidacaoId}
                         clienteNome={cliente?.nome || dadosExibicao?.nome}
@@ -1855,6 +1880,7 @@ export function ModalDetalhesCliente({
                         clienteIdAnexos={cliente?.id || null}
                         anexoAutorId={profile?.user_id || null}
                         anexoAutorNome={profile?.nome || null}
+                        onFicha={setFichaAberta}
                       />
                     ))
                   ) : historicoStatus.length > 0 ? (
@@ -1899,6 +1925,15 @@ export function ModalDetalhesCliente({
           rotaId={rotaId}
           liquidacaoId={liquidacaoId}
           onQuitacaoSucesso={handleQuitacaoSucesso}
+        />
+      )}
+
+      {/* Ficha do empréstimo */}
+      {fichaAberta && (
+        <ModalFichaEmprestimo
+          emprestimoId={fichaAberta}
+          clienteNome={cliente?.nome || dadosExibicao?.nome || ''}
+          onClose={() => setFichaAberta(null)}
         />
       )}
 

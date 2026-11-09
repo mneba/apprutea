@@ -448,7 +448,6 @@ export default function FinanceiroPage() {
   // Qual conta o Ajuste de Saldo abriu. Vazio = aberto sem cartão (nenhum
   // caminho da tela faz isso hoje), e aí o seletor do modal fica livre.
   const [ajusteContaId, setAjusteContaId] = useState('');
-  const [modalVerRotas, setModalVerRotas] = useState(false);
   const [modalVerMicroseguros, setModalVerMicroseguros] = useState(false);
 
   const [saldos, setSaldos] = useState<SaldosContas>({
@@ -1496,37 +1495,49 @@ export default function FinanceiroPage() {
                   </button>
                 )}
 
-                {(modoRota
-                    ? [{ nome: rotaNome || 'Rota', valor: saldos.saldo_rotas, rotaId: rotaId || undefined }]
-                    : rotasItens
-                  ).slice(0, modoRota ? 1 : 3).map((r, i) => (
-                  <button
-                    key={i}
-                    onClick={() => abrirAjuste(contaDaRota(r.rotaId))}
-                    className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left"
-                  >
-                    <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-3.5 h-3.5 text-emerald-600" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-gray-500 uppercase font-semibold truncate">{r.nome}</p>
-                      <p className="text-[10px] text-gray-400">ajustar saldo</p>
-                    </div>
-                    <span className={`text-sm font-bold tabular-nums ${r.valor < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {r.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-gray-300" />
-                  </button>
-                ))}
+                {/*
+                  ⚠ TODAS as rotas, com rolagem — não as 3 primeiras.
 
-                {!modoRota && rotasItens.length > 3 && (
-                  <button
-                    onClick={() => setModalVerRotas(true)}
-                    className="w-full px-3 py-1.5 text-[11px] text-blue-600 hover:bg-blue-50/50 font-medium text-left"
-                  >
-                    ver todas as {rotasItens.length} rotas
-                  </button>
-                )}
+                  Pedido do Mauricio em 07/11/2026: *"só é possível alterar
+                  saldo de 3 rotas, as demais só aparecem em modal; mantenha a
+                  altura atual dessa visão e insira uma barra de rolagem"*.
+
+                  Antes, `.slice(0, 3)` cortava a lista e as outras só eram
+                  alcançáveis por um modal de SOMENTE LEITURA — ou seja, a
+                  PrimeCred tem 11 rotas e só 3 tinham como ser ajustadas pela
+                  tela. O `ver todas as N rotas` saiu junto: com a lista
+                  inteira rolando aqui, ele virou um caminho mais pobre para o
+                  mesmo lugar.
+
+                  `max-h-[160px]` são ~3,5 linhas. A meia linha é de propósito:
+                  é ela que mostra que há mais coisa abaixo. Altura fixa, não
+                  `flex-1`, para o painel inteiro não mudar de tamanho conforme
+                  a empresa tenha 2 ou 11 rotas.
+                */}
+                <div className="max-h-[160px] overflow-y-auto divide-y divide-gray-100">
+                  {(modoRota
+                      ? [{ nome: rotaNome || 'Rota', valor: saldos.saldo_rotas, rotaId: rotaId || undefined }]
+                      : rotasItens
+                    ).map((r, i) => (
+                    <button
+                      key={i}
+                      onClick={() => abrirAjuste(contaDaRota(r.rotaId))}
+                      className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left"
+                    >
+                      <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center flex-shrink-0">
+                        <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[10px] text-gray-500 uppercase font-semibold truncate">{r.nome}</p>
+                        <p className="text-[10px] text-gray-400">ajustar saldo</p>
+                      </div>
+                      <span className={`text-sm font-bold tabular-nums flex-shrink-0 ${r.valor < 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                        {r.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      </span>
+                      <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
+                    </button>
+                  ))}
+                </div>
 
                 <button
                   onClick={() => modoRota ? undefined : setModalVerMicroseguros(true)}
@@ -1729,15 +1740,9 @@ export default function FinanceiroPage() {
         contaTravada={!!ajusteContaId}
       />
 
-      {/* Modal Ver Todas Rotas */}
-      <ModalVerTodas
-        isOpen={modalVerRotas}
-        onClose={() => setModalVerRotas(false)}
-        titulo="Saldos por Rota"
-        itens={rotasItens}
-        icone={MapPin}
-        corIcone="text-emerald-600"
-      />
+      {/* O "Ver Todas Rotas" saiu em 07/11/2026: a lista do painel passou a
+          rolar e mostra todas, e lá cada linha ABRE o ajuste — este modal era
+          só leitura. `ModalVerTodas` continua, para os microsseguros. */}
 
       {/* Modal Ver Todos Microseguros */}
       <ModalVerTodas
