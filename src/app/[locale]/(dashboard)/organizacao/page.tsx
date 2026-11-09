@@ -488,7 +488,7 @@ export default function OrganizacaoPage() {
           `${c.emprestimos ?? 0} empréstimo(s), ${c.parcelas ?? 0} parcela(s), ${c.pagamentos ?? 0} pagamento(s)\n` +
           `${c.liquidacoes ?? 0} liquidação(ões), ${c.lancamentos ?? 0} lançamento(s)\n` +
           `${r.contas_zeradas} conta(s) zerada(s)\n\n` +
-          `Backup guardado. Execução ${r.execucao_id}.`
+          `Execução ${r.execucao_id}.`
       );
     } catch (err: any) {
       console.error('Erro ao resetar rota:', err);
@@ -1858,7 +1858,7 @@ export default function OrganizacaoPage() {
                             {Math.abs(c.diferenca) > 0.005 && (
                               <p className="text-xs text-amber-700 mt-0.5">
                                 Os lançamentos explicam {moedaReset(c.reconstruido)} — sobram{' '}
-                                {moedaReset(c.diferenca)} sem documento. O backup guarda tudo.
+                                {moedaReset(c.diferenca)} sem documento.
                               </p>
                             )}
                           </div>
@@ -1891,8 +1891,7 @@ export default function OrganizacaoPage() {
                   <div className="px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-600 leading-relaxed">
                     <strong className="text-gray-800">O que fica:</strong> a rota, o vendedor, as
                     duas contas (zeradas, não excluídas), o microsseguro, as liberações de usuário
-                    e os feriados. Tudo que sai vai para backup na mesma transação, e a execução
-                    fica registrada com seu usuário.
+                    e os feriados. A execução fica registrada com seu usuário.
                   </div>
 
                   <div>
