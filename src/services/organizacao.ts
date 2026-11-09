@@ -11,6 +11,51 @@ import type {
 
 const supabase = createClient();
 
+/** O que `fn_resetar_rota_previa` devolve. Espelha o jsonb da funcao. */
+export interface PreviaResetRota {
+  pode: boolean;
+  motivo?: string;
+  rota_id?: string;
+  rota_nome?: string;
+  empresa_id?: string | null;
+  empresa_nome?: string | null;
+  contagens?: Record<string, number>;
+  contas?: {
+    nome: string;
+    tipo_conta: string;
+    saldo: number;
+    reconstruido: number;
+    diferenca: number;
+  }[];
+  clientes_compartilhados?: {
+    nome: string;
+    documento: string | null;
+    outras_rotas: string | null;
+  }[];
+  /**
+   * Guarda NOMEADA: cliente exclusivo desta rota que tem emprestimo em OUTRA.
+   * Vem com `pode: false`, porque apaga-lo falharia na FK RESTRICT e o
+   * operador leria um erro cru de chave estrangeira.
+   */
+  emprestimos_fora?: {
+    cliente: string;
+    rota_do_emprestimo: string;
+    status: string;
+  }[];
+  /** `YYYY-MM-DD` ou nulo. Data PURA — nao passar por `new Date(x)` sozinho. */
+  liquidacao_aberta?: string | null;
+}
+
+export interface ResultadoResetRota {
+  sucesso: boolean;
+  execucao_id: string;
+  rota_nome: string;
+  contagens: Record<string, number>;
+  saldo_antes: PreviaResetRota['contas'];
+  /** Se vier 1 onde havia 2, um microsseguro caiu por cascade. Ver o SQL. */
+  contas_zeradas: number;
+}
+
 export const organizacaoService = {
   // ============================================
   // RESUMO GERAL
@@ -1101,6 +1146,82 @@ export const organizacaoService = {
       console.error('Erro ao adicionar feriado:', error);
       throw error;
     }
+  },
+
+  // ============================================
+  // RESET DA ROTA
+  // ============================================
+
+  /**
+   * Quem pode resetar. A resposta vem do BANCO, nao de `tipo_usuario` lido na
+   * tela — e e isso que faz a liberacao futura para donos de empresa ser UMA
+   * linha dentro de `fn_pode_resetar_rota`, sem tocar neste arquivo nem na
+   * pagina. Mauricio em 09/11/2026: *"hoje somente deve estar visivel o botao
+   * de reset para super admins, porem no futuro sera liberado para os donos
+   * das empresas"*.
+   *
+   * O erro a nao repetir e o da importacao SmartPay, onde o item de menu ficou
+   * travado num `user_id` e o proprio CLAUDE.md o chama de cosmetico.
+   */
+  async podeResetarRota(rotaId: string): Promise<boolean> {
+    const { data, error } = await supabase.rpc('fn_pode_resetar_rota', {
+      p_rota_id: rotaId,
+    });
+
+    if (error) {
+      // Nao poder nao e erro de tela: o botao simplesmente nao aparece.
+      console.error('Erro ao verificar permissao de reset:', error);
+      return false;
+    }
+
+    return data === true;
+  },
+
+  /**
+   * A previa. SO LE, e e a MESMA funcao que o reset chama para contar — o que
+   * a tela mostra e o que vai rodar nao podem ser duas contas mantidas iguais
+   * a mao.
+   */
+  async previaResetRota(rotaId: string): Promise<PreviaResetRota> {
+    const { data, error } = await supabase.rpc('fn_resetar_rota_previa', {
+      p_rota_id: rotaId,
+    });
+
+    if (error) {
+      console.error('Erro ao carregar previa do reset:', error);
+      throw error;
+    }
+
+    return data as PreviaResetRota;
+  },
+
+  /**
+   * ⚠ DESTRUTIVO. Apaga clientes, emprestimos, parcelas, pagamentos,
+   * liquidacoes, lancamentos e as pendencias da rota, e zera as duas contas
+   * (ROTA e MICROSEGURO). A rota, o vendedor, as contas e o microsseguro
+   * CONTINUAM — a reimportacao precisa deles para abrir o dia.
+   *
+   * Tudo que sai vai para `backup.reset_rota_linha` em jsonb, na MESMA
+   * transacao, e a execucao fica registrada em `reset_rota_execucao`.
+   *
+   * `confirmacao` tem de ser o nome exato da rota, e quem confere isso e a
+   * FUNCAO, nao este arquivo: chamada direta pela RPC nao escapa.
+   */
+  async resetarRota(rotaId: string, confirmacao: string): Promise<ResultadoResetRota> {
+    const { data, error } = await supabase.rpc('fn_resetar_rota', {
+      p_rota_id: rotaId,
+      p_confirmacao: confirmacao,
+    });
+
+    if (error) {
+      console.error('Erro ao resetar rota:', error);
+      // A mensagem da funcao e a que o operador precisa ler (nome errado,
+      // sem permissao, rota inexistente). Repassada, nao trocada por texto
+      // generico.
+      throw new Error(error.message || 'Falha ao resetar a rota');
+    }
+
+    return data as ResultadoResetRota;
   },
 
   /**

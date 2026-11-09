@@ -24,15 +24,53 @@ import {
   Search,
   Save,
   Shield,
+  RotateCcw,
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { comCache, chave, temCache, invalidarCache } from '@/lib/cacheDados';
 import { organizacaoService } from '@/services/organizacao';
+import type { PreviaResetRota } from '@/services/organizacao';
 import { usuariosService } from '@/services/usuarios';
 import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio, Cidade } from '@/types/organizacao';
 import ModalGerenciarCidades from '@/components/organizacao/ModalGerenciarCidades';
 
 type ViewMode = 'empresas' | 'rotas';
+
+// O que o reset apaga, na ordem em que o operador precisa ler. Fora do
+// componente de proposito: lista estavel nao tem por que renascer a cada
+// render, e aqui ela nao se mistura com a contagem de hooks.
+const ITENS_RESET: { chave: string; rotulo: string }[] = [
+  { chave: 'clientes_apagados', rotulo: 'Clientes apagados' },
+  { chave: 'clientes_desvinculados', rotulo: 'Clientes desvinculados' },
+  { chave: 'emprestimos', rotulo: 'Empréstimos' },
+  { chave: 'parcelas', rotulo: 'Parcelas' },
+  { chave: 'pagamentos', rotulo: 'Pagamentos' },
+  { chave: 'liquidacoes', rotulo: 'Liquidações' },
+  { chave: 'lancamentos', rotulo: 'Lançamentos' },
+  { chave: 'notas', rotulo: 'Notas' },
+  { chave: 'solicitacoes', rotulo: 'Solicitações' },
+  { chave: 'ordem_visita', rotulo: 'Ordem de visita' },
+  { chave: 'historico_cliente', rotulo: 'Histórico de cliente' },
+  { chave: 'anexos', rotulo: 'Anexos' },
+  { chave: 'microseguro_vendas', rotulo: 'Vendas de microsseguro' },
+  { chave: 'nao_pagos', rotulo: 'Não pagos' },
+  { chave: 'renovacoes_pendentes', rotulo: 'Renovações pendentes' },
+  { chave: 'vendas_pendentes', rotulo: 'Vendas pendentes' },
+  { chave: 'movimentacoes_pendentes', rotulo: 'Movimentações pendentes' },
+  { chave: 'importacoes', rotulo: 'Importações SmartPay' },
+];
+
+// ⚠ `$` e DUAS casas decimais. Regra do Mauricio em 04/11/2026: o sistema
+// opera na América Latina, não existe campo de moeda no schema, e já há duas
+// moedas na base — então `currency: 'BRL'` aqui seria inventar o país, que é
+// o erro que custou a limpeza de `R$` nos dois apps. Não copie o
+// `formatarMoeda` de outras telas desta pasta: 41 deles ainda usam BRL.
+const moedaReset = (v: number) =>
+  '$ ' +
+  new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(v || 0);
 
 // =====================================================
 // COMPONENTES AUXILIARES
@@ -96,6 +134,14 @@ export default function OrganizacaoPage() {
   const [vendedoresDisponiveis, setVendedoresDisponiveis] = useState<VendedorDisponivel[]>([]);
   const [empresaParaRota, setEmpresaParaRota] = useState<EmpresaResumo | null>(null);
   const [salvandoRota, setSalvandoRota] = useState(false);
+
+  // Reset da rota
+  const [modalReset, setModalReset] = useState(false);
+  const [podeReset, setPodeReset] = useState(false);
+  const [previaReset, setPreviaReset] = useState<PreviaResetRota | null>(null);
+  const [carregandoPrevia, setCarregandoPrevia] = useState(false);
+  const [confirmacaoReset, setConfirmacaoReset] = useState('');
+  const [resetando, setResetando] = useState(false);
 
   // Modal de nova/editar empresa
   const [modalEmpresa, setModalEmpresa] = useState(false);
@@ -367,6 +413,89 @@ export default function OrganizacaoPage() {
     
     setVendedoresDisponiveis(vendedores);
     setModalRota(true);
+  };
+
+  // ============================================
+  // RESET DA ROTA
+  // ============================================
+
+  // Quem pode resetar vem do BANCO, por rota, e não de `tipo_usuario` lido
+  // aqui. Hoje `fn_pode_resetar_rota` só responde `true` para SUPER_ADMIN;
+  // quando os donos de empresa forem liberados, a mudança é uma linha DENTRO
+  // dela e esta tela não é tocada. Perguntar por `isSuperAdmin` aqui faria o
+  // oposto — seria o item de menu travado num `user_id` da importação.
+  useEffect(() => {
+    if (!modalRota || !rotaEditando) {
+      setPodeReset(false);
+      return;
+    }
+    // Guarda de corrida: só a última pergunta pode escrever no estado.
+    let vivo = true;
+    organizacaoService.podeResetarRota(rotaEditando.id).then((ok) => {
+      if (vivo) setPodeReset(ok);
+    });
+    return () => {
+      vivo = false;
+    };
+  }, [modalRota, rotaEditando]);
+
+  const handleAbrirModalReset = async () => {
+    if (!rotaEditando) return;
+    setConfirmacaoReset('');
+    setPreviaReset(null);
+    setModalReset(true);
+    setCarregandoPrevia(true);
+    try {
+      const previa = await organizacaoService.previaResetRota(rotaEditando.id);
+      setPreviaReset(previa);
+    } catch (err: any) {
+      console.error('Erro ao carregar prévia do reset:', err);
+      alert(`Erro ao carregar a prévia do reset: ${err.message}`);
+      setModalReset(false);
+    } finally {
+      setCarregandoPrevia(false);
+    }
+  };
+
+  const handleConfirmarReset = async () => {
+    if (!rotaEditando) return;
+    setResetando(true);
+    try {
+      const r = await organizacaoService.resetarRota(rotaEditando.id, confirmacaoReset);
+      setModalReset(false);
+      setModalRota(false);
+
+      // ⚠ Sem invalidar, o cache de 5 min devolve a rota com os números
+      // antigos e o reset "não aparece". É a mesma causa que escondeu os 38
+      // clientes importados em 16/10/2026 — e aqui seria pior, porque o
+      // operador concluiria que o reset falhou e apertaria de novo.
+      invalidarCache('organizacao:');
+      if (viewMode === 'rotas' && empresaSelecionada) {
+        const rotasData = await organizacaoService.listarRotasPorEmpresa(
+          empresaSelecionada.id,
+          rotasPermitidas
+        );
+        setRotas(rotasData);
+      } else {
+        carregarDados({ forcar: true });
+      }
+
+      const c = r.contagens || {};
+      alert(
+        `Rota "${r.rota_nome}" resetada.\n\n` +
+          `${c.clientes_apagados ?? 0} cliente(s) apagado(s)\n` +
+          `${c.clientes_desvinculados ?? 0} cliente(s) desvinculado(s), cadastro preservado\n` +
+          `${c.emprestimos ?? 0} empréstimo(s), ${c.parcelas ?? 0} parcela(s), ${c.pagamentos ?? 0} pagamento(s)\n` +
+          `${c.liquidacoes ?? 0} liquidação(ões), ${c.lancamentos ?? 0} lançamento(s)\n` +
+          `${r.contas_zeradas} conta(s) zerada(s)\n\n` +
+          `Backup guardado. Execução ${r.execucao_id}.`
+      );
+    } catch (err: any) {
+      console.error('Erro ao resetar rota:', err);
+      alert(`Erro ao resetar: ${err.message}`);
+    } finally {
+      setResetando(false);
+    }
   };
 
   const handleSalvarRota = async () => {
@@ -1579,6 +1708,29 @@ export default function OrganizacaoPage() {
                   </div>
                 </div>
               </div>
+
+              {/* Zona de risco — só para quem `fn_pode_resetar_rota` autoriza */}
+              {rotaEditando && podeReset && (
+                <div className="pt-4 border-t border-red-100">
+                  <h3 className="text-sm font-semibold text-red-700 mb-1.5 flex items-center gap-2">
+                    <AlertTriangle className="w-4 h-4" />
+                    Zona de risco
+                  </h3>
+                  <p className="text-xs text-gray-600 mb-3 leading-relaxed">
+                    O reset apaga os clientes, empréstimos, pagamentos,
+                    liquidações e lançamentos desta rota, e zera as contas.
+                    A rota, o vendedor, as contas e o microsseguro continuam —
+                    a reimportação precisa deles para abrir o dia.
+                  </p>
+                  <button
+                    onClick={handleAbrirModalReset}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-red-300 text-red-700 rounded-xl hover:bg-red-50 transition-colors text-sm font-medium"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Resetar rota
+                  </button>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
@@ -1596,6 +1748,194 @@ export default function OrganizacaoPage() {
               >
                 {salvandoRota && <Loader2 className="w-4 h-4 animate-spin" />}
                 {rotaEditando ? 'Salvar Alterações' : 'Criar Rota'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================ */}
+      {/* MODAL DE RESET DA ROTA                        */}
+      {/* ============================================ */}
+      {modalReset && rotaEditando && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60"
+            onClick={() => !resetando && setModalReset(false)}
+          />
+
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-red-700 flex items-center gap-2">
+                <AlertTriangle className="w-5 h-5" />
+                Resetar rota
+              </h3>
+              <button
+                onClick={() => !resetando && setModalReset(false)}
+                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 space-y-5 overflow-y-auto">
+              {carregandoPrevia && (
+                <div className="flex items-center gap-2 text-gray-500 py-6">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Contando o que vai ser apagado...
+                </div>
+              )}
+
+              {!carregandoPrevia && previaReset && !previaReset.pode && (
+                <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm">
+                  {previaReset.motivo || 'Não é possível resetar esta rota.'}
+                </div>
+              )}
+
+              {!carregandoPrevia && previaReset?.pode && (
+                <>
+                  <div className="px-4 py-3 rounded-xl bg-red-50 border border-red-200">
+                    <p className="font-semibold text-red-900">{previaReset.rota_nome}</p>
+                    {previaReset.empresa_nome && (
+                      <p className="text-xs text-red-700 mt-0.5">{previaReset.empresa_nome}</p>
+                    )}
+                  </div>
+
+                  {previaReset.liquidacao_aberta && (
+                    <div className="px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm">
+                      Esta rota tem uma liquidação <strong>ABERTA</strong> em{' '}
+                      {/* Data PURA: meio-dia LOCAL, nunca `new Date(iso)` só —
+                          data-só é meia-noite UTC e aparece um dia antes. */}
+                      <strong>
+                        {new Date(previaReset.liquidacao_aberta + 'T12:00:00').toLocaleDateString('pt-BR')}
+                      </strong>
+                      . O vendedor pode estar cobrando agora.
+                    </div>
+                  )}
+
+                  <div>
+                    <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                      O que vai ser apagado
+                    </h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5">
+                      {ITENS_RESET.filter(
+                        (i) => (previaReset.contagens?.[i.chave] ?? 0) > 0
+                      ).map((i) => (
+                        <div key={i.chave} className="flex items-baseline justify-between gap-2 text-sm">
+                          <span className="text-gray-600 shrink">{i.rotulo}</span>
+                          <span className="font-semibold text-gray-900 tabular-nums">
+                            {previaReset.contagens?.[i.chave]}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {ITENS_RESET.every((i) => (previaReset.contagens?.[i.chave] ?? 0) === 0) && (
+                      <p className="text-sm text-gray-500">
+                        Nada a apagar — esta rota já está vazia.
+                      </p>
+                    )}
+                  </div>
+
+                  {(previaReset.contas?.length ?? 0) > 0 && (
+                    <div>
+                      <h4 className="text-sm font-semibold text-gray-900 mb-2">
+                        Contas, que vão a zero
+                      </h4>
+                      <div className="space-y-1.5">
+                        {previaReset.contas?.map((c) => (
+                          <div key={c.nome + c.tipo_conta} className="text-sm">
+                            <div className="flex items-baseline justify-between gap-3">
+                              <span className="text-gray-600 shrink">
+                                {c.nome}{' '}
+                                <span className="text-xs text-gray-400">({c.tipo_conta})</span>
+                              </span>
+                              <span className="font-semibold text-gray-900 tabular-nums">
+                                {moedaReset(c.saldo)}
+                              </span>
+                            </div>
+                            {Math.abs(c.diferenca) > 0.005 && (
+                              <p className="text-xs text-amber-700 mt-0.5">
+                                Os lançamentos explicam {moedaReset(c.reconstruido)} — sobram{' '}
+                                {moedaReset(c.diferenca)} sem documento. O backup guarda tudo.
+                              </p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(previaReset.clientes_compartilhados?.length ?? 0) > 0 && (
+                    <div className="px-4 py-3 rounded-xl bg-blue-50 border border-blue-200">
+                      <p className="text-sm font-semibold text-blue-900 mb-1">
+                        {previaReset.clientes_compartilhados?.length} cliente(s) também estão em
+                        outra rota
+                      </p>
+                      <p className="text-xs text-blue-800 mb-2">
+                        O cadastro deles é <strong>preservado</strong> — só o vínculo com esta rota
+                        e os empréstimos dela são removidos. A história na outra rota fica intacta.
+                      </p>
+                      <ul className="text-xs text-blue-800 space-y-0.5">
+                        {previaReset.clientes_compartilhados?.map((c, i) => (
+                          <li key={i}>
+                            {c.nome}
+                            {c.documento ? ` (${c.documento})` : ''} — também em {c.outras_rotas}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="px-4 py-3 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-600 leading-relaxed">
+                    <strong className="text-gray-800">O que fica:</strong> a rota, o vendedor, as
+                    duas contas (zeradas, não excluídas), o microsseguro, as liberações de usuário
+                    e os feriados. Tudo que sai vai para backup na mesma transação, e a execução
+                    fica registrada com seu usuário.
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Para confirmar, digite o nome da rota
+                    </label>
+                    <p className="text-xs text-gray-500 mb-2 font-mono bg-gray-50 px-3 py-2 rounded-lg border border-gray-200 select-all">
+                      {previaReset.rota_nome}
+                    </p>
+                    <input
+                      type="text"
+                      value={confirmacaoReset}
+                      onChange={(e) => setConfirmacaoReset(e.target.value)}
+                      disabled={resetando}
+                      autoComplete="off"
+                      className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-red-500 focus:border-transparent disabled:bg-gray-100"
+                      placeholder="Nome exato da rota"
+                    />
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+              <button
+                onClick={() => setModalReset(false)}
+                disabled={resetando}
+                className="px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarReset}
+                disabled={
+                  resetando ||
+                  !previaReset?.pode ||
+                  confirmacaoReset.trim() !== (previaReset?.rota_nome || '').trim()
+                }
+                className="flex items-center gap-2 px-5 py-2.5 bg-red-600 text-white rounded-xl hover:bg-red-700 disabled:opacity-50 transition-colors"
+              >
+                {resetando && <Loader2 className="w-4 h-4 animate-spin" />}
+                {resetando ? 'Resetando...' : 'Resetar rota'}
               </button>
             </div>
           </div>
