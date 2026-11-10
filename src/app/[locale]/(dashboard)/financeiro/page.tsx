@@ -1635,6 +1635,7 @@ export default function FinanceiroPage() {
             }
           }}
           rotaId={rotaId}
+          rotaNome={rotaNome}
           liquidacoesMes={liquidacoesMes}
           dataSelecionada={dataTempCalendario || (dataLiquidacao ? new Date(dataLiquidacao + 'T12:00:00') : new Date())}
           onSelecionarData={(d) => setDataTempCalendario(d)}

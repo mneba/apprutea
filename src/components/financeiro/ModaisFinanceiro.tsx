@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useMenuFlutuante } from '@/hooks/useMenuFlutuante';
 
 // As cinco categorias que `fn_criar_movimentacao` NAO vincula a liquidacao:
 // ela desliga o vinculo para elas e grava `liquidacao_id` nulo de proposito.
@@ -111,6 +112,25 @@ export function ModalNovaMovimentacao({
   // comentario em cima do JSX dele.
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
   const [seletorFormaAberto, setSeletorFormaAberto] = useState(false);
+
+  // Os dois menus proprios desta tela posicionam o painel em `position: fixed`
+  // medido do botao. Ver useMenuFlutuante -- ele existe por causa do relato do
+  // Julio em 08/11/2026, e o comentario dele explica por que nao pode ser
+  // `absolute` aqui dentro.
+  //
+  // ⚠ ANTES do `if (!isOpen) return null` la embaixo. Hook depois de retorno
+  // antecipado e React #310; ver "Retorno antecipado vem DEPOIS de todos os
+  // hooks" no CLAUDE.md.
+  const {
+    refGatilho: refGatilhoConta,
+    refPainel: refPainelConta,
+    estiloPainel: estiloConta,
+  } = useMenuFlutuante(seletorContaAberto, () => setSeletorContaAberto(false));
+  const {
+    refGatilho: refGatilhoForma,
+    refPainel: refPainelForma,
+    estiloPainel: estiloForma,
+  } = useMenuFlutuante(seletorFormaAberto, () => setSeletorFormaAberto(false));
 
   const contaSelecionada = contas.find(c => c.id === contaId);
   const categoriasFiltradas = categorias.filter(c => {
@@ -404,6 +424,7 @@ export function ModalNovaMovimentacao({
             */}
             <div className="relative">
               <button
+                ref={refGatilhoConta}
                 type="button"
                 onClick={() => setSeletorContaAberto(v => !v)}
                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -420,7 +441,14 @@ export function ModalNovaMovimentacao({
               {seletorContaAberto && (
                 <>
                   <div className="fixed inset-0 z-[60]" onClick={() => setSeletorContaAberto(false)} />
-                  <div className="absolute left-0 right-0 mt-1 z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
+                  {/* `style` do hook: position/left/width/top/maxHeight. Nao
+                      ponha `absolute` nem `max-h-*` de volta -- era isso que
+                      fazia o corpo do modal recortar a lista. */}
+                  <div
+                    ref={refPainelConta}
+                    style={estiloConta}
+                    className="z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-y-auto"
+                  >
                     {([
                       { tipo: 'EMPRESA',     titulo: 'Empresa' },
                       { tipo: 'ROTA',        titulo: 'Rotas' },
@@ -523,6 +551,7 @@ export function ModalNovaMovimentacao({
               {/* Mesmo motivo do seletor de conta: <option> nao renderiza SVG. */}
               <div className="relative">
                 <button
+                  ref={refGatilhoForma}
                   type="button"
                   onClick={() => setSeletorFormaAberto(v => !v)}
                   className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -534,7 +563,11 @@ export function ModalNovaMovimentacao({
                 {seletorFormaAberto && (
                   <>
                     <div className="fixed inset-0 z-[60]" onClick={() => setSeletorFormaAberto(false)} />
-                    <div className="absolute left-0 right-0 mt-1 z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1">
+                    <div
+                      ref={refPainelForma}
+                      style={estiloForma}
+                      className="z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-y-auto"
+                    >
                       {FORMAS_PAGAMENTO.map(f => (
                         <button
                           key={f.valor}
@@ -938,6 +971,15 @@ export function ModalAjusteSaldo({
   const [erro, setErro] = useState('');
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
 
+  // Mesmo menu flutuante da ModalNovaMovimentacao, mesmo motivo. ANTES do
+  // `if (!isOpen) return null`. Com `contaTravada` o gatilho nem renderiza e
+  // as refs ficam nulas -- o hook trata isso e nao posiciona nada.
+  const {
+    refGatilho: refGatilhoConta,
+    refPainel: refPainelConta,
+    estiloPainel: estiloConta,
+  } = useMenuFlutuante(seletorContaAberto, () => setSeletorContaAberto(false));
+
   const contaSelecionada = contas.find(c => c.id === contaId);
   const saldoAtual = contaSelecionada?.saldo_atual || 0;
   const saldoFinalNum = parseFloat(saldoFinal) || 0;
@@ -1062,6 +1104,7 @@ export function ModalAjusteSaldo({
                  <select> so aceitaria emoji -- ver ModalNovaMovimentacao. */
               <div className="relative">
                 <button
+                  ref={refGatilhoConta}
                   type="button"
                   onClick={() => setSeletorContaAberto(v => !v)}
                   className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-gray-200 bg-white text-left hover:bg-gray-50 focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
@@ -1077,7 +1120,11 @@ export function ModalAjusteSaldo({
                 {seletorContaAberto && (
                   <>
                     <div className="fixed inset-0 z-[60]" onClick={() => setSeletorContaAberto(false)} />
-                    <div className="absolute left-0 right-0 mt-1 z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 max-h-72 overflow-y-auto">
+                    <div
+                      ref={refPainelConta}
+                      style={estiloConta}
+                      className="z-[70] bg-white border border-gray-200 rounded-xl shadow-lg py-1 overflow-y-auto"
+                    >
                       {contas.map(c => (
                         <button
                           key={c.id}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { X, Check } from 'lucide-react';
+import { X, Check, MapPin } from 'lucide-react';
 import { CalendarioLiquidacao, ResumoDiaCalendario } from './CalendarioLiquidacao';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
 
@@ -9,6 +9,8 @@ interface ModalCalendarioLiquidacaoProps {
   isOpen: boolean;
   onClose: () => void;
   rotaId: string;
+  /** Nome da rota, so para o cabecalho manter o contexto da consulta. */
+  rotaNome?: string;
   liquidacoesMes: LiquidacaoDiaria[];
   dataSelecionada: Date;
   onSelecionarData: (data: Date) => void;
@@ -28,6 +30,7 @@ export function ModalCalendarioLiquidacao({
   isOpen,
   onClose,
   rotaId,
+  rotaNome,
   liquidacoesMes,
   dataSelecionada,
   onSelecionarData,
@@ -59,8 +62,28 @@ export function ModalCalendarioLiquidacao({
 
       <div className="relative bg-white rounded-xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
-          <h2 className="text-lg font-bold text-gray-900">Selecionar Data</h2>
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-gray-200">
+          {/* A rota fica no CABECALHO, nao no Resumo do Dia: o corpo deste
+              modal rola, e numa janela estreita o resumo desce para baixo do
+              calendario. O cabecalho nao sai da vista enquanto se navega
+              entre datas, que era exatamente o pedido do Julio em
+              08/11/2026 -- ele sai para conferir outra coisa e volta sem
+              saber de qual rota e o dia que esta vendo.
+              `min-w-0` + `truncate`: ha nome de rota com 48 caracteres
+              ("5.1 Sebastian - Jorge, Felipe, Huber Y Julio (25%)"), e sem
+              isso ele empurraria o X para fora. */}
+          <div className="flex items-center gap-3 min-w-0">
+            <h2 className="text-lg font-bold text-gray-900 flex-shrink-0">Selecionar Data</h2>
+            {rotaNome && (
+              <span
+                title={rotaNome}
+                className="inline-flex items-center gap-1.5 min-w-0 px-2.5 py-1 rounded-full bg-blue-50 border border-blue-100 text-xs font-medium text-blue-700"
+              >
+                <MapPin className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate">{rotaNome}</span>
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"

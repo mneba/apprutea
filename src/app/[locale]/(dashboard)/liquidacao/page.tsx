@@ -2339,7 +2339,7 @@ export default function LiquidacaoDiariaPage() {
           diasPulados={proximaInfo.diasPulados}
           dataProxima={proximaInfo.dataProxima}
         />
-        <ModalCalendarioLiquidacao isOpen={mostrarCalendario} onClose={() => setMostrarCalendario(false)} rotaId={rota.id} liquidacoesMes={liquidacoesMes} dataSelecionada={dataSelecionada} onSelecionarData={(d) => setDataSelecionada(d)} onMesChange={handleMesChange} onConfirmar={handleConfirmarDataCalendario} loading={loadingCalendario} />
+        <ModalCalendarioLiquidacao isOpen={mostrarCalendario} onClose={() => setMostrarCalendario(false)} rotaId={rota.id} rotaNome={rota.nome} liquidacoesMes={liquidacoesMes} dataSelecionada={dataSelecionada} onSelecionarData={(d) => setDataSelecionada(d)} onMesChange={handleMesChange} onConfirmar={handleConfirmarDataCalendario} loading={loadingCalendario} />
       </>
     );
   }
@@ -3258,6 +3258,7 @@ export default function LiquidacaoDiariaPage() {
           isOpen={mostrarCalendario}
           onClose={() => setMostrarCalendario(false)}
           rotaId={rota.id}
+          rotaNome={rota.nome}
           liquidacoesMes={liquidacoesMes}
           dataSelecionada={dataSelecionada}
           onSelecionarData={(data) => setDataSelecionada(data)}
