@@ -64,6 +64,24 @@ export function InputNumero({ valor, onChange, vazio = 0, inteiro, ...resto }: P
       {...resto}
       type="number"
       value={texto}
+      onWheel={(e) => {
+        /**
+         * `<input type="number">` MUDA DE VALOR com a roda do mouse enquanto
+         * está focado, e todos os modais deste sistema rolam. Rolar a tela
+         * com o cursor sobre o campo altera o número sem ninguém digitar
+         * nada — e nada na interface indica que foi isso.
+         *
+         * Em 13/11/2026 o campo de parcelas de um empréstimo saiu de 100
+         * para 2 assim, e o sintoma que chegou foi *"o botão não fica
+         * ativado"*: a alteração silenciosa derrubou o valor abaixo do
+         * mínimo, que é uma guarda três telas de distância da causa.
+         *
+         * `blur()` desiste do foco em vez de bloquear a rolagem: a página
+         * continua rolando normalmente, e o campo para de escutar a roda.
+         */
+        e.currentTarget.blur();
+        resto.onWheel?.(e);
+      }}
       onChange={(e) => {
         const t = e.target.value;
         setTexto(t); // o que se vê é o que foi digitado, inclusive vazio

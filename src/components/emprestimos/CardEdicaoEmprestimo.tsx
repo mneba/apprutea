@@ -226,7 +226,8 @@ export function CardEdicaoEmprestimo({
   // ⚠ A função conta `valor_pago > 0`, que inclui PARCIAL; `parcelas_pagas`
   //   conta só as quitadas. Quando a consulta voltou, vale a dela.
   const parcelasPagas = emprestimo.parcelas_pagas ?? 0;
-  const minParcelas = Math.max(1, (redistrib?.qtdFicam ?? parcelasPagas) + 1);
+  const parcelasComPagamento = redistrib?.qtdFicam ?? parcelasPagas;
+  const minParcelas = Math.max(1, parcelasComPagamento + 1);
 
   // Total já pago pelo cliente (valor_total contratado - saldo devedor)
   const totalPago = Math.max(0, (emprestimo.valor_total || 0) - (emprestimo.valor_saldo || 0));
@@ -374,103 +375,86 @@ export function CardEdicaoEmprestimo({
     JSON.stringify(diasFlexiveis) !== JSON.stringify(emprestimo.dias_mes_cobranca || []);
 
   // Validar se pode salvar
-  const podeSalvar = () => {
-    if (!houveMudanca) return false;
-    
-    // Se mudou frequência ou valores, data é obrigatória
-    if ((mudouFrequencia || mudouValores) && !dataPrimeiraParcela) return false;
-    
-    // Validar valores
-    if (statusBloqueado) return false;
-    if (liquidacaoAberta !== true) return false;
-    if (dataPrimeiraParcela && dataPrimeiraParcela < dataMinima) return false;
-    if (valorPrincipal <= 0) return false;
-    if (taxaJuros < 0) return false;
-    if (numeroParcelas < minParcelas) return false;
-    if (numeroParcelas > MAX_PARCELAS) return false;
-    if (alteracaoQuitaEmprestimo) return false;
-    if (taxaAcimaDoLimite) return false;
-    
-    // Validar parâmetros específicos de frequência
-    if (frequencia === 'SEMANAL' && diasSemana.length === 0) return false;
-    if (frequencia === 'SEMANAL' && diasSemana.includes(0) && !trabalhaDomingo) return false;
-    if (frequencia === 'MENSAL' && diaMes === null) return false;
-    if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0) return false;
-    
-    return true;
+  /**
+   * O MOTIVO de não dar para salvar, ou null quando dá.
+   *
+   * Relato do Mauricio em 13/11/2026: *"fui fazer o teste e o botão não fica
+   * ativado"*. Ele estava certo, e a tela não contava por quê: `podeSalvar`
+   * tinha CATORZE guardas e o aviso amarelo explicava QUATRO. As outras dez
+   * — inclusive o mínimo de parcelas, que era a dele — desligavam o botão em
+   * silêncio.
+   *
+   * ⚠ **As frases existiam**, em `validar()`. Só que `validar()` roda no
+   * submit, e o submit nunca acontece porque o botão está desabilitado.
+   * **Mensagem presa atrás da própria guarda que ela explica é mensagem que
+   * ninguém lê** — e o usuário fica procurando o que mudou de errado numa
+   * tela que já sabe a resposta.
+   *
+   * Agora é UMA lista: ela decide o `disabled`, escreve o aviso e valida o
+   * envio. Duas listas das mesmas regras divergem — é o formato de erro que
+   * este projeto já pagou várias vezes.
+   */
+  const motivoBloqueio = (): string | null => {
+    if (statusBloqueado)
+      return `Empréstimo ${emprestimo.status} não pode ser alterado.`;
+
+    if (liquidacaoAberta !== true)
+      return 'É necessário ter uma liquidação aberta (ou reaberta) nesta rota para alterar o empréstimo.';
+
+    if ((mudouFrequencia || mudouValores) && !dataPrimeiraParcela)
+      return 'Informe a data da primeira parcela pendente.';
+
+    if (dataPrimeiraParcela && dataPrimeiraParcela < dataMinima)
+      return `A data da primeira parcela não pode ser anterior à data da liquidação (${dataMinima.split('-').reverse().join('/')}).`;
+
+    if (valorPrincipal <= 0) return 'O valor principal deve ser maior que zero.';
+
+    if (taxaJuros < 0) return 'A taxa de juros não pode ser negativa.';
+
+    if (numeroParcelas < minParcelas)
+      return parcelasComPagamento > 0
+        ? `O número de parcelas não pode ser menor que ${minParcelas}: ${parcelasComPagamento} parcela(s) já receberam pagamento e ficam como estão, e é preciso sobrar ao menos uma para receber o saldo.`
+        : 'O número de parcelas deve ser no mínimo 1.';
+
+    if (numeroParcelas > MAX_PARCELAS)
+      return emprestimo.numero_parcelas > MAX_PARCELAS
+        ? `O número de parcelas não pode ser maior que ${MAX_PARCELAS}, e este empréstimo tem ${emprestimo.numero_parcelas}. Reduza o campo para ${MAX_PARCELAS} ou menos — as parcelas já pagas ficam, e o saldo é redistribuído nas restantes.`
+        : `O número de parcelas não pode ser maior que ${MAX_PARCELAS}.`;
+
+    if (alteracaoQuitaEmprestimo)
+      return `O saldo a distribuir ficou em ${formatarMoeda(calculosNovos.saldoParaNovas)} — a alteração quitaria o empréstimo. Para encerrá-lo, use a quitação.`;
+
+    if (taxaAcimaDoLimite)
+      return `A taxa de juros excede o limite permitido para este vendedor (${taxaMaximaVendedor}%).`;
+
+    if (frequencia === 'SEMANAL' && diasSemana.length === 0)
+      return 'Selecione pelo menos um dia da semana para cobrança.';
+
+    if (frequencia === 'SEMANAL' && diasSemana.includes(0) && !trabalhaDomingo)
+      return 'Esta rota não trabalha aos domingos. Desmarque o domingo.';
+
+    if (frequencia === 'MENSAL' && diaMes === null)
+      return 'Selecione o dia do mês para cobrança.';
+
+    if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0)
+      return 'Selecione pelo menos um dia do mês.';
+
+    return null;
   };
+
+  // `houveMudanca` fica FORA do motivo, de propósito: botão apagado antes de
+  // mexer em qualquer coisa é óbvio, e um aviso amarelo ao abrir o card seria
+  // ruído em cima de uma tela que não tem problema nenhum.
+  const podeSalvar = () => houveMudanca && motivoBloqueio() === null;
 
   // Handler para salvar
   const handleSalvar = async () => {
-    // Validações
-    if (statusBloqueado) {
-      setErro(`Empréstimo ${emprestimo.status} não pode ser alterado.`);
-      return;
-    }
-
-    if (liquidacaoAberta !== true) {
-      setErro('É necessário ter uma liquidação aberta (ou reaberta) nesta rota para alterar o empréstimo.');
-      return;
-    }
-
-    if ((mudouFrequencia || mudouValores) && !dataPrimeiraParcela) {
-      setErro('Informe a data da primeira parcela pendente.');
-      return;
-    }
-
-    if (dataPrimeiraParcela && dataPrimeiraParcela < dataMinima) {
-      setErro(`A data da primeira parcela não pode ser anterior à data da liquidação (${dataMinima.split('-').reverse().join('/')}).`);
-      return;
-    }
-    
-    if (valorPrincipal <= 0) {
-      setErro('O valor principal deve ser maior que zero.');
-      return;
-    }
-
-    if (numeroParcelas < minParcelas) {
-      setErro(
-        parcelasPagas > 0
-          ? `O número de parcelas não pode ser menor que ${minParcelas}, pois já há ${parcelasPagas} parcela(s) paga(s).`
-          : 'O número de parcelas deve ser no mínimo 1.'
-      );
-      return;
-    }
-
-    if (numeroParcelas > MAX_PARCELAS) {
-      setErro(`O número de parcelas não pode ser maior que ${MAX_PARCELAS}.`);
-      return;
-    }
-
-    if (alteracaoQuitaEmprestimo) {
-      setErro(
-        `O saldo a distribuir ficou em ${formatarMoeda(calculosNovos.saldoParaNovas)}. A alteração quitaria o empréstimo — use a quitação.`
-      );
-      return;
-    }
-
-    if (taxaAcimaDoLimite) {
-      setErro(`A taxa de juros excede o limite permitido para este vendedor (${taxaMaximaVendedor}%).`);
-      return;
-    }
-    
-    if (frequencia === 'SEMANAL' && diasSemana.length === 0) {
-      setErro('Selecione pelo menos um dia da semana para cobrança.');
-      return;
-    }
-
-    if (frequencia === 'SEMANAL' && diasSemana.includes(0) && !trabalhaDomingo) {
-      setErro('Esta rota não trabalha aos domingos. Desmarque o domingo.');
-      return;
-    }
-    
-    if (frequencia === 'MENSAL' && diaMes === null) {
-      setErro('Selecione o dia do mês para cobrança.');
-      return;
-    }
-    
-    if (frequencia === 'FLEXIVEL' && diasFlexiveis.length === 0) {
-      setErro('Selecione pelo menos um dia do mês.');
+    // Uma lista só, a mesma que desabilita o botão e escreve o aviso. Esta
+    // guarda é a rede: o botão desabilitado já impede chegar aqui, mas o
+    // envio não pode depender de um `disabled` da interface.
+    const motivo = motivoBloqueio();
+    if (motivo) {
+      setErro(motivo);
       return;
     }
 
@@ -710,8 +694,13 @@ export function CardEdicaoEmprestimo({
                   />
                 </div>
                 <p className="mt-1 text-[11px] text-gray-500">
-                  {parcelasPagas > 0
-                    ? `Mínimo ${minParcelas} (${parcelasPagas} paga(s)) • Máximo ${MAX_PARCELAS}`
+                  {/* "com pagamento", não "paga(s)": o mínimo sai de `qtdFicam`,
+                      que é o filtro do DELETE da função (`valor_pago > 0`), e
+                      parcela PARCIAL tem pagamento sem estar paga. Dizer "paga"
+                      ao lado de um mínimo que conta a PARCIAL faz a frase não
+                      fechar com o número que está do lado dela. */}
+                  {parcelasComPagamento > 0
+                    ? `Mínimo ${minParcelas} (${parcelasComPagamento} com pagamento) • Máximo ${MAX_PARCELAS}`
                     : `Mínimo ${minParcelas} • Máximo ${MAX_PARCELAS}`}
                 </p>
               </div>
@@ -925,29 +914,17 @@ export function CardEdicaoEmprestimo({
             </div>
           )}
 
-          {/* Avisos de bloqueio */}
-          {(statusBloqueado || liquidacaoAberta !== true || alteracaoQuitaEmprestimo || taxaAcimaDoLimite) && (
-            <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-              <div className="text-xs text-amber-800 space-y-1">
-                {statusBloqueado && (
-                  <p>Empréstimo {emprestimo.status} não pode ser alterado.</p>
-                )}
-                {liquidacaoAberta !== true && (
-                  <p>É necessário ter uma liquidação aberta (ou reaberta) nesta rota para alterar o empréstimo.</p>
-                )}
-                {alteracaoQuitaEmprestimo && (
-                  <p>
-                    O saldo a distribuir ficou em {formatarMoeda(calculosNovos.saldoParaNovas)} — a
-                    alteração quitaria o empréstimo. Para encerrá-lo, use a quitação.
-                  </p>
-                )}
-                {taxaAcimaDoLimite && (
-                  <p>A taxa de juros excede o limite permitido para este vendedor ({taxaMaximaVendedor}%).</p>
-                )}
+          {/* O motivo de o botão estar apagado, sempre que houver um.
+              Status e liquidação aparecem mesmo sem mudança nenhuma — são
+              estado do empréstimo, não da edição; o resto só depois que a
+              pessoa mexeu em algo. */}
+          {(statusBloqueado || liquidacaoAberta !== true || houveMudanca) &&
+            motivoBloqueio() && (
+              <div className="mt-3 p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800">{motivoBloqueio()}</p>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Botões de ação */}
           <div className="flex justify-end gap-2 pt-2">
