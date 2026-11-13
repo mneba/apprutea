@@ -985,10 +985,22 @@ function FormularioEdicao({
         />
       </div>
 
-      {/* Toggle Permite Renegociação */}
+      {/* Toggle Permite Renegociação
+          ⚠ O ATRASO VOLTOU A SER EXIGIDO em 12/11/2026, no mesmo dia em que
+          tinha saído. Ele caiu para a renegociação servir de conserto de
+          empréstimo lançado errado; o Mauricio desfez quando viu que o
+          conserto NÃO CABE NO APP — se o empréstimo é de dias atrás, o
+          vendedor não o alcança, porque só opera as liquidações que pode
+          abrir. Conserto é operação de admin, e vai virar um processo próprio
+          aqui no web, de recriação do empréstimo.
+
+          O guarda gêmeo vive no passo 5 de `fn_renegociar_emprestimo`, e os
+          dois têm de andar juntos: liberar só a tela deixaria o admin
+          autorizando e o vendedor recebendo "Nenhuma parcela estava vencida
+          em ...", que é duas réguas no mesmo fluxo. */}
       <div className={`flex items-center justify-between p-4 rounded-xl border ${
-        temEmprestimoAtivo && temParcelaEmAtraso 
-          ? 'bg-amber-50 border-amber-200' 
+        temEmprestimoAtivo && temParcelaEmAtraso
+          ? 'bg-amber-50 border-amber-200'
           : 'bg-gray-50 border-gray-200'
       }`}>
         <div className="flex items-center gap-3">
@@ -998,10 +1010,10 @@ function FormularioEdicao({
           <div>
             <p className="font-medium text-gray-900">Permite Renegociação</p>
             <p className="text-sm text-gray-500">
-              {!temEmprestimoAtivo 
+              {!temEmprestimoAtivo
                 ? 'Cliente não possui empréstimo ativo'
-                : !temParcelaEmAtraso 
-                  ? 'Cliente não possui parcelas em atraso'
+                : !temParcelaEmAtraso
+                  ? 'Cliente em dia — a renegociação exige parcela em atraso'
                   : 'Autoriza renegociação do empréstimo em atraso'}
             </p>
           </div>

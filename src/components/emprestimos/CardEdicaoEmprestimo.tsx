@@ -173,13 +173,44 @@ export function CardEdicaoEmprestimo({
   const [requerRenegociacao, setRequerRenegociacao] = useState(false);
   const [parcelasAtrasadas, setParcelasAtrasadas] = useState(0);
 
+  /**
+   * As três grandezas da redistribuição, lidas das PARCELAS — as mesmas que
+   * `fn_alterar_emprestimo_completo` calcula em `v_qtd_ficam`,
+   * `v_valor_ja_pago` e `v_saldo_das_ficam`.
+   *
+   * A tela não pode inventar a conta. Antes ela mostrava
+   * `valor_total / numero_parcelas`, que é o que a função faz APENAS quando
+   * não há pagamento: com pagamento, o que se divide é só o saldo que falta,
+   * entre as parcelas que serão recriadas. Com a taxa agora editável isso
+   * aparece na cara — o admin decide olhando este número.
+   *
+   * É a lição da quitação (08/11/2026): repetir, do mesmo dado, as variáveis
+   * da função, em vez de derivar uma conta parecida.
+   *
+   * `null` enquanto a consulta não voltou (ou se ela falhar): aí as fórmulas
+   * caem na derivação antiga. Degradação, não regressão.
+   */
+  const [redistrib, setRedistrib] = useState<
+    { qtdFicam: number; jaPago: number; saldoFicam: number } | null
+  >(null);
+
   // Cálculos automáticos
   const calculosNovos = useMemo(() => {
     const juros = valorPrincipal * (taxaJuros / 100);
-    const valorTotal = valorPrincipal + juros;
-    const valorParcela = numeroParcelas > 0 ? valorTotal / numeroParcelas : 0;
-    return { juros, valorTotal, valorParcela };
-  }, [valorPrincipal, taxaJuros, numeroParcelas]);
+    const valorTotal = Math.round(valorPrincipal * (1 + taxaJuros / 100) * 100) / 100;
+
+    // `v_saldo_para_novas` e `v_qtd_novas`, iguais aos da função.
+    const temPgto = !!redistrib && (redistrib.qtdFicam > 0 || redistrib.jaPago > 0);
+    const saldoParaNovas = temPgto
+      ? valorTotal - redistrib!.jaPago - redistrib!.saldoFicam
+      : valorTotal;
+    const qtdNovas = numeroParcelas - (redistrib?.qtdFicam ?? 0);
+
+    const valorParcela =
+      qtdNovas > 0 ? Math.round((saldoParaNovas / qtdNovas) * 100) / 100 : 0;
+
+    return { juros, valorTotal, valorParcela, saldoParaNovas, qtdNovas };
+  }, [valorPrincipal, taxaJuros, numeroParcelas, redistrib]);
 
   // Data mínima da primeira parcela = data da LIQUIDAÇÃO aberta.
   // (fallback para hoje-local apenas enquanto a liquidação não carregou)
@@ -191,29 +222,45 @@ export function CardEdicaoEmprestimo({
   // ---------------------------------------------------------------
   const MAX_PARCELAS = 48;
 
-  // Parcelas já pagas: não é permitido reduzir para <= esse número
+  // Parcelas já pagas: não é permitido reduzir para <= esse número.
+  // ⚠ A função conta `valor_pago > 0`, que inclui PARCIAL; `parcelas_pagas`
+  //   conta só as quitadas. Quando a consulta voltou, vale a dela.
   const parcelasPagas = emprestimo.parcelas_pagas ?? 0;
-  const minParcelas = Math.max(1, parcelasPagas + 1);
+  const minParcelas = Math.max(1, (redistrib?.qtdFicam ?? parcelasPagas) + 1);
 
   // Total já pago pelo cliente (valor_total contratado - saldo devedor)
   const totalPago = Math.max(0, (emprestimo.valor_total || 0) - (emprestimo.valor_saldo || 0));
 
   /**
-   * Empréstimo que já recebeu dinheiro: valor e taxa ficam travados.
+   * Empréstimo que já recebeu dinheiro: só o VALOR PRINCIPAL fica travado.
    *
-   * Regra do cliente (06/10/2026): mudar o valor de um empréstimo que o
-   * cliente começou a pagar é acordo novo, e para isso existe a renegociação.
-   * O cronograma — frequência, dia de cobrança, número de parcelas — continua
-   * livre, redistribuindo o saldo que falta.
+   * Regra do Mauricio (13/11/2026): "o principal será travado; única
+   * alteração é permitir alterar % de juros, e todo o resto poderá ser
+   * alterado, exceto valor principal".
    *
-   * `fn_alterar_emprestimo_completo` recusa de qualquer jeito e devolve
-   * `requer_renegociacao`. Travar aqui é para o usuário não preencher um
-   * formulário inteiro para ouvir não no fim.
+   * O princípio é o que separa os dois campos: o PRINCIPAL é o dinheiro que
+   * saiu do caixa, e corrigi-lo obriga a anular o lançamento e relançar na
+   * liquidação de origem — que pode estar fechada, e cujo saldo as
+   * liquidações posteriores já copiaram (o degrau da escada, que custou o
+   * `reencadear_dias_posteriores` em 05/10/2026). A TAXA é só cálculo:
+   * mudá-la não move lançamento nenhum, porque `fn_alterar_emprestimo_completo`
+   * guarda todo o bloco do dinheiro por `abs(v_delta_principal) > 0.01`.
+   *
+   * O cronograma — frequência, dia de cobrança, número de parcelas — sempre
+   * foi livre. Em todos esses casos as parcelas que já receberam dinheiro
+   * ficam congeladas e só o saldo restante é redistribuído.
+   *
+   * `fn_alterar_emprestimo_completo` recusa o principal de qualquer jeito e
+   * devolve `requer_renegociacao`. Travar aqui é para o usuário não preencher
+   * um formulário inteiro para ouvir não no fim.
    */
   const temPagamento = parcelasPagas > 0 || totalPago > 0;
 
-  // O empréstimo precisa continuar em aberto após a alteração
-  const alteracaoQuitaEmprestimo = calculosNovos.valorTotal <= totalPago;
+  // O empréstimo precisa continuar em aberto após a alteração.
+  // É a guarda `v_saldo_para_novas <= 0` da função, com a mesma conta — e
+  // ela deixou de ser teórica: baixar muito a taxa de um empréstimo quase
+  // pago zera o que sobra a distribuir.
+  const alteracaoQuitaEmprestimo = calculosNovos.saldoParaNovas <= 0;
 
   // Empréstimos encerrados não podem ser alterados
   const statusBloqueado = ['QUITADO', 'CANCELADO'].includes((emprestimo.status || '').toUpperCase());
@@ -269,6 +316,22 @@ export function CardEdicaoEmprestimo({
           .maybeSingle();
         if (!cancelado && restr && (restr as any).validar_taxa_juros) {
           setTaxaMaximaVendedor((restr as any).taxa_juros_maxima ?? null);
+        }
+
+        // As parcelas que FICAM: as que já receberam dinheiro. É o mesmo
+        // filtro do DELETE da função — `valor_pago > 0` —, e NÃO o status:
+        // `PARCIAL` é parcela com pagamento e tem de entrar aqui.
+        const { data: parc } = await supabase
+          .from('emprestimo_parcelas')
+          .select('valor_pago, valor_saldo')
+          .eq('emprestimo_id', emprestimo.id)
+          .gt('valor_pago', 0);
+        if (!cancelado && Array.isArray(parc)) {
+          setRedistrib({
+            qtdFicam: parc.length,
+            jaPago: parc.reduce((s, p: any) => s + Number(p.valor_pago || 0), 0),
+            saldoFicam: parc.reduce((s, p: any) => s + Number(p.valor_saldo || 0), 0),
+          });
         }
       } catch {
         /* silencioso: não bloqueia a edição por falha de consulta */
@@ -381,7 +444,7 @@ export function CardEdicaoEmprestimo({
 
     if (alteracaoQuitaEmprestimo) {
       setErro(
-        `O novo valor total (${formatarMoeda(calculosNovos.valorTotal)}) não pode ser menor ou igual ao já pago (${formatarMoeda(totalPago)}). A alteração quitaria o empréstimo.`
+        `O saldo a distribuir ficou em ${formatarMoeda(calculosNovos.saldoParaNovas)}. A alteração quitaria o empréstimo — use a quitação.`
       );
       return;
     }
@@ -603,7 +666,7 @@ export function CardEdicaoEmprestimo({
                     min={0}
                     step={0.01}
                     disabled={temPagamento}
-                    title={temPagamento ? 'Já há pagamento neste empréstimo — use a renegociação para mudar o valor' : undefined}
+                    title={temPagamento ? 'Já há pagamento neste empréstimo — o principal é o dinheiro que saiu do caixa. Use a renegociação.' : undefined}
                     className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                   />
                 </div>
@@ -622,8 +685,9 @@ export function CardEdicaoEmprestimo({
                     min={0}
                     max={100}
                     step={0.1}
-                    disabled={temPagamento}
-                    title={temPagamento ? 'Já há pagamento neste empréstimo — use a renegociação para mudar a taxa' : undefined}
+                    /* A TAXA é editável mesmo com pagamento (13/11/2026): ela
+                       não move dinheiro, só recalcula o total e redistribui o
+                       saldo que falta. Quem trava é o PRINCIPAL, logo acima. */
                     className="w-full pl-8 pr-2 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
                   />
                 </div>
@@ -671,6 +735,21 @@ export function CardEdicaoEmprestimo({
                     <span className="font-medium">{formatarMoeda(calculosNovos.valorParcela)}</span>
                   </div>
                 </div>
+
+                {/* A decomposição, quando há pagamento. Sem ela, "Total 1.200"
+                    ao lado de "Parcela 126,67" não fecha com 10 parcelas e
+                    parece erro de conta — a diferença é que 4 parcelas não
+                    serão recriadas. Mesma regra do crédito na quitação: ou a
+                    conta aparece inteira e fecha, ou não aparece. */}
+                {temPagamento && redistrib && (
+                  <p className="mt-1.5 pt-1.5 border-t border-blue-200 text-[11px] text-blue-700">
+                    {formatarMoeda(calculosNovos.valorTotal)} − {formatarMoeda(redistrib.jaPago)}{' '}
+                    já recebido − {formatarMoeda(redistrib.saldoFicam)} que as{' '}
+                    {redistrib.qtdFicam} parcela(s) com pagamento ainda devem ={' '}
+                    <strong>{formatarMoeda(calculosNovos.saldoParaNovas)}</strong> a distribuir
+                    em {calculosNovos.qtdNovas} parcela(s).
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -816,18 +895,21 @@ export function CardEdicaoEmprestimo({
             </div>
           )}
 
-          {/* Por que valor e taxa estão travados.
-              Sem esta linha o campo cinza vira dúvida: o usuário não sabe se
-              é falta de permissão, erro da tela, ou regra. */}
+          {/* Por que o valor principal está travado — e, tão importante
+              quanto, o que PODE ser feito. Sem esta linha o campo cinza vira
+              dúvida: o usuário não sabe se é falta de permissão, erro da
+              tela, ou regra. */}
           {temPagamento && (
             <div className="p-2 bg-gray-50 border border-gray-200 rounded-lg">
               <div className="flex items-start gap-2 text-gray-600 text-xs">
                 <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <p>
-                  Este empréstimo já recebeu pagamento, então valor e taxa não podem
-                  mudar. Dá para alterar frequência, dia de cobrança e número de
-                  parcelas — o saldo que falta é redistribuído. Para mudar o valor,
-                  use a renegociação.
+                  Este empréstimo já recebeu pagamento, então o <strong>valor principal</strong>{' '}
+                  não pode mudar — ele é o dinheiro que saiu do caixa. A{' '}
+                  <strong>taxa de juros</strong> pode ser corrigida, assim como frequência,
+                  dia de cobrança e número de parcelas: as parcelas já pagas ficam como
+                  estão e o saldo que falta é redistribuído nas demais. Para mudar o
+                  principal, use a renegociação.
                 </p>
               </div>
             </div>
@@ -856,8 +938,8 @@ export function CardEdicaoEmprestimo({
                 )}
                 {alteracaoQuitaEmprestimo && (
                   <p>
-                    O novo valor total ({formatarMoeda(calculosNovos.valorTotal)}) não pode ser menor ou igual
-                    ao já pago ({formatarMoeda(totalPago)}) — a alteração quitaria o empréstimo.
+                    O saldo a distribuir ficou em {formatarMoeda(calculosNovos.saldoParaNovas)} — a
+                    alteração quitaria o empréstimo. Para encerrá-lo, use a quitação.
                   </p>
                 )}
                 {taxaAcimaDoLimite && (
