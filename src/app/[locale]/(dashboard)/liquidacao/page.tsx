@@ -1294,7 +1294,49 @@ export default function LiquidacaoDiariaPage() {
     const desc = c.numero_parcela
       ? `${nome} — parcela ${c.numero_parcela}${c.total_parcelas ? `/${c.total_parcelas}` : ''}`
       : nome;
-    if (!confirm(`Estornar o pagamento de ${desc} (${formatarMoeda(Number(c.valor || 0))})?\n\nIsto reverterá o valor da conta e os indicadores da liquidação.`)) {
+
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+
+    // A linha que o admin clicou É UMA OPERAÇÃO: ela vem de `financeiro`, e
+    // `pagamentos_parcelas.financeiro_id` aponta para ela. Sem mandar a
+    // operação, a função estorna TODOS os pagamentos vivos da parcela — e a
+    // parcela pode ter pagamento de outro dia. Era o mecanismo do desastre
+    // de 02/10/2026, e em 14/11 eram 270 parcelas alcançáveis por aqui,
+    // 839.325,05 de colateral. Ver sql/2026-11-14_estorno_mira_a_operacao.sql
+    let operacaoId: string | null = null;
+    let vivos = 0;
+    let sobram = 0;
+    let valorSobra = 0;
+    try {
+      const { data: pgs } = await supabase
+        .from('pagamentos_parcelas')
+        .select('operacao_id, financeiro_id, valor_pago_atual')
+        .eq('parcela_id', c.ref_parcela_id)
+        .eq('estornado', false);
+      const lista = pgs || [];
+      vivos = lista.length;
+      operacaoId = (lista.find((p: any) => p.financeiro_id === c.id)?.operacao_id) ?? null;
+      if (operacaoId) {
+        const resto = lista.filter((p: any) => p.operacao_id !== operacaoId);
+        sobram = resto.length;
+        valorSobra = resto.reduce((s: number, p: any) => s + Number(p.valor_pago_atual || 0), 0);
+      }
+    } catch {
+      // Falhou a consulta: segue no caminho antigo (parcela inteira). É
+      // degradação, não regressão — mas o aviso abaixo deixa de aparecer.
+    }
+
+    // Quem decide apertar lê ESTA tela, então ela diz o que vai acontecer
+    // com o que NÃO foi clicado.
+    const aviso = operacaoId
+      ? (sobram > 0
+          ? `\n\nSerá desfeito SÓ este recebimento. Ficam ${sobram} pagamento(s) nesta parcela, somando ${formatarMoeda(valorSobra)}.`
+          : '')
+      : (vivos > 1
+          ? `\n\n⚠ Não foi possível identificar o recebimento desta linha, então TODOS os ${vivos} pagamentos vivos desta parcela serão estornados — inclusive de outros dias.`
+          : '');
+
+    if (!confirm(`Estornar o pagamento de ${desc} (${formatarMoeda(Number(c.valor || 0))})?\n\nIsto reverterá o valor da conta e os indicadores da liquidação.${aviso}`)) {
       return;
     }
     const motivo = prompt('Motivo do estorno (obrigatório):');
@@ -1303,12 +1345,12 @@ export default function LiquidacaoDiariaPage() {
 
     setEstornandoId(c.id);
     try {
-      const supabase = (await import('@/lib/supabase/client')).createClient();
       const { data, error } = await supabase.rpc('fn_estornar_pagamento_web', {
         p_parcela_id: c.ref_parcela_id,
         p_motivo: motivo.trim(),
         p_vendedor_id: vendedor?.id || null,
         p_user_id: userId || null,
+        p_operacao_id: operacaoId,
       });
       if (error) throw error;
       const res = Array.isArray(data) ? data[0] : data;

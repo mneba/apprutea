@@ -345,11 +345,33 @@ export const solicitacoesService = {
       ? `Estorno autorizado: ${solicitacao.motivo_solicitacao.trim()}`
       : 'Estorno autorizado pelo administrador';
 
+    // QUAL recebimento o vendedor pediu para desfazer. Sem isto o estorno
+    // vale a parcela inteira, e a parcela pode ter pagamento de outro dia —
+    // o mecanismo do desastre de 02/10/2026.
+    // Lido da TABELA, não do objeto: `operacao_id` não está no RETURNS TABLE
+    // de `fn_listar_solicitacoes_central`, e mudar o retorno dela exigiria
+    // DROP + refazer grants numa função de leitura que o sino consulta a cada
+    // minuto. Uma leitura por aprovação é mais barato que isso.
+    // Pedido antigo tem `operacao_id` nulo e cai no comportamento de antes.
+    // Ver sql/2026-11-14_estorno_mira_a_operacao.sql
+    let operacaoId: string | null = null;
+    try {
+      const { data: sol } = await supabase
+        .from('solicitacoes_autorizacao')
+        .select('operacao_id')
+        .eq('id', solicitacao.id)
+        .maybeSingle();
+      operacaoId = (sol as any)?.operacao_id ?? null;
+    } catch {
+      // Degradação, não regressão: segue estornando a parcela inteira.
+    }
+
     const { data: estData, error: estErr } = await supabase.rpc('fn_estornar_pagamento_web', {
       p_parcela_id: solicitacao.parcela_id,
       p_motivo: motivo,
       p_vendedor_id: solicitacao.vendedor_id || null,
       p_user_id: userId,
+      p_operacao_id: operacaoId,
     });
 
     if (estErr) {

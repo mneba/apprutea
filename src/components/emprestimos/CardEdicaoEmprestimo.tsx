@@ -319,15 +319,28 @@ export function CardEdicaoEmprestimo({
           setTaxaMaximaVendedor((restr as any).taxa_juros_maxima ?? null);
         }
 
-        // As parcelas que FICAM: as que já receberam dinheiro. É o mesmo
-        // filtro do DELETE da função — `valor_pago > 0` —, e NÃO o status:
-        // `PARCIAL` é parcela com pagamento e tem de entrar aqui.
-        const { data: parc } = await supabase
+        // As parcelas que FICAM. É o mesmo filtro do DELETE da função, e ele
+        // tem DOIS termos desde 14/11/2026: `valor_pago > 0` OU ter qualquer
+        // registro em `pagamentos_parcelas`, vivo ou estornado.
+        //
+        // O segundo entrou porque `pagamentos_parcelas.parcela_id` é
+        // ON DELETE RESTRICT: a parcela com pagamento estornado não sai, e
+        // apagar o registro do estorno apagaria a auditoria de um dinheiro
+        // que entrou e voltou. A função POUPA essa parcela — então o preview
+        // tem de poupá-la também, ou os dois mostram contas diferentes.
+        // Ver sql/2026-11-14_delete_de_parcela_sem_travar.sql
+        //
+        // E não é o status: `PARCIAL` é parcela com pagamento e entra aqui.
+        const { data: todas } = await supabase
           .from('emprestimo_parcelas')
-          .select('valor_pago, valor_saldo')
-          .eq('emprestimo_id', emprestimo.id)
-          .gt('valor_pago', 0);
-        if (!cancelado && Array.isArray(parc)) {
+          .select('valor_pago, valor_saldo, pagamentos_parcelas(id)')
+          .eq('emprestimo_id', emprestimo.id);
+        const parc = (todas || []).filter(
+          (p: any) =>
+            Number(p.valor_pago || 0) > 0 ||
+            (Array.isArray(p.pagamentos_parcelas) ? p.pagamentos_parcelas.length : 0) > 0
+        );
+        if (!cancelado && Array.isArray(todas)) {
           setRedistrib({
             qtdFicam: parc.length,
             jaPago: parc.reduce((s, p: any) => s + Number(p.valor_pago || 0), 0),
@@ -695,10 +708,11 @@ export function CardEdicaoEmprestimo({
                 </div>
                 <p className="mt-1 text-[11px] text-gray-500">
                   {/* "com pagamento", não "paga(s)": o mínimo sai de `qtdFicam`,
-                      que é o filtro do DELETE da função (`valor_pago > 0`), e
-                      parcela PARCIAL tem pagamento sem estar paga. Dizer "paga"
-                      ao lado de um mínimo que conta a PARCIAL faz a frase não
-                      fechar com o número que está do lado dela. */}
+                      que é o filtro do DELETE da função (`valor_pago > 0` OU ter
+                      registro em `pagamentos_parcelas`), e parcela PARCIAL tem
+                      pagamento sem estar paga. Dizer "paga" ao lado de um mínimo
+                      que conta a PARCIAL faz a frase não fechar com o número que
+                      está do lado dela. */}
                   {parcelasComPagamento > 0
                     ? `Mínimo ${minParcelas} (${parcelasComPagamento} com pagamento) • Máximo ${MAX_PARCELAS}`
                     : `Mínimo ${minParcelas} • Máximo ${MAX_PARCELAS}`}
