@@ -492,8 +492,31 @@ export const usuariosService = {
     if (adminAtual) {
       const novasEmpresas = (adminAtual.admin_empresa_ids as string[])
         .filter((id: string) => id !== empresaId);
-      // Se não sobrou nenhuma empresa como admin, rebaixa para USUARIO_PADRAO
-      const novoTipo = novasEmpresas.length === 0 ? 'USUARIO_PADRAO' : adminAtual.tipo_usuario;
+      /**
+       * Se não sobrou nenhuma empresa como admin, rebaixa para USUARIO_PADRAO
+       * — mas SÓ quem era ADMIN.
+       *
+       * ⚠ Esta linha rebaixava QUALQUER tipo, e em 12/11/2026 tirou o
+       * SUPER_ADMIN da Paola: ela era a titular da empresa "Juan Jose &
+       * Julio Cesar", a titularidade passou para o Juan Jose, o
+       * `admin_empresa_ids` dela ficou vazio e o tipo virou USUARIO_PADRAO.
+       * No dia seguinte ela não tinha mais Central de Liberações,
+       * Categorias Financeiras nem todas as rotas — e as permissões de
+       * módulo estavam intactas, o que mandava procurar no lugar errado.
+       *
+       * Rebaixar faz sentido para ADMIN, que é um tipo DERIVADO da
+       * titularidade: sem empresa titulada, não há do que ser admin.
+       * SUPER_ADMIN e MONITOR não vêm daqui, então esta função não tem o
+       * que dizer sobre eles.
+       *
+       * ⚠ E a mudança não deixa rastro: `log_user_changes` vigia `status` e
+       * os quatro arrays de escopo, mas NÃO `tipo_usuario` nem
+       * `admin_empresa_ids`.
+       */
+      const novoTipo =
+        novasEmpresas.length === 0 && adminAtual.tipo_usuario === 'ADMIN'
+          ? 'USUARIO_PADRAO'
+          : adminAtual.tipo_usuario;
       await supabase
         .from('user_profiles')
         .update({ admin_empresa_ids: novasEmpresas, tipo_usuario: novoTipo })
