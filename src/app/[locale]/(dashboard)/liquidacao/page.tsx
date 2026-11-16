@@ -924,6 +924,7 @@ export default function LiquidacaoDiariaPage() {
   const [ajustesDia, setAjustesDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
   const [modalCobrancas, setModalCobrancas] = useState(false);
   const [estornandoId, setEstornandoId] = useState<string | null>(null);
+  const [resetandoId, setResetandoId] = useState<string | null>(null);
   const [cobrancasDia, setCobrancasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
   const [resumoDia, setResumoDia] = useState<ResumoDia>(RESUMO_DIA_VAZIO);
 
@@ -1369,6 +1370,54 @@ export default function LiquidacaoDiariaPage() {
       setEstornandoId(null);
     }
   }, [vendedor, userId, liquidacao, rota, carregarDadosLiquidacao]);
+
+  // "RESETAR CLIENTE" NO WEB, SÓ EM DIA REABERTO (16/11/2026)
+  //
+  // Quitação errada (6 parcelas, UM lançamento) não se desfaz pelo estorno por
+  // parcela: a linha de quitação do extrato nem tem `ref_parcela_id`, e as
+  // funções de estorno agora RECUSAM recebimento de várias parcelas. Quem
+  // desfaz um recebimento inteiro é `fn_reset_cliente_liquidacao` — que só
+  // existia no app, embora `authenticated` sempre tenha tido EXECUTE nela.
+  // Faltava onde clicar. Mesma regra do app desde 27/10: "reabrir o dia
+  // existe PARA corrigir", então o botão aparece apenas em REABERTO.
+  //
+  // O texto NÃO menciona backup nem "pode ser desfeito": dizer que há rede de
+  // proteção muda o peso do clique (decisão de 09/11 no reset de rota).
+  const handleResetarCliente = useCallback(async (cliente: any) => {
+    if (!liquidacao || liquidacao.status !== 'REABERTO' || !rota) return;
+    const dataStr = String((liquidacao as any).data_liquidacao || '').slice(0, 10);
+    const [y, m, d] = dataStr.split('-');
+    const diaFmt = d && m && y ? `${d}/${m}/${y}` : dataStr;
+    const msg =
+      `Resetar ${cliente.nome} no dia ${diaFmt}?\n\n` +
+      `Isto desfaz TUDO o que este cliente fez neste dia — pagamentos, quitações, ` +
+      `empréstimos criados e microseguros —, corrige o caixa deste dia e reencadeia os dias seguintes.\n\n` +
+      `Não pode ser desfeito. A execução fica registrada com seu usuário.`;
+    if (!confirm(msg)) return;
+
+    setResetandoId(cliente.cliente_id);
+    try {
+      const supabase = (await import('@/lib/supabase/client')).createClient();
+      const { data, error } = await supabase.rpc('fn_reset_cliente_liquidacao', {
+        p_cliente_id: cliente.cliente_id,
+        p_liquidacao_id: liquidacao.id,
+        p_user_id: userId || null,
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (!res || res.sucesso === false) {
+        alert(res?.mensagem || 'Não foi possível resetar o cliente.');
+        return;
+      }
+      alert(res.mensagem || 'Reset concluído.');
+      await carregarDadosLiquidacao(liquidacao, rota.id, { forcar: true });
+    } catch (e: any) {
+      console.error('Erro ao resetar cliente:', e);
+      alert(e?.message || 'Erro ao resetar o cliente. Tente novamente.');
+    } finally {
+      setResetandoId(null);
+    }
+  }, [liquidacao, rota, userId, carregarDadosLiquidacao]);
 
   // `forcar` ignora o cache. Usado por toda ação que altera o dia e pelo botão
   // Atualizar; a montagem da tela chama sem forçar, aproveitando o cache.
@@ -2893,6 +2942,17 @@ export default function LiquidacaoDiariaPage() {
                           <div className="flex-1 min-w-0">
                             <div className="flex items-baseline justify-between gap-2">
                               <span className={`text-sm font-medium truncate ${isCancelado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{cliente.nome}</span>
+                              {isLiquidacaoReaberta && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); handleResetarCliente(cliente); }}
+                                  disabled={resetandoId === cliente.cliente_id}
+                                  title="Desfaz TUDO o que este cliente fez neste dia (pagamentos, quitações, empréstimos, microseguros)"
+                                  className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50 flex-shrink-0"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  {resetandoId === cliente.cliente_id ? 'Resetando…' : 'Resetar'}
+                                </button>
+                              )}
                               {temNotasLiquidacao && (
                                 <button onClick={(e) => { e.stopPropagation(); setModalNotasCliente({ aberto: true, clienteId: cliente.cliente_id, clienteNome: cliente.nome }); }} className="text-[10px] flex items-center gap-0.5 text-amber-600 hover:text-amber-700 flex-shrink-0">
                                   <MessageSquare className="w-3 h-3" />
