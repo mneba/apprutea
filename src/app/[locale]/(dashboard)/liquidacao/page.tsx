@@ -381,9 +381,12 @@ function ModalFecharLiquidacao({
 // =====================================================
 
 function ModalReabrirLiquidacao({
-  isOpen, onClose, onConfirmar, loading, dataLiquidacao,
+  isOpen, onClose, onConfirmar, loading, dataLiquidacao, diaPosteriorAberto,
 }: {
   isOpen: boolean; onClose: () => void; onConfirmar: (motivo: string) => Promise<void>; loading: boolean; dataLiquidacao: string;
+  /** Data de um dia aberto DEPOIS deste, se houver. Com ele, só o Resetar
+   *  cliente corrige o caixa do dia posterior; o resto deixa diferença lá. */
+  diaPosteriorAberto?: string | null;
 }) {
   const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState('');
@@ -421,6 +424,17 @@ function ModalReabrirLiquidacao({
             </div>
           </div>
         </div>
+        {diaPosteriorAberto && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-4 text-sm text-red-800">
+            <p className="font-medium mb-1">
+              O dia {new Date(diaPosteriorAberto + 'T12:00:00').toLocaleDateString('pt-BR')} já está aberto depois deste.
+            </p>
+            <p>
+              Aqui, <strong>só o Resetar cliente</strong> corrige o caixa do dia seguinte sozinho.
+              Qualquer outro lançamento neste dia vai deixar diferença de caixa no dia {new Date(diaPosteriorAberto + 'T12:00:00').toLocaleDateString('pt-BR')}.
+            </p>
+          </div>
+        )}
         <div className="mb-4">
           <label className="block text-sm font-medium text-gray-700 mb-2">Motivo da Reabertura <span className="text-red-500">*</span></label>
           <textarea value={motivo} onChange={(e) => { setMotivo(e.target.value); if (erro) setErro(''); }} className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500 resize-none text-sm ${erro ? 'border-red-300 bg-red-50' : 'border-gray-300'}`} rows={3} placeholder="Descreva o motivo (mínimo 10 caracteres)..." disabled={loading} />
@@ -947,6 +961,10 @@ export default function LiquidacaoDiariaPage() {
 
   // Última data fechada da rota (pra validar se pode reabrir)
   const [ultimaDataFechada, setUltimaDataFechada] = useState<string | null>(null);
+  // Data de um dia ABERTO/REABERTO posterior à última fechada, se houver.
+  // Quem reabre a última fechada com este dia existindo precisa saber que
+  // só o Resetar cliente reencadeia; o resto deixa diferença de caixa lá.
+  const [diaPosteriorAberto, setDiaPosteriorAberto] = useState<string | null>(null);
 
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
@@ -1645,37 +1663,65 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [rota, carregarDadosCalendario]);
 
-  // Data da ÚLTIMA liquidação da rota, em qualquer status.
-  // Serve para liberar a reabertura: só o último dia pode ser reaberto, e
-  // "último" significa que nenhum dia posterior foi iniciado. Antes esta
-  // consulta filtrava por FECHADO/APROVADO, então com 16/07 fechado e 17/07
-  // aberto o 16 aparecia como "a última fechada" e o botão liberava —
-  // reabrir ali quebraria a sequência de caixa, já que o saldo final do 16
-  // é o saldo inicial do 17, que já foi consumido.
+  // Data da ÚLTIMA liquidação FECHADA da rota (FECHADO ou APROVADO).
+  // Serve para liberar a reabertura: só o último dia FECHADO pode ser
+  // reaberto. Um dia posterior ABERTO não bloqueia.
+  //
+  // ⚠ Esta regra já existiu, foi trocada e voltou — e as duas decisões têm
+  // motivo. Em 18/08/2026 a consulta passou a olhar QUALQUER status porque,
+  // com 16/07 fechado e 17/07 aberto, reabrir o 16 e mexer no caixa dele
+  // deixava o 17 com um `caixa_inicial` velho (o degrau de 05/10). Em
+  // 16/11/2026 o Mauricio decidiu voltar a "último dia fechado", porque a
+  // regra de qualquer status deixava a joyce (quitação errada no 14/11,
+  // com o 16/11 já aberto) sem NENHUM caminho de correção — nem web, nem
+  // app. O que mudou entre as duas datas: o RESET de cliente passou a
+  // reencadear os dias posteriores sozinho (sql/2026-11-16_reset_reencadeia
+  // _e_estorno_recusa_multi.sql). Então o reset num dia do meio é seguro;
+  // qualquer OUTRO lançamento num dia do meio ainda deixa degrau no dia
+  // aberto — e é isso que `diaPosteriorAberto` avisa no modal.
   useEffect(() => {
     if (!rota) {
       setUltimaDataFechada(null);
+      setDiaPosteriorAberto(null);
       return;
     }
     (async () => {
       try {
         const supabase = (await import('@/lib/supabase/client')).createClient();
-        const { data, error } = await supabase
-          .from('liquidacoes_diarias')
-          .select('data_liquidacao')
-          .eq('rota_id', rota.id)
-          .order('data_liquidacao', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        if (error) {
-          console.error('Erro ao buscar última data fechada:', error);
+        const [fechada, qualquer] = await Promise.all([
+          supabase
+            .from('liquidacoes_diarias')
+            .select('data_liquidacao')
+            .eq('rota_id', rota.id)
+            .in('status', ['FECHADO', 'APROVADO'])
+            .order('data_liquidacao', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+          supabase
+            .from('liquidacoes_diarias')
+            .select('data_liquidacao, status')
+            .eq('rota_id', rota.id)
+            .order('data_liquidacao', { ascending: false })
+            .limit(1)
+            .maybeSingle(),
+        ]);
+        if (fechada.error) {
+          console.error('Erro ao buscar última data fechada:', fechada.error);
           setUltimaDataFechada(null);
+          setDiaPosteriorAberto(null);
           return;
         }
-        setUltimaDataFechada((data as any)?.data_liquidacao || null);
+        const ultimaFechada = (fechada.data as any)?.data_liquidacao || null;
+        const ultimaQualquer = (qualquer.data as any)?.data_liquidacao || null;
+        setUltimaDataFechada(ultimaFechada);
+        // Há um dia DEPOIS da última fechada? Só pode estar aberto/reaberto.
+        setDiaPosteriorAberto(
+          ultimaFechada && ultimaQualquer && ultimaQualquer > ultimaFechada ? ultimaQualquer : null
+        );
       } catch (err) {
         console.error('Erro inesperado ao buscar última data fechada:', err);
         setUltimaDataFechada(null);
+        setDiaPosteriorAberto(null);
       }
     })();
   }, [rota, liquidacao]);  // Recarrega quando a liquidação muda (após fechar uma, atualiza)
@@ -2543,9 +2589,11 @@ export default function LiquidacaoDiariaPage() {
             )}
           </button>
           {liquidacao?.status === 'FECHADO' && podeReabrir && (() => {
-            // Só reabre se nenhum dia posterior da rota tiver sido iniciado.
-            // `ultimaDataFechada` guarda a última data em QUALQUER status, então
-            // basta ser ela própria. Mesma regra da fn_reabrir_liquidacao_diaria.
+            // Só reabre o ÚLTIMO dia FECHADO da rota (decisão de 16/11/2026,
+            // ver o efeito que calcula `ultimaDataFechada`). Um dia aberto
+            // depois dele não bloqueia. ⚠ Isto é regra de INTERFACE:
+            // fn_reabrir_liquidacao_diaria não a tem — ela só recusa outro dia
+            // REABERTO na rota, mais de 30 dias, e status/permissão/motivo.
             const dataLiqAtual = (liquidacao as any)?.data_liquidacao
               || liquidacao?.data_abertura?.split('T')[0];
             const ehUltimoDia = !!ultimaDataFechada && dataLiqAtual === ultimaDataFechada;
@@ -2558,7 +2606,7 @@ export default function LiquidacaoDiariaPage() {
                 disabled={!ehUltimoDia}
                 title={ehUltimoDia
                   ? 'Reabrir esta liquidação'
-                  : `Não é possível reabrir: o dia ${posteriorFmt} já foi iniciado. Só o último dia da rota pode ser reaberto.`}
+                  : `Não é possível reabrir: o dia ${posteriorFmt} já foi fechado depois deste. Só o último dia fechado da rota pode ser reaberto.`}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-100 text-amber-700 rounded-lg text-xs font-medium hover:bg-amber-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-100"
               >
                 <RotateCcw className="w-3.5 h-3.5" />Reabrir
@@ -3105,7 +3153,7 @@ export default function LiquidacaoDiariaPage() {
           </div>
         </div>
       )}
-      <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={diaOperacional(liquidacao)} />
+      <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={diaOperacional(liquidacao)} diaPosteriorAberto={diaPosteriorAberto} />
       <ModalExtratoLiquidacao isOpen={modalExtrato} onClose={() => setModalExtrato(false)} liquidacao={liquidacao} rotaNome={rota?.nome || ''} vendedorNome={vendedor?.nome} empresaNome={empresaNome} />
       <ModalDetalhesCliente isOpen={modalClienteAberto} onClose={() => { setModalClienteAberto(false); setClienteSelecionado(null); }} cliente={clienteSelecionado} />
 
