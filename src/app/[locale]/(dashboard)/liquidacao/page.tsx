@@ -2613,7 +2613,10 @@ export default function LiquidacaoDiariaPage() {
               </button>
             );
           })()}
-          {(liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO') && !visualizandoOutroDia && (
+          {/* Dia REABERTO fecha de onde for visto: desde 16/11/2026 pode haver
+              um dia ABERTO depois dele, e aí o reaberto é "outro dia" para a
+              tela — sem esta exceção o botão sumia e o dia não tinha como fechar. */}
+          {(liquidacao?.status === 'REABERTO' || (liquidacao?.status === 'ABERTO' && !visualizandoOutroDia)) && (
             <button onClick={() => setModalFechar(true)} className={`flex items-center gap-1.5 px-3 py-1.5 ${liquidacao?.status === 'REABERTO' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'} text-white rounded-lg text-xs font-medium transition-colors`}>
               <Square className="w-3.5 h-3.5" />Fechar Dia
             </button>
@@ -3360,6 +3363,17 @@ export default function LiquidacaoDiariaPage() {
                                           : (c.descricao || 'Cobrança')}
                                       </p>
                                       <p className="text-[11px] text-gray-400">{c.forma_pagamento || 'Dinheiro'}</p>
+                                      {/* Quitação de várias parcelas = UM lançamento sem ref_parcela_id. Não há
+                                          estorno por parcela (a função recusa); o caminho é Resetar o cliente.
+                                          Sem este aviso o usuário procura o botão aqui e não entende (16/11/2026). */}
+                                      {!c.ref_parcela_id && (
+                                        <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
+                                          Recebimento de várias parcelas: não se estorna aqui.{' '}
+                                          {isLiquidacaoReaberta
+                                            ? 'Para desfazê-lo, use "Resetar" na linha do cliente em Clientes do Dia.'
+                                            : 'Para desfazê-lo, reabra o dia e use "Resetar" na linha do cliente em Clientes do Dia.'}
+                                        </p>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                       <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
