@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
+import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
 
 // =====================================================
 // TIPOS
@@ -64,9 +65,9 @@ interface CreditoLiquido {
  * lado — palavra diferente para o mesmo número é o que o Julio chamou de
  * "divergência na interpretação dos valores".
  */
-function fraseCredito(liq: CreditoLiquido): string {
+function fraseCredito(liq: CreditoLiquido, mostrarCredito = true): string {
   const qtd = liq.parcelasQuitadas;
-  if (liq.creditoOculto > 0) {
+  if (liq.creditoOculto > 0 && mostrarCredito) {
     const un = qtd === 1 ? 'parcela' : 'parcelas';
     return ` · crédito aplicado: ${formatarMoeda(liq.creditoOculto)}${qtd > 0 ? ` (${qtd} ${un})` : ''}`;
   }
@@ -261,6 +262,9 @@ export function ModalExtratoLiquidacao({
 }: ModalExtratoLiquidacaoProps) {
   const [loading, setLoading] = useState(false);
   const [gerando, setGerando] = useState(false);
+  // Rota sem crédito à vista: as frases de crédito saem. O dinheiro de cada
+  // linha já é líquido dele, então os totais não mudam.
+  const mostrarCredito = useTrabalhaCredito({ rotaId: liquidacao?.rota_id });
   const [registros, setRegistros] = useState<MovimentoFinanceiro[]>([]);
   const [auditoria, setAuditoria] = useState<EventoAuditoria[]>([]);
   const [pagamentos, setPagamentos] = useState<PagamentoParcela[]>([]);
@@ -928,7 +932,7 @@ export function ModalExtratoLiquidacao({
             <span class="item-cat">${num} ${nomeCliente}</span>
             <span class="item-val verde">+${formatarMoeda(dinheiroRecebido)}</span>
           </div>
-          <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${fraseCredito(liq)}${liq.excedente > 0 ? ` · Crédito gerado: ${formatarMoeda(liq.excedente)}` : ''}</div>
+          <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 && mostrarCredito ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${fraseCredito(liq, mostrarCredito)}${liq.excedente > 0 && mostrarCredito ? ` · Crédito gerado: ${formatarMoeda(liq.excedente)}` : ''}</div>
           <div class="item-meta">${formatarHora(p.created_at)}${p.forma_pagamento ? ` · ${formatarFormaPagamento(p.forma_pagamento)}` : ''}</div>
         </div>`;
       }).join('')}
@@ -1200,6 +1204,7 @@ export function ModalExtratoLiquidacao({
                           ) : (
                             <CardCobranca
                               key={item.p!.id}
+                              mostrarCredito={mostrarCredito}
                               p={item.p!}
                               idx={idx}
                               liq={creditoLiquido(item.p!)}
@@ -1477,10 +1482,12 @@ function CardCobranca({
   p,
   idx,
   liq,
+  mostrarCredito = true,
 }: {
   p: PagamentoParcela;
   idx: number;
   liq: CreditoLiquido;
+  mostrarCredito?: boolean;
 }) {
   const nomeCliente = p.clientes?.nome || `Parcela ${p.numero_parcela}`;
   const valorPagoAtual = Number(p.valor_pago_atual || p.valor_pago_total || 0);
@@ -1499,9 +1506,9 @@ function CardCobranca({
       </div>
       <div className="text-xs text-gray-600 mt-1">
         Parcela {p.numero_parcela}: {formatarMoeda(Number(p.valor_parcela || 0))}
-        {creditoUsado > 0 && ` · ${formatarMoeda(creditoUsado)} com crédito`}
-        {fraseCredito(liq)}
-        {liq.excedente > 0 && ` · Crédito gerado: ${formatarMoeda(liq.excedente)}`}
+        {creditoUsado > 0 && mostrarCredito && ` · ${formatarMoeda(creditoUsado)} com crédito`}
+        {fraseCredito(liq, mostrarCredito)}
+        {liq.excedente > 0 && mostrarCredito && ` · Crédito gerado: ${formatarMoeda(liq.excedente)}`}
       </div>
       <div className="text-[10px] text-gray-400 mt-1">
         {formatarHora(p.created_at)}

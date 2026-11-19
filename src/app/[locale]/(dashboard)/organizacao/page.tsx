@@ -127,6 +127,7 @@ export default function OrganizacaoPage() {
   const [descricaoRota, setDescricaoRota] = useState('');
   const [vendedorRotaId, setVendedorRotaId] = useState('');
   const [trabalhaDomingo, setTrabalhaDomingo] = useState(false);
+  const [trabalhaCredito, setTrabalhaCredito] = useState(false);
   const [veiculoTipo, setVeiculoTipo] = useState<'' | 'CARRO' | 'MOTO'>('');
   const [veiculoCor, setVeiculoCor] = useState('');
   const [veiculoPlaca, setVeiculoPlaca] = useState('');
@@ -370,6 +371,7 @@ export default function OrganizacaoPage() {
     setDescricaoRota('');
     setVendedorRotaId('');
     setTrabalhaDomingo(false);
+    setTrabalhaCredito(false);
     setVeiculoTipo('');
     setVeiculoCor('');
     setVeiculoPlaca('');
@@ -391,6 +393,7 @@ export default function OrganizacaoPage() {
     setDescricaoRota(rota.descricao || '');
     setVendedorRotaId(rota.vendedor_id || '');
     setTrabalhaDomingo(rota.trabalha_domingo ?? false);
+    setTrabalhaCredito(rota.trabalha_credito ?? false);
     setVeiculoTipo((rota.veiculo_tipo as 'CARRO' | 'MOTO' | null) || '');
     setVeiculoCor(rota.veiculo_cor || '');
     setVeiculoPlaca(rota.veiculo_placa || '');
@@ -518,6 +521,7 @@ export default function OrganizacaoPage() {
           descricao: descricaoRota.trim() || undefined,
           vendedor_id: vendedorRotaId || null,
           trabalha_domingo: trabalhaDomingo,
+          trabalha_credito: trabalhaCredito,
           veiculo_tipo: veiculoTipo || null,
           veiculo_cor: veiculoCor.trim() || null,
           veiculo_placa: veiculoPlaca.trim() || null,
@@ -540,6 +544,7 @@ export default function OrganizacaoPage() {
           descricao: descricaoRota.trim() || undefined,
           vendedor_id: vendedorRotaId || undefined,
           trabalha_domingo: trabalhaDomingo,
+          trabalha_credito: trabalhaCredito,
           veiculo_tipo: veiculoTipo || null,
           veiculo_cor: veiculoCor.trim() || null,
           veiculo_placa: veiculoPlaca.trim() || null,
@@ -1644,6 +1649,35 @@ export default function OrganizacaoPage() {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* Crédito — parâmetro de TELA. O crédito existe e funciona igual
+                  com ou sem ele; aqui só se decide se o vendedor o VÊ. */}
+              <div className="pt-4 border-t border-gray-100">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-gray-700">Trabalha com crédito</p>
+                    <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                      {trabalhaCredito
+                        ? 'O valor pago a mais aparece como crédito disponível.'
+                        : 'O valor pago a mais aparece como parte da próxima parcela (ex.: 1,5 parcela paga).'}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={trabalhaCredito}
+                    aria-label="Trabalha com crédito"
+                    onClick={() => setTrabalhaCredito(v => !v)}
+                    className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors ${
+                      trabalhaCredito ? 'bg-green-500' : 'bg-gray-300'
+                    }`}
+                  >
+                    <div className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      trabalhaCredito ? 'translate-x-6' : 'translate-x-0.5'
+                    }`} />
+                  </button>
+                </div>
               </div>
 
               {/* Veículo */}

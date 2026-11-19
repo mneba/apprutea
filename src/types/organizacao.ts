@@ -30,6 +30,8 @@ export interface RotaResumo {
   total_emprestimos: number;
   status: 'ATIVA' | 'INATIVA';
   trabalha_domingo?: boolean;
+  /** Parametro de TELA: false esconde o credito. Ver sql/2026-11-18_rota_trabalha_credito.sql. */
+  trabalha_credito?: boolean;
   veiculo_tipo?: 'CARRO' | 'MOTO' | null;
   veiculo_cor?: string | null;
   veiculo_placa?: string | null;

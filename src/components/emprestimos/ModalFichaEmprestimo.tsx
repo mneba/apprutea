@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { buscarFicha, type Ficha, type EventoFicha } from '@/services/fichaEmprestimo';
 import { AnexosCliente } from '@/components/clientes/AnexosCliente';
+import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
+import { parcelasPagasEquivalentes, fracaoBr } from '@/utils/creditoEmTela';
 
 // ─── Formatação ──────────────────────────────────────────────────────────
 //
@@ -148,6 +150,8 @@ export function ModalFichaEmprestimo({
   const [erro, setErro] = useState<string | null>(null);
   const [aba, setAba] = useState<'parcelas' | 'tempo'>('parcelas');
   const [soAbertas, setSoAbertas] = useState(true);
+  // Rota sem crédito à vista: a palavra some e a contagem vira fração.
+  const mostrarCredito = useTrabalhaCredito({ emprestimoId: idAtual });
   const [expandido, setExpandido] = useState<string | null>(null);
   const [anexoAberto, setAnexoAberto] = useState<string | null>(null);
 
@@ -230,9 +234,16 @@ export function ModalFichaEmprestimo({
   const parcelasAbertas = Number(ficha?.totais?.parcelas_abertas || 0);
   const parcelasTotal = Number(ficha?.totais?.parcelas_total || 0);
 
+  // Sem crédito à vista, a contagem é em EQUIVALENTE: pagou 150 em parcelas
+  // de 100 → "1,5 de 24". Ver utils/creditoEmTela.
+  const pagasEquiv = parcelasPagasEquivalentes(totalEmp, saldoFaltaEmp, valorParcelaEmp, parcelasTotal);
+
   /** "Pago (23 de 24 parcelas)" — e sem o "de 24" quando não falta nenhuma. */
   const rotPagas = (rot: string) => {
     if (!parcelasTotal) return rot;
+    if (!mostrarCredito && pagasEquiv != null && parcelasAbertas > 0) {
+      return `${rot} (${fracaoBr(pagasEquiv)} de ${parcelasTotal} parcelas)`;
+    }
     const un = parcelasPagas === 1 ? 'parcela' : 'parcelas';
     return parcelasAbertas === 0
       ? `${rot} (${parcelasPagas} ${un})`
@@ -309,12 +320,14 @@ export function ModalFichaEmprestimo({
                 <div className="h-px bg-white/20 my-1.5" />
 
                 <Linha rot={rotPagas('Pago')} val={moeda(pagoEmp)} />
-                <Linha
-                  rot="Crédito"
-                  val={moeda(creditoEmp)}
-                  cor={creditoEmp > 0 ? 'text-indigo-200' : undefined}
-                  derivada
-                />
+                {mostrarCredito && (
+                  <Linha
+                    rot="Crédito"
+                    val={moeda(creditoEmp)}
+                    cor={creditoEmp > 0 ? 'text-indigo-200' : undefined}
+                    derivada
+                  />
+                )}
 
                 <div className="h-px bg-white/20 my-1.5" />
 
@@ -524,7 +537,9 @@ export function ModalFichaEmprestimo({
                           </span>
                           <div className="min-w-0 flex-1">
                             <p className={`text-sm font-semibold text-gray-900 ${ev.estornado ? 'line-through' : ''}`}>
-                              {ROTULO_EVENTO[ev.tipo] || ev.tipo}
+                              {ev.tipo === 'CREDITO_CASCATA' && !mostrarCredito
+                                ? 'Adiantamento aplicado'
+                                : (ROTULO_EVENTO[ev.tipo] || ev.tipo)}
                             </p>
                             <p className="text-xs text-gray-500">
                               {dataPura(ev.data_operacional)}
@@ -557,12 +572,12 @@ export function ModalFichaEmprestimo({
                                   Dinheiro: {moeda(ev.dinheiro)}
                                 </span>
                               )}
-                              {(ev.credito_usado || 0) > 0 && (
+                              {(ev.credito_usado || 0) > 0 && mostrarCredito && (
                                 <span className="px-2 py-0.5 rounded text-[11px] bg-indigo-50 text-indigo-700">
                                   Crédito usado: {moeda(ev.credito_usado)}
                                 </span>
                               )}
-                              {(ev.credito_gerado || 0) > 0 && (
+                              {(ev.credito_gerado || 0) > 0 && mostrarCredito && (
                                 <span className="px-2 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700">
                                   Gerou crédito: {moeda(ev.credito_gerado)}
                                 </span>
@@ -594,7 +609,7 @@ export function ModalFichaEmprestimo({
                             ) : (
                               <p className="text-[11px] text-gray-500">
                                 Depois deste evento: {moeda(ev.saldo_devedor)} devedor
-                                {(ev.saldo_credito || 0) > 0 ? ` · ${moeda(ev.saldo_credito)} crédito` : ''}
+                                {(ev.saldo_credito || 0) > 0 && mostrarCredito ? ` · ${moeda(ev.saldo_credito)} crédito` : ''}
                               </p>
                             )}
 

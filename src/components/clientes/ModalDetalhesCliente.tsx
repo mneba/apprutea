@@ -60,6 +60,7 @@ import type {
   Segmento,
   HistoricoCliente,
 } from '@/types/clientes';
+import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
 
 // =====================================================
 // HELPERS
@@ -405,6 +406,8 @@ function CardEmprestimo({
 }) {
   // Um comprovante aberto por vez dentro do card.
   const [comprovanteAberto, setComprovanteAberto] = useState<string | null>(null);
+  // Rota sem crédito à vista: o pagamento por crédito vira "adiantamento".
+  const mostrarCredito = useTrabalhaCredito({ emprestimoId: emprestimo.emprestimo_id });
   const percentualPago = emprestimo.percentual_valor_pago || 0;
   const temParcelasPendentes = parcelas.length === 0 || parcelas.some(p => ['PENDENTE', 'PARCIAL', 'VENCIDO'].includes(p.status));
   const emprestimoAtivo = ['ATIVO', 'VENCIDO'].includes(emprestimo.emprestimo_status);
@@ -563,16 +566,18 @@ function CardEmprestimo({
                             )}
                             {/* Cada pagamento ativo */}
                             {resumo.ativos.map((pg: any, i: number) => {
-                              const forma = rotuloFormaPagamento(pg.forma);
+                              const forma = !mostrarCredito && pg.forma === 'CREDITO'
+                                ? 'Adiantamento'
+                                : rotuloFormaPagamento(pg.forma);
                               return (
                                 <div key={i} className="text-[12px] text-gray-600">
                                   <span>Pago em: {fmtDataHora(pg.created_at)}</span>
                                   {forma && <span> · {forma}</span>}
                                   {pg.liq_data && <span className="text-indigo-500"> · Liq. {fmtDataCurta(pg.liq_data)}</span>}
-                                  {pg.credito_usado > 0 && (
+                                  {pg.credito_usado > 0 && mostrarCredito && (
                                     <span className="block text-blue-600">crédito usado {formatarMoeda(pg.credito_usado)}</span>
                                   )}
-                                  {pg.credito_gerado > 0 && !autoQuitacao && (
+                                  {pg.credito_gerado > 0 && !autoQuitacao && mostrarCredito && (
                                     <span className="block text-purple-600">+{formatarMoeda(pg.credito_gerado)} crédito</span>
                                   )}
                                   {/* Comprovante DESTE pagamento. Abre sob demanda:
@@ -604,7 +609,7 @@ function CardEmprestimo({
                               );
                             })}
                             {autoQuitacao && (
-                              <p className="text-[12px] text-purple-600 font-medium">Quitado por crédito</p>
+                              <p className="text-[12px] text-purple-600 font-medium">{mostrarCredito ? 'Quitado por crédito' : 'Quitado'}</p>
                             )}
                             {saldo > 0 && (
                               <p className="text-[12px] text-amber-600">Saldo restante: {formatarMoeda(saldo)}</p>

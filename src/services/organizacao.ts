@@ -618,6 +618,7 @@ export const organizacaoService = {
         vendedor_id,
         quantidade_clientes,
         trabalha_domingo,
+        trabalha_credito,
         veiculo_tipo,
         veiculo_cor,
         veiculo_placa,
@@ -663,6 +664,7 @@ export const organizacaoService = {
           total_clientes: rota.quantidade_clientes || 0,
           total_emprestimos: totalEmprestimos || 0,
           trabalha_domingo: rota.trabalha_domingo ?? false,
+          trabalha_credito: rota.trabalha_credito ?? false,
           veiculo_tipo: rota.veiculo_tipo ?? null,
           veiculo_cor: rota.veiculo_cor ?? null,
           veiculo_placa: rota.veiculo_placa ?? null,
@@ -712,6 +714,7 @@ export const organizacaoService = {
     descricao?: string;
     vendedor_id?: string;
     trabalha_domingo?: boolean;
+    trabalha_credito?: boolean;
     veiculo_tipo?: 'CARRO' | 'MOTO' | null;
     veiculo_cor?: string | null;
     veiculo_placa?: string | null;
@@ -724,6 +727,7 @@ export const organizacaoService = {
         descricao: dados.descricao,
         vendedor_id: dados.vendedor_id,
         trabalha_domingo: dados.trabalha_domingo ?? false,
+        trabalha_credito: dados.trabalha_credito ?? false,
         veiculo_tipo: dados.veiculo_tipo ?? null,
         veiculo_cor: dados.veiculo_cor ?? null,
         veiculo_placa: dados.veiculo_placa ?? null,
@@ -749,6 +753,7 @@ export const organizacaoService = {
       total_clientes: 0,
       total_emprestimos: 0,
       trabalha_domingo: data.trabalha_domingo ?? false,
+      trabalha_credito: data.trabalha_credito ?? false,
       veiculo_tipo: data.veiculo_tipo ?? null,
       veiculo_cor: data.veiculo_cor ?? null,
       veiculo_placa: data.veiculo_placa ?? null,
@@ -762,6 +767,7 @@ export const organizacaoService = {
     vendedor_id?: string | null;
     status?: string;
     trabalha_domingo?: boolean;
+    trabalha_credito?: boolean;
     veiculo_tipo?: 'CARRO' | 'MOTO' | null;
     veiculo_cor?: string | null;
     veiculo_placa?: string | null;

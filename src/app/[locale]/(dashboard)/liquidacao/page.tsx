@@ -61,6 +61,7 @@ import type {
   EstatisticasClientesDia,
 } from '@/types/liquidacao';
 import type { ClienteComTotais } from '@/types/clientes';
+import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
 
 // =====================================================
 // HELPERS
@@ -860,6 +861,8 @@ export default function LiquidacaoDiariaPage() {
   const { profile, localizacao } = useUser();
   const userId = profile?.user_id;
   const rotaIdContexto = localizacao?.rota_id;
+  // Rota sem crédito à vista: a linha "pagos com crédito" do resumo some.
+  const mostrarCredito = useTrabalhaCredito({ rotaId: rotaIdContexto });
   const empresaId = localizacao?.empresa_id;
 
   const [vendedor, setVendedor] = useState<VendedorLiquidacao | null>(null);
@@ -2774,7 +2777,7 @@ export default function LiquidacaoDiariaPage() {
                       cliente já tinha sendo consumido, e é a razão de
                       `valor_recebido_dia` ser `valor_pago_atual − credito_usado`.
                       Só aparece quando houve, para não virar linha morta. */}
-                  {resumoDia.creditoUsado > 0 && (
+                  {resumoDia.creditoUsado > 0 && mostrarCredito && (
                     <p className="text-[10px] text-violet-600 leading-tight">
                       {formatarMoeda(resumoDia.creditoUsado)} pagos com crédito
                     </p>

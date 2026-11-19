@@ -11,6 +11,7 @@ import {
   Wallet,
   Banknote,
 } from 'lucide-react';
+import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
 
 // =====================================================
 // TIPOS
@@ -78,6 +79,8 @@ export function ModalQuitarEmprestimo({
   onQuitacaoSucesso,
 }: Props) {
   const [carregando, setCarregando] = useState(true);
+  // Rota sem crédito à vista: só o dinheiro a receber. A conta é a mesma.
+  const mostrarCredito = useTrabalhaCredito({ rotaId });
   const [processando, setProcessando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState(false);
@@ -298,6 +301,7 @@ export function ModalQuitarEmprestimo({
               <div className="space-y-3">
                 {/* A conta se lê de cima para baixo e FECHA:
                     parcelas em aberto − crédito a usar = dinheiro. */}
+                {mostrarCredito && (
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Wallet className="w-5 h-5 text-gray-400" />
@@ -307,8 +311,9 @@ export function ModalQuitarEmprestimo({
                     {formatarMoeda(dados.saldo_bruto)}
                   </span>
                 </div>
+                )}
 
-                {dados.credito_disponivel > 0 && (
+                {dados.credito_disponivel > 0 && mostrarCredito && (
                   <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
                     <div className="flex items-center gap-2">
                       <CreditCard className="w-5 h-5 text-blue-500" />
