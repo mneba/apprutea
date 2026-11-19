@@ -6,6 +6,17 @@ import {
   FileText,
   Share2,
   Loader2,
+  ArrowDown,
+  ArrowUp,
+  Minus,
+  Plus,
+  ShieldCheck,
+  Repeat,
+  Lock,
+  LockOpen,
+  ChevronDown,
+  ChevronUp,
+  Search,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
@@ -138,10 +149,12 @@ interface ResumoOperacional {
 // HELPERS
 // =====================================================
 
+// O símbolo é SEMPRE "$", com 2 casas: o sistema não sabe em que país está
+// (CLAUDE.md, "E o símbolo é SEMPRE `$`"). Era `R$` aqui até 19/11/2026.
 function formatarMoeda(valor: number | null | undefined): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
+  return '$ ' + new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(valor || 0);
 }
 
@@ -270,6 +283,9 @@ export function ModalExtratoLiquidacao({
   const [pagamentos, setPagamentos] = useState<PagamentoParcela[]>([]);
   const [vendasDia, setVendasDia] = useState<EmprestimoDia[]>([]);
   const [renegociacoesDia, setRenegociacoesDia] = useState<EmprestimoDia[]>([]);
+  // Blocos do extrato (mockup B): fechados ao abrir, cada um abre ao clique.
+  const [blocosAbertos, setBlocosAbertos] = useState<Set<string>>(new Set());
+  const [buscaCob, setBuscaCob] = useState('');
   const [resumoOp, setResumoOp] = useState<ResumoOperacional>({
     pagos: 0,
     naoPagos: 0,
@@ -766,6 +782,121 @@ export function ModalExtratoLiquidacao({
       !['RETIRO_MICROSEGURO', 'SAIDA_MICROSEGURO'].includes(r.categoria)
   );
 
+  // ══════════════════════════════════════════════════════════════════
+  // O EXTRATO REDESENHADO (19/11/2026) — espelho do app
+  // ══════════════════════════════════════════════════════════════════
+  //
+  // A conta primeiro e o detalhe em blocos (mockup B, aprovado pelo
+  // Mauricio). Mesma estrutura de `LiquidacaoDetalhes.tsx` — mudou lá, muda
+  // aqui, nas DUAS renderizações (tela e PDF). Uma linha por RECEBIMENTO;
+  // empréstimo sem dado de contrato; sem resumo operacional; sem clientes
+  // que faltam. ⚠ Os totais não mudam: saem das contas de cima.
+  const diaAberto = ['ABERTO', 'REABERTO'].includes(String(liquidacao?.status || '').toUpperCase());
+  const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
+
+  type LinhaCob = {
+    key: string; nome: string; criado: string; sub: string; valor: number;
+    quitacao: boolean; usado: number; gerado: number; nota: string; soCredito: number;
+  };
+  const linhasCobranca: LinhaCob[] = (() => {
+    const subParcelas = (nums: number[]) => (nums.length === 1 ? `parcela ${nums[0]}` : fraseParcelas(nums));
+    const out: LinhaCob[] = recebimentos.map((rec) => ({
+      key: rec.key,
+      nome: rec.nomeCliente,
+      criado: rec.linhas[rec.linhas.length - 1].created_at,
+      sub: subParcelas(rec.parcelas),
+      valor: rec.dinheiro,
+      quitacao: rec.quitacao,
+      usado: rec.linhas.reduce((s, pg) => s + Number(pg.valor_credito_usado || 0), 0),
+      gerado: rec.linhas.reduce((s, pg) => s + creditoLiquido(pg).excedente, 0),
+      nota: rec.linhas.map((pg) => fraseCredito(creditoLiquido(pg), mostrarCredito)).join('').replace(/^ · /, ''),
+      soCredito: 0,
+    }));
+    // Recebimento SÓ de crédito, de empréstimo sem linha em dinheiro no dia:
+    // sem isto ele sumia. Aparece com 0,00 e fora da cobrança.
+    const comLinha = new Set(pagamentosDinheiro.map((pg) => pg.emprestimo_id).filter(Boolean));
+    const soCred = new Map<string, PagamentoParcela[]>();
+    for (const pg of pagamentos) {
+      if (pg.forma_pagamento !== 'CREDITO' || comLinha.has(pg.emprestimo_id)) continue;
+      const k = pg.operacao_id || pg.id;
+      const arr = soCred.get(k);
+      if (arr) arr.push(pg);
+      else soCred.set(k, [pg]);
+    }
+    for (const [k, ls] of soCred) {
+      const nums = ls.map((pg) => Number(pg.numero_parcela || 0)).sort((x, y) => x - y);
+      out.push({
+        key: 'c' + k,
+        nome: ls[0].clientes?.nome || '—',
+        criado: ls[ls.length - 1].created_at,
+        sub: subParcelas(nums),
+        valor: 0,
+        quitacao: ls.some((pg) => pg.tipo_operacao === 'QUITACAO'),
+        usado: 0, gerado: 0, nota: '',
+        soCredito: ls.reduce((s, pg) => s + Number(pg.valor_credito_usado || pg.valor_pago_atual || 0), 0),
+      });
+    }
+    return out.sort((a, b) => (a.criado < b.criado ? -1 : a.criado > b.criado ? 1 : 0));
+  })();
+  const qtdParcelasCob = recebimentos.reduce((s, r) => s + r.parcelas.length, 0);
+  const notaSoCredito = (v: number) =>
+    mostrarCredito ? `pago só com crédito: ${formatarMoeda(v)}` : `adiantamento aplicado: ${formatarMoeda(v)}`;
+
+  const tipoEmp = (e: EmprestimoDia) =>
+    e.tipo_emprestimo === 'RENOVACAO'
+      ? { rot: 'RENOVOU', cor: '#92400E', fundo: '#FEF3C7' }
+      : e.tipo_emprestimo === 'ADICIONAL'
+      ? { rot: 'ADICIONAL', cor: '#1E40AF', fundo: '#DBEAFE' }
+      : { rot: 'NOVO', cor: '#065F46', fundo: '#D1FAE5' };
+  const nRenov = vendasDia.filter((e) => e.tipo_emprestimo === 'RENOVACAO').length;
+  const nAdic = vendasDia.filter((e) => e.tipo_emprestimo === 'ADICIONAL').length;
+  const nNovos = vendasDia.length - nRenov - nAdic;
+  const resumoEmprestimos = vendasDia.length === 0 ? 'nenhum' : [
+    nNovos ? plural(nNovos, 'novo', 'novos') : '',
+    nRenov ? plural(nRenov, 'renovação', 'renovações') : '',
+    nAdic ? plural(nAdic, 'adicional', 'adicionais') : '',
+  ].filter(Boolean).join(' · ');
+  const totalRenegociado = renegociacoesDia.reduce((s, e) => s + Number(e.valor_principal || 0), 0);
+
+  const despesasVivas = registrosSaidas.filter((r) => r.status !== 'ANULADO');
+  const nAnuladas = registrosSaidas.length - despesasVivas.length;
+  const resumoDespesas = registrosSaidas.length === 0 ? 'nenhuma' : [
+    plural(despesasVivas.length, 'lançamento', 'lançamentos'),
+    nAnuladas ? plural(nAnuladas, 'anulado', 'anulados') : '',
+  ].filter(Boolean).join(' · ');
+  const nomeLanc = (r: MovimentoFinanceiro) => r.descricao || r.cliente_nome || formatarCategoria(r.categoria);
+
+  // A conta que FECHA, nas duas pontas (tela e PDF).
+  type LinhaConta = { rot: string; txt: string; cor: string };
+  const sinal = (v: number) => `${v >= 0 ? '+' : ''}${formatarMoeda(v)}`;
+  const caixaInicialDia = Number(liquidacao?.caixa_inicial || 0);
+  const linhasConta: LinhaConta[] = [
+    { rot: 'Abriu com', txt: formatarMoeda(caixaInicialDia), cor: '#111827' },
+    { rot: 'Cobrou', txt: `+${formatarMoeda(totalCobrancas)}`, cor: '#047857' },
+  ];
+  if (totalOutrasReceitas > 0) linhasConta.push({ rot: 'Outras receitas', txt: `+${formatarMoeda(totalOutrasReceitas)}`, cor: '#047857' });
+  if (totalVendasEmprestimos > 0) linhasConta.push({ rot: 'Emprestou', txt: `-${formatarMoeda(totalVendasEmprestimos)}`, cor: '#B91C1C' });
+  if (totalSaidasDespesas > 0) linhasConta.push({ rot: 'Gastou', txt: `-${formatarMoeda(totalSaidasDespesas)}`, cor: '#B91C1C' });
+  if (temAjustes) linhasConta.push({ rot: 'Ajustes de saldo', txt: sinal(totalAjustes), cor: '#1D4ED8' });
+  if (temDiferenca) linhasConta.push({ rot: 'Diferença não explicada', txt: sinal(diferencaNaoExplicada), cor: '#B91C1C' });
+  const rotTopo = diaAberto ? 'Saldo do caixa agora' : 'Saldo do caixa no fim do dia';
+  const rotFim = diaAberto ? 'Caixa agora' : 'Fechou com';
+  const avisoDiferenca = 'Dinheiro que mexeu na conta fora deste dia — em geral uma correção de um dia anterior.';
+
+  const alternarBloco = (id: string) =>
+    setBlocosAbertos((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const normalizar = (t: string) =>
+    (t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  const buscaNorm = normalizar(buscaCob);
+  const linhasCobVisiveis = buscaNorm
+    ? linhasCobranca.filter((l) => normalizar(l.nome).includes(buscaNorm))
+    : linhasCobranca;
+
   // ============================================================
   // GERAR HTML PARA IMPRESSÃO / PDF
   // ============================================================
@@ -778,6 +909,26 @@ export function ModalExtratoLiquidacao({
         formatarDataLiquidacaoBR((liquidacao as any).data_liquidacao) ||
         formatarDataLiquidacaoBR(liquidacao.data_abertura);
 
+      // O PDF segue a TELA (mockup B): a conta primeiro, depois os blocos,
+      // abertos. Mesmas listas da tela — e a mesma estrutura do app.
+      const esc = (s: unknown) =>
+        String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const secao = (titulo: string, resumo: string, total: string, cor: string) => `
+  <div class="sec">
+    <div class="sec-row"><span class="sec-t" style="color:${cor}">${titulo}</span></div>
+    ${resumo ? `<div class="sec-res">${esc(resumo)}</div>` : ''}
+  </div>`;
+      const mov = (
+        nome: string,
+        valor: string,
+        sub: string,
+        opc: { cor?: string; cls?: string; badge?: string; badgeCor?: string; badgeFundo?: string; extra?: string } = {}
+      ) => `
+  <div class="mov${opc.cls || ''}">
+    <div class="mov-row"><span class="mov-cat">${esc(nome)}</span><span class="mov-val" style="color:${opc.cor || '#111827'}">${valor}</span></div>
+    <div class="mov-sub">${opc.badge ? `<span class="badge" style="color:${opc.badgeCor};background:${opc.badgeFundo}">${opc.badge}</span> ` : ''}${esc(sub)}</div>${opc.extra || ''}
+  </div>`;
+
       const html = `
 <!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -789,219 +940,128 @@ export function ModalExtratoLiquidacao({
   .container { max-width: 600px; margin: 0 auto; }
   h1 { font-size: 20px; margin-bottom: 4px; text-align: center; }
   .sub { text-align: center; color: #6B7280; font-size: 12px; margin-bottom: 2px; }
-  .sep { border: none; border-top: 1px dashed #D1D5DB; margin: 10px 0; }
-  .sep2 { border: none; border-top: 2px solid #9CA3AF; margin: 12px 0; }
-  .row { display: flex; justify-content: space-between; align-items: baseline; padding: 4px 0; }
-  .b { font-weight: 600; }
-  .lg { font-size: 16px; font-weight: 700; }
-  .verde { color: #059669; }
-  .verm { color: #DC2626; }
-  .azul { color: #2563EB; }
-  .roxo { color: #7C3AED; }
-  .ambar { color: #D97706; }
-  .cinza { color: #9CA3AF; }
-  .secao { text-align: center; font-weight: 700; font-size: 13px; margin-top: 16px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
-  .item { margin-top: 6px; padding: 8px 10px; background: #F9FAFB; border-radius: 6px; border-left: 3px solid #E5E7EB; }
-  .item-row { display: flex; justify-content: space-between; align-items: baseline; }
-  .item-cat { font-weight: 600; }
-  .item-val { font-weight: 700; white-space: nowrap; padding-left: 8px; }
-  .item-sub { color: #6B7280; font-size: 11px; margin-top: 2px; }
-  .item-meta { color: #9CA3AF; font-size: 10px; margin-top: 2px; }
-  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 4px; margin-bottom: 4px; }
-  .selo { text-align: center; margin: 10px auto 0; padding: 7px 12px; border: 1px dashed #D1D5DB; border-radius: 6px; background: #F9FAFB; max-width: 260px; }
+  .selo { text-align: center; margin: 10px auto 0; padding: 7px 12px; border: 1px dashed #D1D5DB; border-radius: 6px; background: #F9FAFB; max-width: 300px; }
   .selo-t { font-size: 11px; font-weight: 700; color: #374151; letter-spacing: 0.5px; }
   .selo div:not(.selo-t) { font-size: 11px; color: #6B7280; margin-top: 2px; }
-  .total-line { display: flex; justify-content: space-between; padding: 6px 10px; background: #F3F4F6; border-radius: 4px; margin-top: 8px; }
+  .conta { margin-top: 14px; padding: 14px 16px; border: 1px solid #E5E7EB; border-radius: 10px; }
+  .topo-rot { font-size: 12px; color: #4B5563; }
+  .topo-val { font-size: 26px; font-weight: 700; margin: 2px 0 8px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; padding: 3px 0; }
+  .row .r { white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .fim { border-top: 1px solid #E5E7EB; margin-top: 4px; padding-top: 6px; font-weight: 700; font-size: 14px; }
+  .aviso { font-size: 11px; color: #991B1B; margin-top: 6px; }
+  .b { font-weight: 700; }
+  .sec { margin-top: 18px; padding-bottom: 6px; border-bottom: 2px solid #E5E7EB; }
+  .sec-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .sec-t { font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .sec-res { font-size: 11px; color: #6B7280; margin-top: 2px; }
+  .mov { padding: 7px 4px; border-bottom: 1px solid #F3F4F6; }
+  .mov.quit { background: #F5F3FF; border-radius: 6px; padding: 7px 8px; }
+  .mov.risc .mov-cat, .mov.risc .mov-val { color: #9CA3AF !important; text-decoration: line-through; }
+  .mov-row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+  .mov-cat { font-weight: 500; }
+  .mov-val { font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .mov-sub { color: #6B7280; font-size: 11px; margin-top: 2px; }
+  .badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; }
+  .cred { margin-top: 4px; padding: 4px 8px; background: #FFFBEB; border-radius: 6px; font-size: 11px; color: #78350F; }
+  .cred .row { padding: 1px 0; }
+  .vazio { text-align: center; color: #9CA3AF; font-size: 12px; padding: 8px 0; }
+  .saldo { display: flex; justify-content: space-between; margin-top: 18px; padding-top: 10px; border-top: 2px solid #9CA3AF; font-size: 16px; font-weight: 700; }
 </style></head>
 <body><div class="container">
 
-  <h1>${rotaNome || 'Rota'}</h1>
-  ${vendedorNome ? `<div class="sub">${vendedorNome}</div>` : ''}
-  ${empresaNome ? `<div class="sub">${empresaNome}</div>` : ''}
+  <h1>${esc(rotaNome || 'Rota')}</h1>
+  ${vendedorNome ? `<div class="sub">${esc(vendedorNome)}</div>` : ''}
+  ${empresaNome ? `<div class="sub">${esc(empresaNome)}</div>` : ''}
   <div class="sub">${dataLiqStr}</div>
   ${fechamento ? `<div class="selo">
     <div class="selo-t">🔒 SISTEMA FECHADO</div>
     <div>${formatarDataHora(fechamento.quando)}</div>
-    ${fechamento.por ? `<div>por ${fechamento.por}</div>` : ''}
+    ${fechamento.por ? `<div>por ${esc(fechamento.por)}</div>` : ''}
   </div>` : ''}
-  <hr class="sep2">
 
-  <div class="row"><span>Caixa inicial</span><span>${formatarMoeda(liquidacao.caixa_inicial)}</span></div>
-  <div class="row"><span class="verde">(+) Cobrança do dia</span><span class="verde">${formatarMoeda(totalCobrancas)}</span></div>
-  <div class="row"><span class="verde">(+) Receitas do dia</span><span class="verde">${formatarMoeda(totalOutrasReceitas)}</span></div>
-  <div class="row"><span class="verm">(-) Despesas do dia</span><span class="verm">${formatarMoeda(totalSaidasDespesas)}</span></div>
-  ${temAjustes ? `<div class="row"><span class="azul">(±) Ajustes de saldo</span><span class="azul">${totalAjustes >= 0 ? '+' : ''}${formatarMoeda(totalAjustes)}</span></div>` : ''}
-  ${totalVendasEmprestimos > 0 ? `<div class="row"><span class="verm">(-) Empréstimos do dia</span><span class="verm">${formatarMoeda(totalVendasEmprestimos)}</span></div>` : ''}
-  ${temDiferenca ? `<div class="row"><span class="verm">(±) Diferença não explicada</span><span class="verm">${formatarMoeda(diferencaNaoExplicada)}</span></div>` : ''}
-  <hr class="sep2">
-  <div class="row"><span class="lg">(=) Caixa final</span><span class="lg">${formatarMoeda(liquidacao.caixa_final)}</span></div>
+  <div class="conta">
+    <div class="topo-rot">${rotTopo}</div>
+    <div class="topo-val" style="color:${caixaFinalGravado < 0 ? '#B91C1C' : '#111827'}">${formatarMoeda(caixaFinalGravado)}</div>
+    ${linhasConta.map((l, i) => `<div class="row"><span style="color:${i === 0 ? '#4B5563' : l.cor}">${l.rot}</span><span class="r" style="color:${l.cor}">${l.txt}</span></div>`).join('')}
+    <div class="row fim"><span>${rotFim}</span><span class="r">${formatarMoeda(caixaFinalGravado)}</span></div>
+    ${temDiferenca ? `<div class="aviso">${avisoDiferenca}</div>` : ''}
+  </div>
 
-  ${vendasDia.length > 0 ? `
-  <div class="secao verm">Empréstimos do Dia</div>
-  <hr class="sep">
-  ${vendasDia.map((emp, idx) => {
-    const clienteNome = emp.cliente?.nome || '—';
-    const clienteCodigo = emp.cliente?.codigo_cliente ? `#${emp.cliente.codigo_cliente} ` : '';
-    const isRenovacao = emp.tipo_emprestimo === 'RENOVACAO';
-    const isAdicional = emp.tipo_emprestimo === 'ADICIONAL';
-    const tipoLabel = isRenovacao ? '🔄 RENOVAÇÃO' : isAdicional ? '➕ ADICIONAL' : '🆕 NOVO';
-    const tipoCor = isRenovacao ? '#D97706' : isAdicional ? '#7C3AED' : '#059669';
-    const primeiroPgto = formatarDataParcela(emp.data_primeiro_vencimento);
-    return `<div class="item">
-      <span class="badge" style="color:${tipoCor};background:${tipoCor}20">${tipoLabel}</span>
-      <div class="item-row">
-        <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${clienteCodigo}${clienteNome}</span>
-        <span class="item-val verm">-${formatarMoeda(Number(emp.valor_principal))}</span>
-      </div>
-      <div class="item-sub">1° pgto: ${primeiroPgto} · ${emp.numero_parcelas}x ${formatarMoeda(Number(emp.valor_parcela))} · juros ${formatarMoeda(Number(emp.valor_total || 0) - Number(emp.valor_principal || 0))} (${emp.taxa_juros}%)</div>
-      <div class="item-meta">${formatarHora(emp.created_at)}</div>
-    </div>`;
+  ${secao('Cobranças',
+    linhasCobranca.length === 0 ? 'nenhuma' : `${plural(linhasCobranca.length, 'recebimento', 'recebimentos')} · ${plural(qtdParcelasCob, 'parcela', 'parcelas')}`,
+    formatarMoeda(totalCobrancas), '#047857')}
+  ${linhasCobranca.map((l) => {
+    const cred = mostrarCredito && (l.usado > 0 || l.gerado > 0)
+      ? `<div class="cred">${l.usado > 0
+          ? `<div class="row"><span>Abateu das parcelas</span><span class="r">${formatarMoeda(l.valor + l.usado)}</span></div>
+             <div class="row"><span>Usou de crédito</span><span class="r">-${formatarMoeda(l.usado)}</span></div>`
+          : ''}${l.gerado > 0
+          ? `<div class="row"><span>Crédito gerado</span><span class="r">+${formatarMoeda(l.gerado)}</span></div>`
+          : ''}</div>`
+      : '';
+    const notas = [l.soCredito > 0 ? notaSoCredito(l.soCredito) : '', l.nota].filter(Boolean)
+      .map((n) => `<div class="mov-sub">${esc(n)}</div>`).join('');
+    return mov(l.nome, formatarMoeda(l.valor), `${formatarHora(l.criado)} · ${l.sub}`, {
+      cor: l.soCredito > 0 ? '#9CA3AF' : l.quitacao ? '#6D28D9' : '#111827',
+      cls: l.quitacao ? ' quit' : '',
+      badge: l.quitacao ? 'QUITOU' : '',
+      badgeCor: '#5B21B6',
+      badgeFundo: '#EDE9FE',
+      extra: cred + notas,
+    });
   }).join('')}
-  <div class="total-line"><span class="verm b">TOTAL EMPRÉSTIMOS</span><span class="verm b">-${formatarMoeda(totalVendasEmprestimos)}</span></div>
+
+  ${entradasOutras.length > 0 ? `
+  ${secao('Outras receitas', plural(entradasOutras.length, 'lançamento', 'lançamentos'), `+${formatarMoeda(totalOutrasReceitas)}`, '#047857')}
+  ${entradasOutras.map((r) => mov(nomeLanc(r), `+${formatarMoeda(Number(r.valor))}`, `${formatarHora(r.created_at)} · ${formatarCategoria(r.categoria)}`, { cor: '#047857' })).join('')}
   ` : ''}
+
+  ${secao('Empréstimos', resumoEmprestimos, `-${formatarMoeda(totalVendasEmprestimos)}`, '#B91C1C')}
+  ${vendasDia.map((e) => {
+    const tp = tipoEmp(e);
+    return mov(e.cliente?.nome || '—', `-${formatarMoeda(Number(e.valor_principal || 0))}`, formatarHora(e.created_at), {
+      cor: '#B91C1C', badge: tp.rot, badgeCor: tp.cor, badgeFundo: tp.fundo,
+    });
+  }).join('')}
 
   ${renegociacoesDia.length > 0 ? `
-  <div class="secao ambar">Renegociações</div>
-  <hr class="sep">
-  ${renegociacoesDia.map((emp, idx) => {
-    const clienteNome = emp.cliente?.nome || '—';
-    const primeiroPgto = formatarDataParcela(emp.data_primeiro_vencimento);
-    return `<div class="item">
-      <div class="item-row">
-        <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${clienteNome}</span>
-        <span class="item-val ambar">${formatarMoeda(Number(emp.valor_principal))}</span>
-      </div>
-      <div class="item-sub">1° pgto: ${primeiroPgto} · ${emp.numero_parcelas}x ${formatarMoeda(Number(emp.valor_parcela))} · juros ${formatarMoeda(Number(emp.valor_total || 0) - Number(emp.valor_principal || 0))} (${emp.taxa_juros}%)</div>
-      <div class="item-meta">${formatarHora(emp.created_at)}</div>
-    </div>`;
-  }).join('')}
-  <div class="total-line"><span class="ambar b">TOTAL RENEGOCIAÇÕES</span><span class="ambar b">${formatarMoeda(renegociacoesDia.reduce((s, e) => s + Number(e.valor_principal || 0), 0))}</span></div>
+  ${secao('Renegociações', `${plural(renegociacoesDia.length, 'renegociação', 'renegociações')} · não sai do caixa`, formatarMoeda(totalRenegociado), '#B45309')}
+  ${renegociacoesDia.map((e) => mov(e.cliente?.nome || '—', formatarMoeda(Number(e.valor_principal || 0)), formatarHora(e.created_at), { cor: '#B45309' })).join('')}
   ` : ''}
+
+  ${secao('Despesas', resumoDespesas, `-${formatarMoeda(totalSaidasDespesas)}`, '#B91C1C')}
+  ${registrosSaidas.map((r) => {
+    const anulado = r.status === 'ANULADO';
+    return mov(nomeLanc(r), `-${formatarMoeda(Number(r.valor))}`,
+      `${formatarHora(r.created_at)} · ${anulado ? 'ANULADO' : formatarCategoria(r.categoria)}`,
+      { cor: '#B91C1C', cls: anulado ? ' risc' : '' });
+  }).join('')}
 
   ${entradasMicroseguro.length > 0 ? `
-  <div class="secao roxo">Microseguros</div>
-  <hr class="sep">
-  ${entradasMicroseguro.map((item, idx) => `
-    <div class="item">
-      <div class="item-row">
-        <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${item.cliente_nome || item.descricao || '—'}</span>
-        <span class="item-val roxo">+${formatarMoeda(Number(item.valor))}</span>
-      </div>
-      <div class="item-meta">${formatarHora(item.created_at)}</div>
-    </div>`).join('')}
-  <div class="total-line"><span class="roxo b">TOTAL MICROSEGUROS</span><span class="roxo b">${formatarMoeda(totalMicroseguros)}</span></div>
+  ${secao('Microsseguro', `${plural(entradasMicroseguro.length, 'venda', 'vendas')} · caixa próprio`, `+${formatarMoeda(totalMicroseguros)}`, '#6D28D9')}
+  ${entradasMicroseguro.map((r) => mov(r.cliente_nome || r.descricao || '—', `+${formatarMoeda(Number(r.valor))}`, formatarHora(r.created_at), { cor: '#6D28D9' })).join('')}
   ` : ''}
-
-  <div class="secao">Resumo Operacional</div>
-  <div class="row"><span>Clientes pagos</span><span class="verde b">${resumoOp.pagos}</span></div>
-  <div class="row"><span>Clientes não pagos</span><span class="verm b">${resumoOp.naoPagos}</span></div>
-  <div class="row"><span>Clientes novos</span><span>${resumoOp.novos}</span></div>
-  <div class="row"><span>Renovações</span><span>${resumoOp.renovados}</span></div>
-  <div class="row"><span>Renegociações</span><span>${resumoOp.renegociados}</span></div>
-
-  <div class="secao">Detalhes Entradas (${recebimentos.length + entradasOutras.length})</div>
-  ${pagamentosDinheiro.length === 0 && entradasOutras.length === 0 ? `<div class="sub cinza">Nenhuma entrada</div>` : `
-    ${pagamentosDinheiro.length > 0 ? `
-      <div class="sub cinza">── Cobranças em dinheiro (${recebimentos.length}) ──</div>
-      ${itensCobranca.map((item, idx) => {
-        const num = String(idx + 1).padStart(2, '0');
-
-        // Recebimento que cobriu varias parcelas: o valor da OPERACAO em
-        // cima, que e o que se confere contra o caixa.
-        if (item.grupo) {
-          const rec = item.grupo;
-          const base = rec.linhas[0];
-          return `<div class="item">
-          <div class="item-row">
-            <span class="item-cat">${num} ${rec.nomeCliente}</span>
-            <span class="item-val" style="color:${rec.quitacao ? '#7C3AED' : '#059669'}">+${formatarMoeda(rec.dinheiro)}</span>
-          </div>
-          <div class="item-sub">${fraseParcelas(rec.parcelas)}${rec.quitacao ? ' · quitação' : ''}</div>
-          <div class="item-meta">${formatarHora(base.created_at)}${base.forma_pagamento ? ` · ${formatarFormaPagamento(base.forma_pagamento)}` : ''}</div>
-        </div>`;
-        }
-
-        const p = item.p!;
-        const nomeCliente = item.rec.nomeCliente;
-        const valorPagoAtual = Number(p.valor_pago_atual || p.valor_pago_total || 0);
-        const creditoUsado = Number(p.valor_credito_usado || 0);
-        const dinheiroRecebido = valorPagoAtual - creditoUsado;
-        const liq = creditoLiquido(p);
-        return `<div class="item">
-          <div class="item-row">
-            <span class="item-cat">${num} ${nomeCliente}</span>
-            <span class="item-val verde">+${formatarMoeda(dinheiroRecebido)}</span>
-          </div>
-          <div class="item-sub">Parcela ${p.numero_parcela}: ${formatarMoeda(Number(p.valor_parcela || 0))}${creditoUsado > 0 && mostrarCredito ? ` · ${formatarMoeda(creditoUsado)} com crédito` : ''}${fraseCredito(liq, mostrarCredito)}${liq.excedente > 0 && mostrarCredito ? ` · Crédito gerado: ${formatarMoeda(liq.excedente)}` : ''}</div>
-          <div class="item-meta">${formatarHora(p.created_at)}${p.forma_pagamento ? ` · ${formatarFormaPagamento(p.forma_pagamento)}` : ''}</div>
-        </div>`;
-      }).join('')}
-      <div class="total-line"><span class="verde b">TOTAL COBRANÇAS</span><span class="verde b">${formatarMoeda(totalCobrancas)}</span></div>
-    ` : ''}
-    ${entradasOutras.length > 0 ? `
-      <div class="sub cinza" style="margin-top:12px">── Outras Receitas (${entradasOutras.length}) ──</div>
-      ${entradasOutras.map((item, idx) => `
-        <div class="item">
-          <div class="item-row">
-            <span class="item-cat">${String(idx + 1).padStart(2, '0')} ${formatarCategoria(item.categoria)}</span>
-            <span class="item-val verde">+${formatarMoeda(Number(item.valor))}</span>
-          </div>
-          ${item.cliente_nome ? `<div class="item-sub">${item.cliente_nome}</div>` : ''}
-          <div class="item-meta">${formatarHora(item.created_at)}${item.forma_pagamento ? ` · ${formatarFormaPagamento(item.forma_pagamento)}` : ''}</div>
-        </div>`).join('')}
-      <div class="total-line"><span class="verde b">TOTAL OUTRAS RECEITAS</span><span class="verde b">${formatarMoeda(totalOutrasReceitas)}</span></div>
-    ` : ''}
-  `}
-
-  <div class="secao">Detalhes Saídas (${registrosSaidas.length})</div>
-  ${registrosSaidas.length === 0 ? `<div class="sub cinza">Nenhuma saída</div>` :
-    registrosSaidas.map((item, idx) => {
-      const isAnulado = item.status === 'ANULADO';
-      const principal = (isAnulado ? '❌ ' : '') + (item.cliente_nome || formatarCategoria(item.categoria));
-      const sub = isAnulado ? 'ANULADO' : (item.cliente_nome && item.descricao ? item.descricao : '');
-      const valorClass = isAnulado ? 'cinza' : 'verm';
-      const valorStyle = isAnulado ? 'text-decoration: line-through;' : '';
-      return `<div class="item" style="${isAnulado ? 'background: #f3f4f6;' : ''}">
-        <div class="item-row">
-          <span class="item-cat" style="${isAnulado ? 'color: #9ca3af;' : ''}">${String(idx + 1).padStart(2, '0')} ${principal}</span>
-          <span class="item-val ${valorClass}" style="${valorStyle}">-${formatarMoeda(Number(item.valor))}</span>
-        </div>
-        ${sub ? `<div class="item-sub" style="${isAnulado ? 'color: #dc2626; font-weight: 600;' : ''}">${sub}</div>` : ''}
-        <div class="item-meta">${formatarHora(item.created_at)}${item.forma_pagamento ? ` · ${formatarFormaPagamento(item.forma_pagamento)}` : ''}</div>
-      </div>`;
-    }).join('')}
-  ${registrosSaidas.length > 0 ? `<div class="total-line"><span class="verm b">TOTAL SAÍDAS</span><span class="verm b">-${formatarMoeda(totalSaidasDespesas)}</span></div>` : ''}
 
   ${reaberturas.length > 0 ? `
-  <div class="secao azul">Reaberturas do Dia</div>
-  <hr class="sep">
-  ${reaberturas.map((ev) => `
-    <div class="item">
-      <div class="item-top"><span class="b">${ev.tipo === 'REABERTURA' ? 'Reaberta' : 'Fechada novamente'}</span></div>
-      <div class="item-sub">${ev.usuario || '—'}</div>
-      ${ev.motivo ? `<div class="item-sub">Motivo: ${ev.motivo}</div>` : ''}
-      <div class="item-meta">${formatarHora(ev.momento)}</div>
-    </div>`).join('')}
-  <div class="secao">Após a reabertura</div>
-  <hr class="sep">
+  ${secao('Dia reaberto', plural(alteracoesPosReabertura.length, 'alteração depois', 'alterações depois'), '', '#1D4ED8')}
+  ${reaberturas.map((ev) => mov(
+    ev.tipo === 'REABERTURA' ? 'Reaberta' : 'Fechada novamente',
+    formatarHora(ev.momento),
+    `${ev.usuario || '—'}${ev.motivo ? ` · Motivo: ${ev.motivo}` : ''}`
+  )).join('')}
+  <div class="sec-res b" style="margin-top:8px">Após a reabertura</div>
   ${alteracoesPosReabertura.length === 0
-    ? `<div class="item"><div class="item-sub">Nenhuma alteração registrada.</div></div>`
-    : alteracoesPosReabertura.map((ev) => `
-    <div class="item">
-      <div class="item-top">
-        <span>${ev.descricao || ev.tipo}</span>
-        <span class="${(ev.impacto_caixa || 0) < 0 ? 'verm' : 'verde'}">${
-          ev.impacto_caixa === null ? '—' : formatarMoeda(ev.impacto_caixa)
-        }</span>
-      </div>
-      <div class="item-meta">${formatarHora(ev.momento)} · ${ev.usuario || '—'}</div>
-    </div>`).join('')}
+    ? `<div class="vazio">Nenhuma alteração registrada.</div>`
+    : alteracoesPosReabertura.map((ev) => mov(
+        ev.descricao || ev.tipo,
+        ev.impacto_caixa === null ? '—' : formatarMoeda(ev.impacto_caixa),
+        `${formatarHora(ev.momento)} · ${ev.usuario || '—'}`
+      )).join('')}
   ` : ''}
 
-  <hr class="sep2">
-  <div class="row"><span class="lg">Saldo Final</span><span class="lg">${formatarMoeda(liquidacao.caixa_final)}</span></div>
-  <hr class="sep2">
-  <div class="sub cinza" style="margin-top:12px">*** FIM DO EXTRATO ***</div>
+  <div class="saldo"><span>Saldo final</span><span>${formatarMoeda(caixaFinalGravado)}</span></div>
+  <div class="sub" style="margin-top:12px;color:#9CA3AF">*** FIM DO EXTRATO ***</div>
 
 </div></body></html>`;
 
@@ -1066,299 +1126,345 @@ export function ModalExtratoLiquidacao({
           </div>
         </div>
 
-        {/* Conteúdo */}
-        <div className="flex-1 overflow-y-auto p-6">
+        {/* Conteúdo — a conta primeiro, o detalhe em blocos (mockup B) */}
+        <div className="flex-1 overflow-y-auto bg-gray-100 p-4 sm:p-6">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
             </div>
           ) : (
-            <div className="space-y-6">
-              {/* Cabeçalho do extrato */}
-              <div className="text-center pb-4 border-b border-dashed border-gray-300">
-                <h3 className="text-xl font-bold text-gray-900">{rotaNome}</h3>
-                {vendedorNome && <p className="text-sm text-gray-600 mt-1">{vendedorNome}</p>}
-                {empresaNome && <p className="text-xs text-gray-500">{empresaNome}</p>}
-                <p className="text-sm text-gray-500 mt-1">{dataLiqStr}</p>
-                {fechamento && (
-                  <div className="mt-3 inline-flex flex-col items-center px-4 py-2 rounded-lg border border-dashed border-gray-300 bg-gray-50">
-                    <span className="text-[11px] font-bold text-gray-700 tracking-wide">
-                      🔒 SISTEMA FECHADO
-                    </span>
-                    <span className="text-[11px] text-gray-500 mt-0.5">
-                      {formatarDataHora(fechamento.quando)}
-                    </span>
-                    {!!fechamento.por && (
-                      <span className="text-[11px] text-gray-500">por {fechamento.por}</span>
-                    )}
-                  </div>
-                )}
+            <div className="space-y-3">
+              <div className="text-center">
+                <h3 className="text-lg font-bold text-gray-900">{rotaNome}</h3>
+                <p className="text-sm text-gray-600">
+                  {[vendedorNome, empresaNome, dataLiqStr].filter(Boolean).join(' · ')}
+                </p>
               </div>
 
-              {/* Resumo de caixa */}
-              <div className="space-y-2">
-                <Linha label="Caixa inicial" valor={formatarMoeda(liquidacao.caixa_inicial)} />
-                <Linha label="(+) Cobrança do dia" valor={formatarMoeda(totalCobrancas)} cor="verde" />
-                <Linha label="(+) Receitas do dia" valor={formatarMoeda(totalOutrasReceitas)} cor="verde" />
-                <Linha label="(-) Despesas do dia" valor={formatarMoeda(totalSaidasDespesas)} cor="verm" />
-                {temAjustes && (
-                  <Linha
-                    label="(±) Ajustes de saldo"
-                    valor={`${totalAjustes >= 0 ? '+' : ''}${formatarMoeda(totalAjustes)}`}
-                    cor="azul"
-                  />
-                )}
-                {totalVendasEmprestimos > 0 && (
-                  <Linha label="(-) Empréstimos do dia" valor={formatarMoeda(totalVendasEmprestimos)} cor="verm" />
-                )}
-                {temDiferenca && (
-                  <Linha
-                    label="(±) Diferença não explicada"
-                    valor={`${diferencaNaoExplicada >= 0 ? '+' : ''}${formatarMoeda(diferencaNaoExplicada)}`}
-                    cor="verm"
-                  />
-                )}
-                <div className="border-t-2 border-gray-300 pt-3">
-                  <Linha label="(=) Caixa final" valor={formatarMoeda(liquidacao.caixa_final)} bold large />
+              {/* A CONTA */}
+              <div className="bg-white rounded-xl p-4 sm:p-5">
+                <p className="text-xs text-gray-600">{rotTopo}</p>
+                <p className={`text-3xl font-bold tabular-nums ${caixaFinalGravado < 0 ? 'text-red-700' : 'text-gray-900'}`}>
+                  {formatarMoeda(caixaFinalGravado)}
+                </p>
+                <div className="mt-3 pt-3 border-t border-gray-200 space-y-1.5">
+                  {linhasConta.map((l, i) => (
+                    <div key={i} className="flex items-baseline justify-between gap-3 text-sm">
+                      <span className="min-w-0" style={{ color: i === 0 ? '#4B5563' : l.cor }}>{l.rot}</span>
+                      <span className="tabular-nums font-medium whitespace-nowrap" style={{ color: l.cor }}>{l.txt}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-baseline justify-between gap-3 pt-2 border-t border-gray-200 text-sm font-bold text-gray-900">
+                    <span>{rotFim}</span>
+                    <span className="tabular-nums whitespace-nowrap">{formatarMoeda(caixaFinalGravado)}</span>
+                  </div>
                 </div>
+                {temDiferenca && <p className="mt-2 text-xs text-red-900">{avisoDiferenca}</p>}
               </div>
 
-              {/* Empréstimos do dia */}
-              {vendasDia.length > 0 && (
-                <Secao titulo="Empréstimos do Dia" cor="text-red-600">
-                  {vendasDia.map((emp, idx) => (
-                    <CardEmprestimo key={emp.id} emp={emp} idx={idx} />
-                  ))}
-                  <div className="flex justify-between items-center px-3 py-2 bg-red-50 rounded mt-2">
-                    <span className="text-sm font-semibold text-red-700">TOTAL EMPRÉSTIMOS</span>
-                    <span className="text-sm font-bold text-red-700">-{formatarMoeda(totalVendasEmprestimos)}</span>
-                  </div>
-                </Secao>
-              )}
-
-              {/* Renegociações */}
-              {renegociacoesDia.length > 0 && (
-                <Secao titulo="Renegociações" cor="text-amber-600">
-                  {renegociacoesDia.map((emp, idx) => (
-                    <CardRenegociacao key={emp.id} emp={emp} idx={idx} />
-                  ))}
-                  <div className="flex justify-between items-center px-3 py-2 bg-amber-50 rounded mt-2">
-                    <span className="text-sm font-semibold text-amber-700">TOTAL RENEGOCIAÇÕES</span>
-                    <span className="text-sm font-bold text-amber-700">
-                      {formatarMoeda(renegociacoesDia.reduce((s, e) => s + Number(e.valor_principal || 0), 0))}
-                    </span>
-                  </div>
-                </Secao>
-              )}
-
-              {/* Microseguros */}
-              {entradasMicroseguro.length > 0 && (
-                <Secao titulo="Microseguros" cor="text-purple-600">
-                  {entradasMicroseguro.map((item, idx) => (
-                    <CardLinhaSimples
-                      key={item.id}
-                      idx={idx}
-                      titulo={item.cliente_nome || item.descricao || '—'}
-                      valor={`+${formatarMoeda(Number(item.valor))}`}
-                      hora={formatarHora(item.created_at)}
-                      corValor="text-purple-600"
-                      bgColor="bg-purple-50"
-                    />
-                  ))}
-                  <div className="flex justify-between items-center px-3 py-2 bg-purple-50 rounded mt-2">
-                    <span className="text-sm font-semibold text-purple-700">TOTAL MICROSEGUROS</span>
-                    <span className="text-sm font-bold text-purple-700">+{formatarMoeda(totalMicroseguros)}</span>
-                  </div>
-                </Secao>
-              )}
-
-              {/* Resumo operacional */}
-              <Secao titulo="Resumo Operacional" cor="text-gray-700">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <Linha label="Clientes pagos" valor={resumoOp.pagos} cor="verde" />
-                  <Linha label="Clientes não pagos" valor={resumoOp.naoPagos} cor="verm" />
-                  <Linha label="Clientes novos" valor={resumoOp.novos} />
-                  <Linha label="Renovações" valor={resumoOp.renovados} />
-                  <Linha label="Renegociações" valor={resumoOp.renegociados} />
+              {fechamento && (
+                <div className="flex items-center gap-2 rounded-lg bg-gray-200 px-3 py-2 text-xs text-gray-700">
+                  <Lock className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    Sistema fechado · {formatarDataHora(fechamento.quando)}
+                    {fechamento.por ? ` · ${fechamento.por}` : ''}
+                  </span>
                 </div>
-              </Secao>
+              )}
 
-              {/* Detalhes entradas */}
-              <Secao
-                titulo={`Detalhes Entradas (${recebimentos.length + entradasOutras.length})`}
-                cor="text-green-700"
+              {/* COBRANÇAS — uma linha por recebimento */}
+              <BlocoExtrato
+                aberto={blocosAbertos.has('cob')}
+                onToggle={() => alternarBloco('cob')}
+                Icone={ArrowDown}
+                cor="#047857"
+                fundo="#D1FAE5"
+                titulo="Cobranças"
+                resumo={linhasCobranca.length === 0 ? 'nenhuma'
+                  : `${plural(linhasCobranca.length, 'recebimento', 'recebimentos')} · ${plural(qtdParcelasCob, 'parcela', 'parcelas')}`}
+                valor={formatarMoeda(totalCobrancas)}
+                vazio={linhasCobranca.length === 0}
               >
-                {pagamentosDinheiro.length === 0 && entradasOutras.length === 0 ? (
-                  <div className="text-center py-4 text-gray-400 text-sm">Nenhuma entrada</div>
-                ) : (
-                  <>
-                    {pagamentosDinheiro.length > 0 && (
-                      <>
-                        {/* A contagem é de RECEBIMENTOS — atos do vendedor —, não de parcelas. */}
-                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 mt-2">
-                          ── Cobranças em dinheiro ({recebimentos.length}) ──
-                        </div>
-                        {itensCobranca.map((item, idx) =>
-                          item.grupo ? (
-                            <CardRecebimento key={item.grupo.key} rec={item.grupo} idx={idx} />
-                          ) : (
-                            <CardCobranca
-                              key={item.p!.id}
-                              mostrarCredito={mostrarCredito}
-                              p={item.p!}
-                              idx={idx}
-                              liq={creditoLiquido(item.p!)}
-                            />
-                          )
-                        )}
-                        <div className="flex justify-between items-center px-3 py-2 bg-green-50 rounded mt-2">
-                          <span className="text-sm font-semibold text-green-700">TOTAL COBRANÇAS</span>
-                          <span className="text-sm font-bold text-green-700">
-                            +{formatarMoeda(totalCobrancas)}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                    {entradasOutras.length > 0 && (
-                      <>
-                        <div className="text-xs text-gray-500 uppercase tracking-wide mb-2 mt-4">
-                          ── Outras Receitas ({entradasOutras.length}) ──
-                        </div>
-                        {entradasOutras.map((item, idx) => (
-                          <CardLinhaSimples
-                            key={item.id}
-                            idx={idx}
-                            titulo={formatarCategoria(item.categoria)}
-                            subtitulo={item.cliente_nome || undefined}
-                            valor={`+${formatarMoeda(Number(item.valor))}`}
-                            hora={formatarHora(item.created_at)}
-                            forma={formatarFormaPagamento(item.forma_pagamento)}
-                            corValor="text-green-600"
-                            bgColor="bg-green-50"
-                          />
-                        ))}
-                        <div className="flex justify-between items-center px-3 py-2 bg-green-50 rounded mt-2">
-                          <span className="text-sm font-semibold text-green-700">TOTAL OUTRAS RECEITAS</span>
-                          <span className="text-sm font-bold text-green-700">
-                            +{formatarMoeda(totalOutrasReceitas)}
-                          </span>
-                        </div>
-                      </>
-                    )}
-                  </>
-                )}
-              </Secao>
-
-              {/* Detalhes saídas */}
-              <Secao titulo={`Detalhes Saídas (${registrosSaidas.length})`} cor="text-red-700">
-                {registrosSaidas.length === 0 ? (
-                  <div className="text-center py-4 text-gray-400 text-sm">Nenhuma saída</div>
-                ) : (
-                  <>
-                    {registrosSaidas.map((item, idx) => {
-                      const isAnulado = item.status === 'ANULADO';
-                      return (
-                        <CardLinhaSimples
-                          key={item.id}
-                          idx={idx}
-                          titulo={
-                            (isAnulado ? '❌ ' : '') +
-                            (item.cliente_nome || formatarCategoria(item.categoria))
-                          }
-                          subtitulo={
-                            isAnulado
-                              ? 'ANULADO'
-                              : item.cliente_nome && item.descricao
-                              ? item.descricao
-                              : undefined
-                          }
-                          valor={`-${formatarMoeda(Number(item.valor))}`}
-                          hora={formatarHora(item.created_at)}
-                          forma={formatarFormaPagamento(item.forma_pagamento)}
-                          corValor={isAnulado ? 'text-gray-400 line-through' : 'text-red-600'}
-                          bgColor={isAnulado ? 'bg-gray-100' : 'bg-red-50'}
-                        />
-                      );
-                    })}
-                    <div className="flex justify-between items-center px-3 py-2 bg-red-50 rounded mt-2">
-                      <span className="text-sm font-semibold text-red-700">TOTAL SAÍDAS</span>
-                      <span className="text-sm font-bold text-red-700">-{formatarMoeda(totalSaidasDespesas)}</span>
-                    </div>
-                  </>
-                )}
-              </Secao>
-
-              {/* Reaberturas — só existe quando o dia foi reaberto.
-                  O MOTIVO aparece aqui e NÃO no extrato do vendedor: quem
-                  recebe o comprovante no celular não tem o que fazer com
-                  "fulano reabriu para corrigir a frequência do cliente". */}
-              {reaberturas.length > 0 && (
-                <Secao titulo="Reaberturas do Dia" cor="text-blue-600">
-                  {reaberturas.map((ev, i) => (
-                    <div key={`reab-${i}`} className="py-2 border-b border-dashed border-gray-200 last:border-0">
-                      <div className="flex justify-between items-baseline">
-                        <span className="text-sm font-semibold text-gray-900">
-                          {ev.tipo === 'REABERTURA' ? 'Reaberta' : 'Fechada novamente'}
-                        </span>
-                        <span className="text-xs text-gray-500">{formatarHora(ev.momento)}</span>
-                      </div>
-                      <div className="text-xs text-gray-600">{ev.usuario || '—'}</div>
-                      {ev.motivo && (
-                        <div className="text-xs text-gray-700 mt-1 italic">Motivo: {ev.motivo}</div>
-                      )}
-                    </div>
-                  ))}
-
-                  <div className="pt-3">
-                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">
-                      Após a reabertura
-                    </p>
-                    {alteracoesPosReabertura.length === 0 ? (
-                      // Dizer "nenhuma" é informação, não ausência dela: um dia
-                      // reaberto e fechado sem mexer em nada é exatamente o que
-                      // um auditor quer ver confirmado.
-                      <p className="text-xs text-gray-500">Nenhuma alteração registrada.</p>
-                    ) : (
-                      alteracoesPosReabertura.map((ev, i) => (
-                        <div key={`alt-${i}`} className="flex justify-between items-baseline py-1">
-                          <div className="min-w-0 pr-2">
-                            <p className="text-sm text-gray-900 truncate">{ev.descricao || ev.tipo}</p>
-                            <p className="text-xs text-gray-500">
-                              {formatarHora(ev.momento)} · {ev.usuario || '—'}
-                            </p>
-                          </div>
-                          <span
-                            className={`text-sm font-medium shrink-0 ${
-                              (ev.impacto_caixa || 0) < 0 ? 'text-red-600' : 'text-green-600'
-                            }`}
-                            // Impacto nulo é "não derivável", não zero. Ver o
-                            // COMMENT de fn_auditoria_liquidacao.
-                            title={ev.impacto_caixa === null ? 'Impacto no caixa não derivável' : undefined}
-                          >
-                            {ev.impacto_caixa === null ? '—' : formatarMoeda(ev.impacto_caixa)}
-                          </span>
-                        </div>
-                      ))
-                    )}
+                {linhasCobranca.length > 8 && (
+                  <div className="relative my-2">
+                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <label htmlFor="extrato-busca" className="sr-only">Procurar cliente</label>
+                    <input
+                      id="extrato-busca"
+                      type="search"
+                      value={buscaCob}
+                      onChange={(e) => setBuscaCob(e.target.value)}
+                      placeholder="Procurar cliente"
+                      className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm"
+                    />
                   </div>
-                </Secao>
+                )}
+                {linhasCobVisiveis.map((l) => (
+                  <div key={l.key} className={`py-2 px-1 border-b border-gray-100 last:border-0 ${l.quitacao ? 'bg-violet-50 rounded-lg px-2' : ''}`}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-900 truncate">{l.nome}</p>
+                        <p className="text-xs text-gray-600 flex items-center gap-1.5 flex-wrap">
+                          {l.quitacao && (
+                            <span className="text-[10px] font-bold px-1.5 rounded bg-violet-100 text-violet-800">QUITOU</span>
+                          )}
+                          <span>{formatarHora(l.criado)} · {l.sub}</span>
+                        </p>
+                      </div>
+                      <span className={`text-sm tabular-nums whitespace-nowrap ${l.soCredito > 0 ? 'text-gray-400' : l.quitacao ? 'text-violet-700 font-bold' : 'text-gray-900 font-medium'}`}>
+                        {formatarMoeda(l.valor)}
+                      </span>
+                    </div>
+                    {l.soCredito > 0 && <p className="text-xs text-gray-500 mt-0.5">{notaSoCredito(l.soCredito)}</p>}
+                    {mostrarCredito && (l.usado > 0 || l.gerado > 0) && (
+                      <div className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900 space-y-0.5">
+                        {l.usado > 0 && (
+                          <>
+                            <div className="flex justify-between gap-3"><span>Abateu das parcelas</span><span className="tabular-nums">{formatarMoeda(l.valor + l.usado)}</span></div>
+                            <div className="flex justify-between gap-3"><span>Usou de crédito</span><span className="tabular-nums">-{formatarMoeda(l.usado)}</span></div>
+                          </>
+                        )}
+                        {l.gerado > 0 && (
+                          <div className="flex justify-between gap-3"><span>Crédito gerado</span><span className="tabular-nums">+{formatarMoeda(l.gerado)}</span></div>
+                        )}
+                      </div>
+                    )}
+                    {!!l.nota && <p className="text-xs text-gray-500 mt-0.5">{l.nota}</p>}
+                  </div>
+                ))}
+                {linhasCobVisiveis.length === 0 && (
+                  <p className="text-center text-sm text-gray-500 py-3">Nenhum cliente com esse nome</p>
+                )}
+              </BlocoExtrato>
+
+              {entradasOutras.length > 0 && (
+                <BlocoExtrato
+                  aberto={blocosAbertos.has('rec')}
+                  onToggle={() => alternarBloco('rec')}
+                  Icone={Plus}
+                  cor="#047857"
+                  fundo="#D1FAE5"
+                  titulo="Outras receitas"
+                  resumo={plural(entradasOutras.length, 'lançamento', 'lançamentos')}
+                  valor={formatarMoeda(totalOutrasReceitas)}
+                >
+                  {entradasOutras.map((r) => (
+                    <LinhaBloco key={r.id} nome={nomeLanc(r)} sub={`${formatarHora(r.created_at)} · ${formatarCategoria(r.categoria)}`}
+                      valor={`+${formatarMoeda(Number(r.valor))}`} cor="#047857" />
+                  ))}
+                </BlocoExtrato>
               )}
 
-              {/* Saldo final */}
-              <div className="border-t-2 border-gray-300 pt-4">
-                <div className="flex justify-between items-center text-lg font-bold">
-                  <span>Saldo Final</span>
-                  <span>{formatarMoeda(liquidacao.caixa_final)}</span>
-                </div>
-              </div>
+              {/* EMPRÉSTIMOS — quem, quanto saiu, novo ou renovação */}
+              <BlocoExtrato
+                aberto={blocosAbertos.has('emp')}
+                onToggle={() => alternarBloco('emp')}
+                Icone={ArrowUp}
+                cor="#B91C1C"
+                fundo="#FEE2E2"
+                titulo="Empréstimos"
+                resumo={resumoEmprestimos}
+                valor={formatarMoeda(totalVendasEmprestimos)}
+                vazio={vendasDia.length === 0}
+              >
+                {vendasDia.map((e) => {
+                  const tp = tipoEmp(e);
+                  return (
+                    <LinhaBloco key={e.id} nome={e.cliente?.nome || '—'} sub={formatarHora(e.created_at)}
+                      valor={`-${formatarMoeda(Number(e.valor_principal || 0))}`} cor="#B91C1C"
+                      badge={{ rot: tp.rot, cor: tp.cor, fundo: tp.fundo }} />
+                  );
+                })}
+              </BlocoExtrato>
 
-              <div className="text-center text-xs text-gray-400 pt-4 border-t border-dashed border-gray-300">
-                *** FIM DO EXTRATO ***
-              </div>
+              {renegociacoesDia.length > 0 && (
+                <BlocoExtrato
+                  aberto={blocosAbertos.has('reneg')}
+                  onToggle={() => alternarBloco('reneg')}
+                  Icone={Repeat}
+                  cor="#B45309"
+                  fundo="#FEF3C7"
+                  titulo="Renegociações"
+                  resumo={`${plural(renegociacoesDia.length, 'renegociação', 'renegociações')} · não sai do caixa`}
+                  valor={formatarMoeda(totalRenegociado)}
+                >
+                  {renegociacoesDia.map((e) => (
+                    <LinhaBloco key={e.id} nome={e.cliente?.nome || '—'} sub={formatarHora(e.created_at)}
+                      valor={formatarMoeda(Number(e.valor_principal || 0))} cor="#B45309" />
+                  ))}
+                </BlocoExtrato>
+              )}
+
+              {/* DESPESAS — anulada fica, riscada e fora do total */}
+              <BlocoExtrato
+                aberto={blocosAbertos.has('desp')}
+                onToggle={() => alternarBloco('desp')}
+                Icone={Minus}
+                cor="#B91C1C"
+                fundo="#FEE2E2"
+                titulo="Despesas"
+                resumo={resumoDespesas}
+                valor={formatarMoeda(totalSaidasDespesas)}
+                vazio={registrosSaidas.length === 0}
+              >
+                {registrosSaidas.map((r) => {
+                  const anulado = r.status === 'ANULADO';
+                  return (
+                    <LinhaBloco key={r.id} nome={nomeLanc(r)}
+                      sub={`${formatarHora(r.created_at)} · ${anulado ? 'ANULADO' : formatarCategoria(r.categoria)}`}
+                      valor={`-${formatarMoeda(Number(r.valor))}`} cor="#B91C1C" riscado={anulado} />
+                  );
+                })}
+              </BlocoExtrato>
+
+              {entradasMicroseguro.length > 0 && (
+                <BlocoExtrato
+                  aberto={blocosAbertos.has('micro')}
+                  onToggle={() => alternarBloco('micro')}
+                  Icone={ShieldCheck}
+                  cor="#6D28D9"
+                  fundo="#EDE9FE"
+                  titulo="Microsseguro"
+                  resumo={`${plural(entradasMicroseguro.length, 'venda', 'vendas')} · caixa próprio`}
+                  valor={formatarMoeda(totalMicroseguros)}
+                >
+                  {entradasMicroseguro.map((r) => (
+                    <LinhaBloco key={r.id} nome={r.cliente_nome || r.descricao || '—'} sub={formatarHora(r.created_at)}
+                      valor={`+${formatarMoeda(Number(r.valor))}`} cor="#6D28D9" />
+                  ))}
+                </BlocoExtrato>
+              )}
+
+              {/* DIA REABERTO — o MOTIVO aparece aqui e NÃO no extrato do
+                  vendedor: quem recebe o comprovante no celular não tem o
+                  que fazer com ele. */}
+              {reaberturas.length > 0 && (
+                <BlocoExtrato
+                  aberto={blocosAbertos.has('reab')}
+                  onToggle={() => alternarBloco('reab')}
+                  Icone={LockOpen}
+                  cor="#1D4ED8"
+                  fundo="#DBEAFE"
+                  titulo="Dia reaberto"
+                  resumo={plural(alteracoesPosReabertura.length, 'alteração depois', 'alterações depois')}
+                >
+                  {reaberturas.map((ev, i) => (
+                    <LinhaBloco key={`reab-${i}`} nome={ev.tipo === 'REABERTURA' ? 'Reaberta' : 'Fechada novamente'}
+                      sub={`${ev.usuario || '—'}${ev.motivo ? ` · Motivo: ${ev.motivo}` : ''}`}
+                      valor={formatarHora(ev.momento)} cor="#4B5563" />
+                  ))}
+                  <p className="text-xs font-semibold text-blue-800 uppercase tracking-wide mt-2 mb-1">Após a reabertura</p>
+                  {alteracoesPosReabertura.length === 0 ? (
+                    // Dizer "nenhuma" é informação: um dia reaberto e fechado
+                    // sem mexer em nada é o que um auditor quer ver confirmado.
+                    <p className="text-xs text-gray-500 py-1">Nenhuma alteração registrada.</p>
+                  ) : (
+                    alteracoesPosReabertura.map((ev, i) => (
+                      // Impacto nulo é "não derivável", não zero. Ver o
+                      // COMMENT de fn_auditoria_liquidacao.
+                      <LinhaBloco key={`alt-${i}`} nome={ev.descricao || ev.tipo}
+                        sub={`${formatarHora(ev.momento)} · ${ev.usuario || '—'}`}
+                        valor={ev.impacto_caixa === null ? '—' : formatarMoeda(ev.impacto_caixa)}
+                        cor={(ev.impacto_caixa || 0) < 0 ? '#B91C1C' : '#047857'} />
+                    ))
+                  )}
+                </BlocoExtrato>
+              )}
             </div>
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+// =====================================================
+// EXTRATO REDESENHADO (19/11/2026) — bloco e linha
+// =====================================================
+
+function BlocoExtrato({
+  aberto,
+  onToggle,
+  Icone,
+  cor,
+  fundo,
+  titulo,
+  resumo,
+  valor,
+  vazio,
+  children,
+}: {
+  aberto: boolean;
+  onToggle: () => void;
+  Icone: React.ComponentType<{ className?: string; style?: React.CSSProperties }>;
+  cor: string;
+  fundo: string;
+  titulo: string;
+  resumo: string;
+  valor?: string;
+  vazio?: boolean;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={vazio}
+        aria-expanded={aberto}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left enabled:hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-blue-500"
+      >
+        <span className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: fundo }}>
+          <Icone className="w-4 h-4" style={{ color: cor }} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-medium text-gray-900">{titulo}</span>
+          <span className="block text-xs text-gray-600">{resumo}</span>
+        </span>
+        {valor != null && (
+          <span className="text-sm font-bold tabular-nums whitespace-nowrap" style={{ color: cor }}>{valor}</span>
+        )}
+        {!vazio && (aberto ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />)}
+      </button>
+      {aberto && !vazio && <div className="border-t border-gray-200 px-4 py-1">{children}</div>}
+    </div>
+  );
+}
+
+function LinhaBloco({
+  nome,
+  sub,
+  valor,
+  cor,
+  riscado,
+  badge,
+}: {
+  nome: string;
+  sub: string;
+  valor: string;
+  cor: string;
+  riscado?: boolean;
+  badge?: { rot: string; cor: string; fundo: string };
+}) {
+  return (
+    <div className="py-2 border-b border-gray-100 last:border-0 flex items-baseline justify-between gap-3">
+      <div className="min-w-0">
+        <p className={`text-sm truncate ${riscado ? 'text-gray-400 line-through' : 'text-gray-900'}`}>{nome}</p>
+        <p className="text-xs text-gray-600 flex items-center gap-1.5 flex-wrap">
+          {badge && (
+            <span className="text-[10px] font-bold px-1.5 rounded" style={{ color: badge.cor, backgroundColor: badge.fundo }}>
+              {badge.rot}
+            </span>
+          )}
+          <span>{sub}</span>
+        </p>
+      </div>
+      <span
+        className={`text-sm font-medium tabular-nums whitespace-nowrap ${riscado ? 'line-through' : ''}`}
+        style={{ color: riscado ? '#9CA3AF' : cor }}
+      >
+        {valor}
+      </span>
     </div>
   );
 }
