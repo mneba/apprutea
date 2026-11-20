@@ -2023,13 +2023,18 @@ export default function LiquidacaoDiariaPage() {
   const handleFecharLiquidacao = async (observacoes: string) => {
     if (!liquidacao || !userId) return;
     const rotaId = (liquidacao as any).rota_id || rotaIdContexto;
-    // Antes de fechar: verificar solicitações pendentes da rota
+    // ══ SOLICITAÇÕES ABERTAS NA ROTA, ANTES DE FECHAR ═════════════════════
+    // Pedido do campo (25/09/2026), decisão do Mauricio (19/11/2026): pendente
+    // trava o fechamento; aprovada e ainda não usada só avisa, todo dia, até
+    // ser usada ou cancelada. Cancelar APAGA (dupla confirmação) — a versão
+    // anterior REJEITAVA, e isso registrava uma rejeição que ninguém fez.
+    // A régua é do banco (fn_solicitacoes_do_fechamento), a mesma do app.
     if (rotaId) {
       try {
         const supabase = (await import('@/lib/supabase/client')).createClient();
-        const { data, error } = await supabase.rpc('fn_listar_solicitacoes_pendentes_rota', { p_rota_id: rotaId });
-        if (!error && Array.isArray(data) && data.length > 0) {
-          // Há pendências: guarda observações e abre modal informativo
+        const { data, error } = await supabase.rpc('fn_solicitacoes_do_fechamento', { p_rota_id: rotaId });
+        if (error) throw error;
+        if (Array.isArray(data) && data.length > 0) {
           setObservacoesFechamento(observacoes);
           setPendenciasEncerramento(data);
           setModalFechar(false);
@@ -2037,38 +2042,37 @@ export default function LiquidacaoDiariaPage() {
           return;
         }
       } catch (err) {
-        console.error('Erro ao verificar pendências:', err);
-        // Em caso de erro na verificação, segue o fechamento normal
+        // Sem a lista não se fecha: fechar por cima de pendência é o defeito
+        // que este passo existe para impedir.
+        console.error('Erro ao verificar solicitações da rota:', err);
+        alert('Não foi possível verificar as solicitações da rota. Tente de novo.');
+        return;
       }
     }
-    // Sem pendências: fecha direto
     await executarFechamento(observacoes);
   };
 
-  // "Continuar" no modal de pendências: rejeita em massa e fecha
-  const handleContinuarEncerramento = async () => {
+  // "Cancelar todas" no modal: segunda confirmação, apaga e fecha
+  const handleCancelarPendenciasEEncerrar = async () => {
     if (!liquidacao || !userId) return;
+    if (!window.confirm('As solicitações serão APAGADAS: não ficará registro delas e terão de ser refeitas.\n\nContinuar?')) return;
     const rotaId = (liquidacao as any).rota_id || rotaIdContexto;
     setLoadingAcao(true);
     try {
       const supabase = (await import('@/lib/supabase/client')).createClient();
-      const { data, error } = await supabase.rpc('fn_rejeitar_solicitacoes_encerramento', {
-        p_rota_id: rotaId,
-        p_admin_user_id: userId,
-      });
+      const { data, error } = await supabase.rpc('fn_cancelar_solicitacoes_do_fechamento', { p_rota_id: rotaId, p_ids: null });
       const row = Array.isArray(data) ? data[0] : data;
       if (error || !row?.sucesso) {
-        alert(row?.mensagem || error?.message || 'Erro ao rejeitar solicitações pendentes');
+        alert(row?.mensagem || error?.message || 'Erro ao cancelar solicitações');
         setLoadingAcao(false);
         return;
       }
     } catch (err: any) {
-      console.error('Erro ao rejeitar solicitações:', err);
-      alert('Erro ao rejeitar solicitações pendentes');
+      console.error('Erro ao cancelar solicitações:', err);
+      alert('Erro ao cancelar solicitações');
       setLoadingAcao(false);
       return;
     }
-    // Rejeitadas: agora fecha de fato
     await executarFechamento(observacoesFechamento);
   };
 
@@ -3112,28 +3116,31 @@ export default function LiquidacaoDiariaPage() {
                 <AlertTriangle className="w-5 h-5 text-amber-600" />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-gray-900">Solicitações pendentes</h2>
-                <p className="text-sm text-gray-500">Existem solicitações não resolvidas nesta rota</p>
+                <h2 className="text-lg font-bold text-gray-900">Solicitações abertas</h2>
+                <p className="text-sm text-gray-500">Há solicitações desta rota ainda em aberto</p>
               </div>
             </div>
 
             <div className="px-6 py-4 overflow-y-auto">
               <p className="text-sm text-gray-600 mb-3">
-                Ao encerrar o dia, as solicitações abaixo serão <strong>rejeitadas automaticamente</strong> pelo sistema.
-                Esta ação não pode ser desfeita.
+                {pendenciasEncerramento.some((p: any) => p.bloqueia)
+                  ? <>Há solicitações <strong>pendentes</strong> nesta rota. O dia só fecha depois que elas forem aprovadas ou rejeitadas em Liberações, ou cancelando todas.</>
+                  : <>Há autorizações <strong>aprovadas e ainda não usadas</strong>. Você pode encerrar o dia e elas continuam valendo, ou cancelar todas.</>}
               </p>
               <div className="space-y-2">
                 {pendenciasEncerramento.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
-                    <div>
+                  <div key={p.id} className="flex items-center justify-between gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                    <div className="min-w-0">
                       <p className="text-sm font-medium text-gray-800">
                         {TIPO_SOLICITACAO_LABELS?.[p.tipo_solicitacao] || p.tipo_solicitacao}
                       </p>
-                      {p.motivo_solicitacao && (
-                        <p className="text-xs text-gray-500 mt-0.5">{p.motivo_solicitacao}</p>
-                      )}
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {p.cliente_nome || ''}{p.data_solicitada ? ` · ${new Date(p.data_solicitada + 'T12:00:00').toLocaleDateString('pt-BR')}` : ''}{p.valor != null ? ` · ${formatarMoeda(Number(p.valor))}` : ''}
+                      </p>
                     </div>
-                    <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded">Pendente</span>
+                    <span className={`text-[11px] font-medium px-2 py-0.5 rounded flex-shrink-0 ${p.bloqueia ? 'text-amber-700 bg-amber-50' : 'text-emerald-700 bg-emerald-50'}`}>
+                      {p.bloqueia ? 'Pendente' : 'Aprovada'}
+                    </span>
                   </div>
                 ))}
               </div>
@@ -3145,15 +3152,25 @@ export default function LiquidacaoDiariaPage() {
                 disabled={loadingAcao}
                 className="flex-1 px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50 transition-colors disabled:opacity-50"
               >
-                Cancelar
+                Voltar
               </button>
+              {!pendenciasEncerramento.some((p: any) => p.bloqueia) && (
+                <button
+                  onClick={() => executarFechamento(observacoesFechamento)}
+                  disabled={loadingAcao}
+                  className="flex-1 px-4 py-2.5 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {loadingAcao ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  Encerrar e manter
+                </button>
+              )}
               <button
-                onClick={handleContinuarEncerramento}
+                onClick={handleCancelarPendenciasEEncerrar}
                 disabled={loadingAcao}
-                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                className="flex-1 px-4 py-2.5 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {loadingAcao ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Continuar e encerrar
+                Cancelar todas
               </button>
             </div>
           </div>
