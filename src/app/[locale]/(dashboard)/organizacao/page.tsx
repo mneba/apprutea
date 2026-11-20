@@ -1576,9 +1576,9 @@ export default function OrganizacaoPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setModalRota(false)} />
           
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[92vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h3 className="text-lg font-semibold text-gray-900">
                 {rotaEditando ? 'Configurações da Rota' : 'Nova Rota'}
               </h3>
@@ -1591,7 +1591,10 @@ export default function OrganizacaoPage() {
             </div>
 
             {/* Body */}
-            <div className="p-6 space-y-4">
+            {/* Duas colunas a partir de md: à esquerda os dados da rota, à
+                direita o veículo e a zona de risco. Antes era uma coluna só
+                de max-w-md e o modal passava da altura da tela. */}
+            <div className="px-6 py-4 overflow-y-auto">
               {/* Badge indicando contexto */}
               <div className={`px-4 py-2.5 rounded-xl font-medium ${
                 rotaEditando 
@@ -1604,6 +1607,8 @@ export default function OrganizacaoPage() {
                 }
               </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 mt-4">
+              <div className="space-y-4">
               {/* Nome */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
@@ -1613,7 +1618,7 @@ export default function OrganizacaoPage() {
                   type="text"
                   value={nomeRota}
                   onChange={(e) => setNomeRota(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Rota Centro Norte"
                 />
               </div>
@@ -1627,7 +1632,7 @@ export default function OrganizacaoPage() {
                   type="text"
                   value={descricaoRota}
                   onChange={(e) => setDescricaoRota(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Ex: Região central e zona norte"
                 />
               </div>
@@ -1640,7 +1645,7 @@ export default function OrganizacaoPage() {
                 <select
                   value={vendedorRotaId}
                   onChange={(e) => setVendedorRotaId(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                  className="w-full px-4 py-2.5 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 >
                   <option value="">Selecione Um Vendedor</option>
                   {vendedoresDisponiveis.map((v) => (
@@ -1680,8 +1685,11 @@ export default function OrganizacaoPage() {
                 </div>
               </div>
 
+              </div>
+
+              <div className="space-y-4">
               {/* Veículo */}
-              <div className="pt-4 border-t border-gray-100">
+              <div className="pt-4 border-t border-gray-100 md:pt-0 md:border-t-0">
                 <h3 className="text-sm font-semibold text-gray-700 mb-3">Veículo da Rota</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1765,10 +1773,12 @@ export default function OrganizacaoPage() {
                   </button>
                 </div>
               )}
+              </div>
+              </div>
             </div>
 
             {/* Footer */}
-            <div className="flex items-center justify-end gap-3 p-6 border-t border-gray-200">
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 flex-shrink-0">
               <button
                 onClick={() => setModalRota(false)}
                 className="px-4 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
