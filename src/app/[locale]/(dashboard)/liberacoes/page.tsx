@@ -96,7 +96,7 @@ const TIPO_CONFIG: Record<string, { titulo: string; subtitulo: string; icone: st
   },
   'CLIENTE_OUTRA_ROTA': { 
     titulo: 'Cliente de Outra Rota', 
-    subtitulo: 'Rota Diferente',
+    subtitulo: 'Incluir cliente na rota do vendedor',
     icone: '🔀',
     cor: 'purple'
   },
@@ -994,7 +994,7 @@ function ModalDetalhesSolicitacao({
                   <span className="text-sm font-medium text-gray-700">{tipoConfig.subtitulo || 'Motivo'}</span>
                 </div>
                 <div className="bg-gray-100 border border-gray-200 rounded-xl p-4">
-                  <p className="text-xs text-gray-500 mb-1">Comentário do vendedor:</p>
+                  <p className="text-xs text-gray-500 mb-1">{solicitacao.tipo_solicitacao === 'CLIENTE_OUTRA_ROTA' ? 'Situação do cliente (montada pelo sistema):' : 'Comentário do vendedor:'}</p>
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">
                     {solicitacao.motivo_solicitacao || 'Nenhum motivo informado'}
                   </p>
@@ -1897,6 +1897,9 @@ export default function LiberacoesPage() {
       // Para RENEGOCIACAO e EMPRESTIMO_ADICIONAL, usar função especial
       if (['RENEGOCIACAO', 'EMPRESTIMO_ADICIONAL'].includes(solicitacaoSelecionada.tipo_solicitacao)) {
         resultado = await solicitacoesService.aprovarAutorizacaoCliente(solicitacaoSelecionada, user.id);
+      } else if (solicitacaoSelecionada.tipo_solicitacao === 'CLIENTE_OUTRA_ROTA') {
+        // Aprovar = incluir o cliente na rota de quem pediu (20/11/2026).
+        resultado = await solicitacoesService.aprovarClienteOutraRota(solicitacaoSelecionada.id, motivo);
       } else if (solicitacaoSelecionada.tipo_solicitacao === 'ESTORNO_PAGAMENTO') {
         // Estorno: aprovar efetiva o estorno de fato (reverte a parcela)
         console.log('[APROVAR] entrando no ramo ESTORNO_PAGAMENTO');

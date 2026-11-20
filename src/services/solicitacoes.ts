@@ -329,6 +329,25 @@ export const solicitacoesService = {
     };
   },
 
+  // Aprovar CLIENTE_OUTRA_ROTA (20/11/2026): inclui a rota do vendedor que
+  // pediu em `clientes.rotas_ids` e aprova, na mesma transação. A venda depois
+  // é feita pelo vendedor, com as regras da rota dele.
+  async aprovarClienteOutraRota(
+    solicitacaoId: string,
+    motivo?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const { data, error } = await supabase.rpc('fn_aprovar_cliente_outra_rota', {
+      p_solicitacao_id: solicitacaoId,
+      p_motivo: motivo || null,
+    });
+    if (error) {
+      console.error('Erro ao aprovar cliente de outra rota:', error);
+      return { success: false, message: error.message };
+    }
+    const r = Array.isArray(data) ? data[0] : data;
+    return { success: !!r?.sucesso, message: r?.mensagem || 'Erro ao aprovar' };
+  },
+
   // Aprovar solicitação de ESTORNO_PAGAMENTO
   // Executa o estorno de fato (fn_estornar_pagamento_web) e, só se der certo,
   // marca a solicitação como aprovada. Se o estorno falhar (ex.: fora de ordem,
