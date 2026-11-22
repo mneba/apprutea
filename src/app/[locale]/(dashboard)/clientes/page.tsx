@@ -358,7 +358,13 @@ export default function ClientesPage() {
   const [frequenciasFiltro, setFrequenciasFiltro] = useState<string[]>([...FREQUENCIAS]);
   const [dropdownFreqAberto, setDropdownFreqAberto] = useState(false);
   const [statusFiltro, setStatusFiltro] = useState<string>('');
-  const [rotaFiltro, setRotaFiltro] = useState<string>('');
+  // Abre na rota do cabeçalho (pedido do Julio, 12/10/2026). Até 22/11/2026
+  // a rota do cabeçalho filtrava a lista CALADA enquanto a caixa mostrava
+  // "Todas as Rotas" — e escolher outra rota na caixa não fazia nada, porque
+  // `rotaIdContexto || rotaFiltro` dava sempre a do cabeçalho. Agora a caixa
+  // é o filtro, nasce do cabeçalho e o acompanha quando ele muda.
+  const [rotaFiltro, setRotaFiltro] = useState<string>(rotaIdContexto || '');
+  useEffect(() => { setRotaFiltro(rotaIdContexto || ''); }, [rotaIdContexto]);
 
   // ─── Exportação ─────────────────────────────────────────────────────────
   //
@@ -445,7 +451,7 @@ export default function ClientesPage() {
     if (!empresaId) return;
 
     const forcar = opts?.forcar;
-    const rotaParam = rotaIdContexto || rotaFiltro || undefined;
+    const rotaParam = rotaFiltro || undefined;
     const freqParam = frequenciasFiltro;
 
     // Busca digitada não entra no cache: encheria o Map com uma chave por
@@ -500,7 +506,7 @@ export default function ClientesPage() {
     } finally {
       setLoading(false);
     }
-  }, [empresaId, rotaIdContexto, rotaFiltro, statusFiltro, busca, frequenciasFiltro]);
+  }, [empresaId, rotaFiltro, statusFiltro, busca, frequenciasFiltro]);
 
   useEffect(() => {
     carregarDados();

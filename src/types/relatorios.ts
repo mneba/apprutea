@@ -130,6 +130,12 @@ export interface DiaPeriodo {
    * coisas que não se comparam — ver o cabeçalho da RPC.
    */
   esperado: number;
+  /**
+   * Pagamento de parcela que VENCE no dia — o numerador do percentual. O
+   * `recebido` é o total cobrado, inclusive atraso e quitação. A semana soma
+   * este, nunca o `recebido`, senão volta o 107%.
+   */
+  recebido_dia: number;
   percentual_recebimento: number;
   emprestado: number;
   juros_vendidos: number;
@@ -298,6 +304,19 @@ export interface LinhaVenda {
    * maior.
    */
   classificacao: 'MAIOR' | 'IGUAL' | 'MENOR' | 'PRIMEIRO';
+  /**
+   * Quem autorizou a venda (22/11/2026). ACHADO na leitura — não há vínculo
+   * gravado; ver sql/2026-11-22_vendas_com_autorizacao.sql. Nulo quando não
+   * houve autorização ou quando não se achou o par.
+   */
+  autorizacao?: {
+    tipo: string;
+    por: string | null;
+    /** O motivo do pedido, montado pelo sistema ("Renovação de $ … excede …"). */
+    motivo: string | null;
+    /** O que o admin escreveu ao aprovar, quando escreveu. */
+    nota: string | null;
+  } | null;
 }
 
 export interface TotaisVendas {

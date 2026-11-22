@@ -35,11 +35,12 @@
 // NÃO HÁ GRÁFICO DE COBRADO CONTRA EMPRESTADO. São fluxos diferentes, e
 // barras lado a lado convidam a uma comparação que não significa nada.
 //
-// NÃO HÁ PERCENTUAL NO PERÍODO. Somar o esperado ao longo de semanas mistura
-// coisas que não se comparam: a parcela que vencia no dia 3 e foi paga no dia
-// 10 entra nos dois lados; a que vence no dia 30 entra só num. Numa rota real
-// deu 107%, com dias de 231% e 419%. No dia a dia os dois campos ficam, porque
-// ali significam o que o vendedor entende.
+// NÃO HÁ PERCENTUAL NO PERÍODO INTEIRO, mas há POR SEMANA (22/11/2026, pedido
+// do Julio). O que dava 107% era somar o `recebido` — que inclui parcela
+// atrasada e quitação — contra o esperado. Desde 21/10 o dia tem `recebido_dia`,
+// só pagamento de parcela que vence NAQUELE dia, e a semana soma ESSE contra o
+// esperado: os dois lados saem do mesmo universo, então o percentual se
+// sustenta. A semana é segunda a domingo, e corta no limite do período.
 //
 // Nenhuma conta acontece aqui: tudo vem de `fn_liquidacoes_periodo`, inclusive
 // o que NÃO somar. Ver sql/2026-10-01_fn_liquidacoes_periodo.sql e os scripts
@@ -49,7 +50,7 @@ import {
   ArrowDownToLine, ArrowLeft, ArrowRightLeft, ArrowUpFromLine, Calendar,
   ChevronDown, Download, Globe, Loader2, MapPin, Shield, TrendingUp,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import AjudaRelatorio, { type SecaoAjuda } from '@/components/relatorios/AjudaRelatorio';
 import ArvoreEscopo from '@/components/relatorios/ArvoreEscopo';
 import PainelCobranca from '@/components/relatorios/PainelCobranca';
@@ -87,6 +88,16 @@ const diaSemana = (d: string) => {
   const [a, m, dd] = d.substring(0, 10).split('-').map(Number);
   return new Date(Date.UTC(a, m - 1, dd)).getUTCDay();
 };
+
+/** Segunda-feira da semana de um `YYYY-MM-DD`, em UTC pelo mesmo motivo acima. */
+const inicioSemana = (d: string) => {
+  const [a, m, dd] = d.substring(0, 10).split('-').map(Number);
+  const t = new Date(Date.UTC(a, m - 1, dd));
+  t.setUTCDate(t.getUTCDate() - ((t.getUTCDay() + 6) % 7));
+  return t.toISOString().substring(0, 10);
+};
+
+interface Semana { de: string; ate: string; recebido: number; recebidoDia: number; esperado: number; emprestado: number; ganancia: number }
 
 const hojeIso = () => {
   const d = new Date();
@@ -146,7 +157,7 @@ const AJUDA: SecaoAjuda[] = [
       // passavam de 100%, máximo de 9010%. Corrigido em
       // sql/2026-10-21_meta_do_dia_no_relatorio.sql, que passou o numerador a
       // contar só pagamento de parcela que vence no dia.
-      '**Não há percentual no período, de propósito.** Somar o esperado de semanas mistura a parcela que vencia no dia 3 e foi paga no dia 10 — numa rota real deu 107%, com dias de 231%.',
+      '**Não há percentual do período inteiro; há por semana.** A linha cinza no fim de cada semana compara o que foi pago das parcelas que venciam naquela semana com o esperado dela. Atraso e quitação ficam fora da conta, como no dia.',
       '**Por dia, o percentual compara só o que vence naquele dia.** Cobrança de parcela atrasada e de quitação entra em Cobrança, porque é dinheiro que entrou, mas fica fora da meta — ela é do dia.',
       '**Caixa e carteira são do último dia de cada rota.** Somam entre rotas, nunca entre dias.',
       '**Clientes ativos é a base; clientes pagos é o movimento.** O segundo soma entre dias: o mesmo cliente pago em dez dias conta dez.',
@@ -463,6 +474,37 @@ export default function LiquidacaoPeriodoPage() {
 
   /** Colunas do dia a dia que só existem quando houve liquidação. */
   const COLUNAS_DA_LIQUIDACAO = 11;
+
+  /**
+   * Subtotal por semana (segunda a domingo), na ordem em que os dias vêm.
+   * Percentual = Σ recebido_dia ÷ Σ esperado: o mesmo universo do percentual
+   * do dia. Somar o `recebido` aqui traria de volta o 107% — ver o cabeçalho.
+   */
+  const semanas = useMemo(() => {
+    const m = new Map<string, Semana>();
+    for (const d of dados?.por_dia ?? []) {
+      const k = inicioSemana(d.data);
+      const s = m.get(k) ?? { de: d.data, ate: d.data, recebido: 0, recebidoDia: 0, esperado: 0, emprestado: 0, ganancia: 0 };
+      if (d.data < s.de) s.de = d.data;
+      if (d.data > s.ate) s.ate = d.data;
+      s.recebido += d.recebido || 0;
+      s.recebidoDia += d.recebido_dia || 0;
+      s.esperado += d.esperado || 0;
+      s.emprestado += d.emprestado || 0;
+      s.ganancia += d.ganancia || 0;
+      m.set(k, s);
+    }
+    return m;
+  }, [dados]);
+
+  /** Colunas depois de Lucro, para a linha da semana fechar a largura. */
+  const colunasDepoisDoLucro =
+    6 + (temTransferencia ? 1 : 0) + (temAjuste ? 1 : 0) + (temMicro ? 2 : 0) + (temAporte ? 1 : 0);
+
+  /** Médias por dia trabalhado — mesma régua da média de cobrança da RPC. */
+  const diasTrab = c?.dias_trabalhados ?? 0;
+  const mediaVenda = diasTrab > 0 ? (c?.emprestado ?? 0) / diasTrab : 0;
+  const mediaLucro = diasTrab > 0 ? (c?.ganancia ?? 0) / diasTrab : 0;
 
   const exportarDias = () => {
     if (!dados) return;
@@ -798,8 +840,14 @@ export default function LiquidacaoPeriodoPage() {
                       <tbody className="divide-y divide-gray-50">
                         {(dados?.por_dia ?? []).map((d) => {
                           const dom = diaSemana(d.data) === 0;
+                          const sem = semanas.get(inicioSemana(d.data));
+                          // A linha da semana sai depois do ÚLTIMO dia dela que
+                          // está na lista — funciona com a lista em qualquer ordem.
+                          const fechaSemana = !!sem && sem.ate === d.data;
+                          const pctSem = sem && sem.esperado > 0 ? (sem.recebidoDia / sem.esperado) * 100 : null;
                           return (
-                            <tr key={d.data} className="hover:bg-gray-50">
+                            <Fragment key={d.data}>
+                            <tr className="hover:bg-gray-50">
                               {/* O dia da semana na frente do dia do mês: sem
                                   ele, ler uma queda de cobrança exige contar no
                                   calendário. Domingo em vermelho discreto — na
@@ -865,6 +913,35 @@ export default function LiquidacaoPeriodoPage() {
                                 </td>
                               )}
                             </tr>
+                            {fechaSemana && sem && (
+                              <tr className="bg-slate-50 border-y border-slate-200">
+                                <td className="px-3 py-1.5 whitespace-nowrap text-[11px] font-semibold uppercase tracking-wide text-slate-600">
+                                  Semana {diaCurto(sem.de)}–{diaCurto(sem.ate)}
+                                </td>
+                                <td className="px-3 py-1.5 text-right font-semibold text-slate-800 tabular-nums">{fmt(sem.recebido)}</td>
+                                <td className="px-3 py-1.5 text-right text-slate-500 tabular-nums">{fmt(sem.esperado)}</td>
+                                <td
+                                  className="px-3 py-1.5 text-right"
+                                  title={`Pago das parcelas que venciam na semana: ${fmt(sem.recebidoDia)} de ${fmt(sem.esperado)} esperado. Atraso e quitação ficam fora.`}
+                                >
+                                  <span className="inline-flex items-center gap-2 justify-end">
+                                    <span className="w-10 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                                      <span
+                                        className={`block h-full ${corPct(pctSem ?? 0)}`}
+                                        style={{ width: `${Math.min(100, pctSem ?? 0)}%` }}
+                                      />
+                                    </span>
+                                    <span className="tabular-nums text-slate-800 font-bold text-[12px] w-12 text-right">
+                                      {pctSem != null ? `${pctSem.toFixed(0)}%` : '—'}
+                                    </span>
+                                  </span>
+                                </td>
+                                <td className="px-3 py-1.5 text-right text-slate-700 tabular-nums">{fmt(sem.emprestado)}</td>
+                                <td className="px-3 py-1.5 text-right text-emerald-700 tabular-nums">{fmt(sem.ganancia)}</td>
+                                <td colSpan={colunasDepoisDoLucro} />
+                              </tr>
+                            )}
+                            </Fragment>
                           );
                         })}
 
@@ -940,8 +1017,12 @@ export default function LiquidacaoPeriodoPage() {
                       <span className="text-red-600 font-semibold tabular-nums">
                         não pagos {int(c?.clientes_nao_pagos)}
                       </span>
+                      {/* Médias por dia trabalhado (pedido do Julio, 01/11/2026).
+                          Cobrança vem da RPC; venda e lucro são total ÷ dias. */}
                       <span className="text-gray-500 tabular-nums">
-                        média {fmt(c?.media_diaria)} por dia trabalhado
+                        por dia trabalhado: cobrança <b className="text-gray-700">{fmt(c?.media_diaria)}</b>
+                        {' · '}venda <b className="text-gray-700">{fmt(mediaVenda)}</b>
+                        {' · '}lucro <b className="text-emerald-700">{fmt(mediaLucro)}</b>
                       </span>
                     </span>
                   </div>

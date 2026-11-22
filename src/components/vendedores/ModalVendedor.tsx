@@ -27,9 +27,12 @@ import {
   Upload,
   Plus,
   Check,
+  Paperclip,
 } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { InputNumero } from '@/components/ui/InputNumero';
+import { ExcluirCadastro } from '@/components/ui/ExcluirCadastro';
+import { AnexosVendedor } from './AnexosVendedor';
 import { vendedoresService } from '@/services/vendedores';
 import {
   EditorModeloRecibo,
@@ -51,7 +54,7 @@ interface Props {
   onSave: () => void;
 }
 
-type TabType = 'dados' | 'configuracoes' | 'restricoes' | 'recibos';
+type TabType = 'dados' | 'configuracoes' | 'restricoes' | 'recibos' | 'anexos';
 
 // DDIs da América do Sul
 const DDIS = [
@@ -516,6 +519,9 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
     { id: 'configuracoes' as TabType, label: 'Configurações', icon: Settings },
     { id: 'restricoes' as TabType, label: 'Restrições', icon: Shield },
     { id: 'recibos' as TabType, label: 'Recibos', icon: Receipt },
+    // Repositório de anexos (22/11/2026): só para vendedor JÁ criado — o
+    // caminho do arquivo e a permissão dependem do id dele.
+    ...(vendedor?.id ? [{ id: 'anexos' as TabType, label: 'Anexos', icon: Paperclip }] : []),
   ];
 
   // CONFIGURAÇÕES OPERACIONAIS — treze existem, quatro são decisão.
@@ -622,6 +628,10 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
             </div>
           ) : (
             <>
+              {activeTab === 'anexos' && vendedor?.id && (
+                <AnexosVendedor vendedorId={vendedor.id} />
+              )}
+
               {/* ABA DADOS PESSOAIS */}
               {activeTab === 'dados' && (
                 <div className="space-y-6">
@@ -1360,6 +1370,14 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                 </div>
               )}
             </>
+          )}
+
+          {/* Excluir vendedor sem movimentação (22/11/2026) — some para
+              quem não é SUPER_ADMIN. `onSave` já fecha e recarrega a lista. */}
+          {vendedor?.id && (
+            <div className="mt-6">
+              <ExcluirCadastro tipo="VENDEDOR" id={vendedor.id} onExcluido={onSave} />
+            </div>
           )}
         </div>
 

@@ -50,6 +50,14 @@ const CLASSES: Record<string, { rotulo: string; classe: string }> = {
   PRIMEIRO: { rotulo: 'Primeiro', classe: 'bg-gray-100 text-gray-600' },
 };
 
+/** Por que a venda precisou de autorização. */
+const AUTORIZ: Record<string, string> = {
+  RENOVACAO_EXCEDE_ANTERIOR: 'Acima do último',
+  VENDA_EXCEDE_LIMITE: 'Acima do limite',
+  EMPRESTIMO_ADICIONAL: 'Adicional',
+  RENEGOCIACAO: 'Renegociação',
+};
+
 const FREQ: Record<string, string> = {
   DIARIO: 'Diário',
   SEMANAL: 'Semanal',
@@ -110,6 +118,10 @@ export default function PainelVendas({ aberto, rotaIds, de, ate }: Props) {
         { cabecalho: 'Parcelas', valor: (l) => l.numero_parcelas },
         { cabecalho: 'Valor da parcela', valor: (l) => numCsv(l.valor_parcela) },
         { cabecalho: 'Saldo', valor: (l) => numCsv(l.saldo) },
+        { cabecalho: 'Autorização', valor: (l) => (l.autorizacao ? AUTORIZ[l.autorizacao.tipo] ?? l.autorizacao.tipo : '') },
+        { cabecalho: 'Autorizado por', valor: (l) => l.autorizacao?.por ?? '' },
+        { cabecalho: 'Motivo da autorização', valor: (l) => l.autorizacao?.motivo ?? '' },
+        { cabecalho: 'Nota de quem autorizou', valor: (l) => l.autorizacao?.nota ?? '' },
       ],
       linhas
     );
@@ -195,6 +207,7 @@ export default function PainelVendas({ aberto, rotaIds, de, ate }: Props) {
               <th className="text-right font-medium px-3 py-2">Juro</th>
               <th className="text-right font-medium px-3 py-2">Parcelas</th>
               <th className="text-right font-medium px-3 py-2">Saldo</th>
+              <th className="text-left font-medium px-3 py-2">Autorização</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
@@ -238,6 +251,29 @@ export default function PainelVendas({ aberto, rotaIds, de, ate }: Props) {
                     {l.numero_parcelas}×{fmt(l.valor_parcela)}
                   </td>
                   <td className="px-3 py-2 text-right text-gray-500 tabular-nums">{fmt(l.saldo)}</td>
+                  {/* Quem autorizou e por quê (pedido do Julio, 01/11/2026).
+                      O motivo é o texto que o sistema montou no pedido; a nota
+                      é o que o admin escreveu ao aprovar, quando escreveu. */}
+                  <td className="px-3 py-2 min-w-[200px] max-w-[280px]">
+                    {l.autorizacao ? (
+                      <>
+                        <span className="inline-block text-[11px] font-bold px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">
+                          {AUTORIZ[l.autorizacao.tipo] ?? l.autorizacao.tipo}
+                        </span>
+                        <span className="block text-[12px] text-gray-900 mt-0.5">
+                          {l.autorizacao.por || 'autorizador não identificado'}
+                        </span>
+                        {l.autorizacao.motivo && (
+                          <span className="block text-[11px] text-gray-500 leading-snug">{l.autorizacao.motivo}</span>
+                        )}
+                        {l.autorizacao.nota && (
+                          <span className="block text-[11px] text-gray-500 italic leading-snug">“{l.autorizacao.nota}”</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-gray-300">—</span>
+                    )}
+                  </td>
                 </tr>
               );
             })}

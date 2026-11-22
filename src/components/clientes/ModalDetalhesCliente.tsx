@@ -66,6 +66,14 @@ import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
 // HELPERS
 // =====================================================
 
+/**
+ * E-mail é opcional, mas quando preenchido tem de ter a forma nome@dominio.tld
+ * (relato do Julio, 12/10/2026: aceitava "abc"). A mesma regra vive em
+ * ModalNovaVenda e ModalDetalhesCliente — mudou num, muda no outro.
+ */
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const emailInvalido = (v: string) => v.trim() !== '' && !EMAIL_OK.test(v.trim());
+
 function formatarMoeda(valor: number): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -955,9 +963,12 @@ function FormularioEdicao({
           type="email"
           value={form.email}
           onChange={(e) => handleChange('email', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${emailInvalido(form.email) ? 'border-red-400' : 'border-gray-300'}`}
           placeholder="email@exemplo.com"
         />
+        {emailInvalido(form.email) && (
+          <p className="text-xs text-red-600 mt-1">E-mail inválido. Use o formato nome@dominio.com, ou deixe em branco.</p>
+        )}
       </div>
 
       {/* Endereço Residencial */}
@@ -1103,7 +1114,7 @@ function FormularioEdicao({
         </button>
         <button
           onClick={() => onSalvar({ ...form, status: statusCliente })}
-          disabled={salvando || !form.nome.trim()}
+          disabled={salvando || !form.nome.trim() || emailInvalido(form.email)}
           className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {salvando ? (

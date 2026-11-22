@@ -705,8 +705,16 @@ export function ModalNotasCliente({
                   <p className="text-sm text-gray-700 whitespace-pre-wrap">{nota.nota}</p>
                   
                   <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-200">
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <span>{formatarDataHora(nota.created_at)}</span>
+                    {/* O dia da LIQUIDAÇÃO em destaque; o instante depois,
+                        como "registrada". Até 22/11/2026 o destaque era o
+                        `created_at`, e uma nota lançada em 11/11 num dia
+                        reaberto de 22/10 parecia gravada com a data errada. */}
+                    <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                      <span className="font-medium text-gray-700">
+                        {nota.data_referencia ? `Liquidação ${formatarDataCurta(nota.data_referencia)}` : 'Sem liquidação'}
+                      </span>
+                      <span>•</span>
+                      <span>registrada {formatarDataHora(nota.created_at)}</span>
                       <span>•</span>
                       <span>{nota.autor_nome}</span>
                     </div>
@@ -714,13 +722,8 @@ export function ModalNotasCliente({
 
                   {/* Info de contexto */}
                   <div className="flex items-center gap-2 mt-1 text-xs text-gray-400">
-                    <Calendar className="w-3 h-3" />
-                    <span>{nota.data_referencia ? formatarDataCurta(nota.data_referencia) : '-'}</span>
                     {nota.numero_parcela && (
-                      <>
-                        <span>|</span>
-                        <span>Parcela {nota.numero_parcela}</span>
-                      </>
+                      <span>Parcela {nota.numero_parcela}</span>
                     )}
                     {nota.liquidacao_id === liquidacaoId && (
                       <span className="ml-auto px-1.5 py-0.5 bg-amber-200 text-amber-800 rounded text-[10px] font-medium">

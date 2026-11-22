@@ -32,6 +32,11 @@ const getIconeForma = (v: string) => {
   }
 };
 
+/** Dinheiro como no resto do sistema: "$ 1.800,00". Era `currency: 'BRL'` (R$),
+ * que escapou da varredura de 04/11/2026 — o sistema não sabe o país. */
+const moeda = (n: number) =>
+  `$ ${(Number.isFinite(n) ? n : 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
 const CATEGORIAS_SEM_LIQUIDACAO = [
   'EMPRESTIMO',
   'ESTORNO_PAGAMENTO',
@@ -472,7 +477,7 @@ export function ModalNovaMovimentacao({
                               {getIconeConta(c.tipo_conta)}
                               <span className="flex-1 truncate">{nomeDaConta(c)}</span>
                               <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
-                                {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                {moeda(c.saldo_atual)}
                               </span>
                             </button>
                           ))}
@@ -486,7 +491,7 @@ export function ModalNovaMovimentacao({
             {contaSelecionada && (
               <div className="mt-2 flex items-center gap-2 text-sm text-gray-500">
                 {getIconeConta(contaSelecionada.tipo_conta)}
-                <span>Saldo atual: <strong>{contaSelecionada.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong></span>
+                <span>Saldo atual: <strong>{moeda(contaSelecionada.saldo_atual)}</strong></span>
               </div>
             )}
           </div>
@@ -791,13 +796,13 @@ export function ModalTransferencia({
               <option value="">Selecione a conta de origem</option>
               {contas.map(c => (
                 <option key={c.id} value={c.id}>
-                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - {moeda(c.saldo_atual)}
                 </option>
               ))}
             </select>
             {contaOrigemObj && (
               <p className="mt-2 text-sm text-gray-500">
-                Saldo disponível: <strong className="text-gray-700">{contaOrigemObj.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                Saldo disponível: <strong className="text-gray-700">{moeda(contaOrigemObj.saldo_atual)}</strong>
               </p>
             )}
           </div>
@@ -824,13 +829,13 @@ export function ModalTransferencia({
               <option value="">Selecione a conta de destino</option>
               {contasDestinoFiltradas.map(c => (
                 <option key={c.id} value={c.id}>
-                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {getIconeConta(c.tipo_conta)} {nomeDaConta(c)} - {moeda(c.saldo_atual)}
                 </option>
               ))}
             </select>
             {contaDestinoObj && (
               <p className="mt-2 text-sm text-gray-500">
-                Saldo atual: <strong className="text-gray-700">{contaDestinoObj.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>
+                Saldo atual: <strong className="text-gray-700">{moeda(contaDestinoObj.saldo_atual)}</strong>
               </p>
             )}
           </div>
@@ -889,11 +894,11 @@ export function ModalTransferencia({
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-blue-700">{nomeDaConta(contaOrigemObj)}:</span>
-                  <span className="text-red-600 font-medium">- {parseFloat(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  <span className="text-red-600 font-medium">- {moeda(parseFloat(valor))}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-blue-700">{nomeDaConta(contaDestinoObj)}:</span>
-                  <span className="text-green-600 font-medium">+ {parseFloat(valor).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</span>
+                  <span className="text-green-600 font-medium">+ {moeda(parseFloat(valor))}</span>
                 </div>
               </div>
             </div>
@@ -1135,7 +1140,7 @@ export function ModalAjusteSaldo({
                           {getIconeConta(c.tipo_conta)}
                           <span className="flex-1 truncate">{nomeDaConta(c)}</span>
                           <span className="text-xs text-gray-500 tabular-nums flex-shrink-0">
-                            {c.saldo_atual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                            {moeda(c.saldo_atual)}
                           </span>
                         </button>
                       ))}
@@ -1152,7 +1157,7 @@ export function ModalAjusteSaldo({
               <div className="p-4 rounded-xl border-2 border-gray-200 bg-gray-50">
                 <label className="block text-sm font-medium text-gray-500 mb-2">Saldo Atual (Sistema)</label>
                 <p className="text-2xl font-bold text-gray-700">
-                  {saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {moeda(saldoAtual)}
                 </p>
               </div>
 
@@ -1195,14 +1200,14 @@ export function ModalAjusteSaldo({
               <p className={`text-2xl font-bold ${
                 diferenca > 0 ? 'text-green-700' : 'text-red-700'
               }`}>
-                {diferenca > 0 ? '+' : ''}{diferenca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                {diferenca > 0 ? '+' : ''}{moeda(diferenca)}
               </p>
               {/* A frase que o Mauricio pediu em 07/11/2026: o usuario tem de
                   sair daqui sabendo que o numero digitado VIRA o saldo. */}
               <p className="text-sm text-gray-700 mt-2">
                 Ao salvar, <strong>{nomeDaConta(contaSelecionada)}</strong> passa de{' '}
-                {saldoAtual.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })} para{' '}
-                <strong>{saldoFinalNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong>.
+                {moeda(saldoAtual)} para{' '}
+                <strong>{moeda(saldoFinalNum)}</strong>.
               </p>
             </div>
           )}

@@ -37,6 +37,14 @@ import type {
 // CONSTANTES
 // =====================================================
 
+/**
+ * E-mail é opcional, mas quando preenchido tem de ter a forma nome@dominio.tld
+ * (relato do Julio, 12/10/2026: aceitava "abc"). A mesma regra vive em
+ * ModalNovaVenda e ModalDetalhesCliente — mudou num, muda no outro.
+ */
+const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const emailInvalido = (v: string) => v.trim() !== '' && !EMAIL_OK.test(v.trim());
+
 const DDIS = [
   { codigo: '+55', pais: 'Brasil', bandeira: '🇧🇷' },
   { codigo: '+54', pais: 'Argentina', bandeira: '🇦🇷' },
@@ -320,6 +328,7 @@ export function ModalNovaVenda({
   const validarCliente = () => {
     if (!nome.trim()) return 'Nome é obrigatório';
     if (!telefoneCelular.trim()) return 'Celular é obrigatório';
+    if (emailInvalido(email)) return 'E-mail inválido. Use o formato nome@dominio.com, ou deixe em branco.';
     return null;
   };
 
@@ -437,7 +446,7 @@ export function ModalNovaVenda({
           cliente_documento: documento || undefined,
           cliente_telefone: telefoneCompleto,
           cliente_telefone_fixo: telefoneFixoCompleto,
-          cliente_email: email || undefined,
+          cliente_email: email.trim() || undefined,
           cliente_endereco: endereco || undefined,
           cliente_endereco_comercial: enderecoComercial || undefined,
           cliente_segmento_id: segmentoId || undefined,
@@ -681,7 +690,7 @@ export function ModalNovaVenda({
               <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                   <User className="w-4 h-4 text-gray-500" />
-                  Nome Completo *
+                  Nome Completo <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="text"
@@ -712,7 +721,7 @@ export function ModalNovaVenda({
                 <div className="p-4 rounded-xl border-2 border-gray-200 bg-white overflow-hidden">
                   <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                     <Phone className="w-4 h-4 text-gray-500" />
-                    Celular *
+                    Celular <span className="text-red-500">*</span>
                   </label>
                   <div className="flex gap-2">
                     <select
@@ -777,8 +786,11 @@ export function ModalNovaVenda({
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="email@exemplo.com"
-                  className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className={`w-full px-4 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${emailInvalido(email) ? 'border-red-400' : 'border-gray-200'}`}
                 />
+                {emailInvalido(email) && (
+                  <p className="text-xs text-red-600 mt-1">E-mail inválido. Use o formato nome@dominio.com, ou deixe em branco.</p>
+                )}
               </div>
 
               {/* Endereços */}

@@ -940,6 +940,18 @@ export default function FinanceiroPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contas, isSuperAdmin, profile]);
 
+  /**
+   * Contas para LANÇAR (Nova movimentação e Ajuste), no contexto do cabeçalho
+   * (pedido do Julio, 12/10/2026): com rota escolhida, só as contas dela
+   * (rota e microsseguro) mais a da empresa. Sem rota, todas as acessíveis.
+   * A Transferência fica com `contasAcessiveis`: ela tem dois lados, e mandar
+   * da rota para a empresa ou para outra rota é o uso normal.
+   */
+  const contasDoContexto = React.useMemo(() => {
+    if (!rotaId) return contasAcessiveis;
+    return contasAcessiveis.filter((c) => c.tipo_conta === 'EMPRESA' || (c as any).rota_id === rotaId);
+  }, [contasAcessiveis, rotaId]);
+
   // Se a rota do contexto define uma conta-rota, ela é o default do seletor
   const contaSelecionada = contas.find((c) => c.id === contaFiltro) || null;
   const nomeContaSelecionada = (contaSelecionada ? nomeDaConta(contaSelecionada) : '')
@@ -1718,7 +1730,7 @@ export default function FinanceiroPage() {
       <ModalNovaMovimentacao
         isOpen={modalMovimentacao}
         onClose={() => setModalMovimentacao(false)}
-        contas={contasAcessiveis}
+        contas={contasDoContexto}
         categorias={categorias}
         onSalvar={handleSalvarMovimentacao}
         contaPadraoId={contaFiltro}
@@ -1735,7 +1747,7 @@ export default function FinanceiroPage() {
       <ModalAjusteSaldo
         isOpen={modalAjuste}
         onClose={() => setModalAjuste(false)}
-        contas={contasAcessiveis}
+        contas={contasDoContexto}
         onSalvar={handleSalvarAjuste}
         contaPadraoId={ajusteContaId || contaFiltro}
         contaTravada={!!ajusteContaId}

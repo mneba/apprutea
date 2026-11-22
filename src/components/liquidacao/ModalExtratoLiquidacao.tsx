@@ -80,6 +80,47 @@ interface CreditoLiquido {
  * lado — palavra diferente para o mesmo número é o que o Julio chamou de
  * "divergência na interpretação dos valores".
  */
+/**
+ * PARCIAL E "COMPLETOU" (pedido do Julio, 01/11/2026). Por PARCELA, não por
+ * pagamento: o recebimento junta todos os pagamentos do mesmo empréstimo no
+ * dia, e "100 e depois mais 100" na mesma parcela tem de sair como uma coisa
+ * só. Vale o ÚLTIMO pagamento da parcela no grupo (`valor_pago_total` é o
+ * acumulado da parcela DEPOIS daquele pagamento — medido); o que ela já tinha
+ * sai do PRIMEIRO (acumulado − o que ele trouxe), e só quando ele não usou
+ * crédito, que embaralha a conta.
+ *
+ * O caso do relato (denilson, Barcelona 05/10) era "completou": os 100,00
+ * fecharam a parcela 5, que já tinha 100,00.
+ *
+ * Mesma regra nos dois extratos (web ModalExtratoLiquidacao e app
+ * LiquidacaoDetalhes) — mudou num, muda no outro.
+ */
+function fraseParcial(linhas: PagamentoParcela[]): string {
+  const porParcela = new Map<number, PagamentoParcela[]>();
+  for (const pg of linhas) {
+    const n = Number(pg.numero_parcela || 0);
+    const arr = porParcela.get(n);
+    if (arr) arr.push(pg); else porParcela.set(n, [pg]);
+  }
+  const partes: string[] = [];
+  for (const [n, ps] of [...porParcela.entries()].sort((a, b) => a[0] - b[0])) {
+    ps.sort((a, b) => a.created_at.localeCompare(b.created_at));
+    const ult = ps[ps.length - 1];
+    const pri = ps[0];
+    const valorParcela = Number(ult.valor_parcela || 0);
+    if (valorParcela <= 0) continue;
+    const acumulado = Number(ult.valor_pago_total || 0);
+    if (acumulado < valorParcela - 0.005) {
+      partes.push(`parcela ${n} parcial: faltam ${formatarMoeda(valorParcela - acumulado)}`);
+      continue;
+    }
+    if (Number(pri.valor_credito_usado || 0) > 0) continue;
+    const jaTinha = Number(pri.valor_pago_total || 0) - Number(pri.valor_pago_atual || 0);
+    if (jaTinha > 0.005) partes.push(`completou a parcela ${n} (já tinha ${formatarMoeda(jaTinha)})`);
+  }
+  return partes.join(' · ');
+}
+
 function fraseCredito(liq: CreditoLiquido, mostrarCredito = true): string {
   const qtd = liq.parcelasQuitadas;
   if (liq.creditoOculto > 0 && mostrarCredito) {
@@ -821,6 +862,8 @@ export function ModalExtratoLiquidacao({
   type LinhaCob = {
     key: string; nome: string; criado: string; sub: string; valor: number;
     quitacao: boolean; usado: number; gerado: number; nota: string; soCredito: number;
+    /** "parcela 5 parcial: faltam $ 100,00" / "completou a parcela 5 (…)". */
+    parcial: string;
   };
   const linhasCobranca: LinhaCob[] = (() => {
     const subParcelas = (nums: number[]) => (nums.length === 1 ? `parcela ${nums[0]}` : fraseParcelas(nums));
@@ -835,6 +878,7 @@ export function ModalExtratoLiquidacao({
       gerado: rec.linhas.reduce((s, pg) => s + creditoLiquido(pg).excedente, 0),
       nota: rec.linhas.map((pg) => fraseCredito(creditoLiquido(pg), mostrarCredito)).join('').replace(/^ · /, ''),
       soCredito: 0,
+      parcial: fraseParcial(rec.linhas),
     }));
     // Recebimento SÓ de crédito, de empréstimo sem linha em dinheiro no dia:
     // sem isto ele sumia. Aparece com 0,00 e fora da cobrança.
@@ -856,7 +900,7 @@ export function ModalExtratoLiquidacao({
         sub: subParcelas(nums),
         valor: 0,
         quitacao: ls.some((pg) => pg.tipo_operacao === 'QUITACAO'),
-        usado: 0, gerado: 0, nota: '',
+        usado: 0, gerado: 0, nota: '', parcial: '',
         soCredito: ls.reduce((s, pg) => s + Number(pg.valor_credito_usado || pg.valor_pago_atual || 0), 0),
       });
     }
@@ -1024,7 +1068,7 @@ export function ModalExtratoLiquidacao({
           ? `<div class="row"><span>Crédito gerado</span><span class="r">+${formatarMoeda(l.gerado)}</span></div>`
           : ''}</div>`
       : '';
-    const notas = [l.soCredito > 0 ? notaSoCredito(l.soCredito) : '', l.nota].filter(Boolean)
+    const notas = [l.parcial, l.soCredito > 0 ? notaSoCredito(l.soCredito) : '', l.nota].filter(Boolean)
       .map((n) => `<div class="mov-sub">${esc(n)}</div>`).join('');
     return mov(l.nome, formatarMoeda(l.valor), `${formatarHora(l.criado)} · ${l.sub}`, {
       cor: l.soCredito > 0 ? '#9CA3AF' : l.quitacao ? '#6D28D9' : '#111827',
@@ -1256,6 +1300,7 @@ export function ModalExtratoLiquidacao({
                         {formatarMoeda(l.valor)}
                       </span>
                     </div>
+                    {!!l.parcial && <p className="text-xs text-amber-700 mt-0.5">{l.parcial}</p>}
                     {l.soCredito > 0 && <p className="text-xs text-gray-500 mt-0.5">{notaSoCredito(l.soCredito)}</p>}
                     {mostrarCredito && (l.usado > 0 || l.gerado > 0) && (
                       <div className="mt-1 rounded-md bg-amber-50 px-2 py-1 text-xs text-amber-900 space-y-0.5">

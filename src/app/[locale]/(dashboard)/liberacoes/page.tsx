@@ -17,7 +17,8 @@ import {
   DollarSign,
   RefreshCw,
   PlusCircle,
-  Eye
+  Eye,
+  X
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { InputNumero } from '@/components/ui/InputNumero';
@@ -1710,7 +1711,7 @@ function BadgeStatus({ status }: { status: string }) {
 
 // Página Principal
 export default function LiberacoesPage() {
-  const { user, isSuperAdmin } = useUser();
+  const { user, isSuperAdmin, localizacao } = useUser();
   const [loading, setLoading] = useState(true);
   const [todasSolicitacoes, setTodasSolicitacoes] = useState<Solicitacao[]>([]);
   // Teto de segurança da paginação foi atingido: os filtros locais podem
@@ -1726,6 +1727,19 @@ export default function LiberacoesPage() {
   const [filtroCliente, setFiltroCliente] = useState<string>('');
   const [filtroData, setFiltroData] = useState<string>(''); // YYYY-MM-DD
   const [filtroEmpresa, setFiltroEmpresa] = useState<string>(''); // empresa_id (só SUPER_ADMIN)
+
+  // CONTEXTO DO CABEÇALHO (pedido do Julio, 12/10/2026): a Central abre só com
+  // as solicitações da rota escolhida no topo — ou da empresa, sem rota. A
+  // etiqueta com ✕ desliga, para quem quer a fila inteira; trocar de rota ou
+  // empresa no topo liga de novo. A RPC já filtrava por rota e empresa; a tela
+  // é que não mandava.
+  const [usarContexto, setUsarContexto] = useState(true);
+  useEffect(() => { setUsarContexto(true); }, [localizacao?.rota_id, localizacao?.empresa_id]);
+  const ctxRotaId = usarContexto ? (localizacao?.rota_id || null) : null;
+  const ctxEmpresaId = usarContexto && !ctxRotaId ? (localizacao?.empresa_id || null) : null;
+  const ctxNome = ctxRotaId
+    ? (localizacao?.rota?.nome || 'rota do topo')
+    : ctxEmpresaId ? (localizacao?.empresa?.nome || 'empresa do topo') : null;
   const [busca, setBusca] = useState('');
 
   // Categorias de tipos
@@ -1783,7 +1797,8 @@ export default function LiberacoesPage() {
       status: filtroStatus || null,
       tipo: filtroTipo || null,
       tipos: tiposDoFiltro,
-      empresa_id: filtroEmpresa || null,
+      empresa_id: filtroEmpresa || ctxEmpresaId,
+      rota_id: ctxRotaId,
       cliente: clienteAplicado || null,
       data_solicitada: filtroData || null,
       busca: buscaAplicada || null,
@@ -1794,7 +1809,8 @@ export default function LiberacoesPage() {
     // Toda aprovação/rejeição invalida a chave logo abaixo.
     const k = chave(
       'liberacoes:lista', user.id, filtroStatus, filtroTipo,
-      tiposDoFiltro || undefined, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada
+      tiposDoFiltro || undefined, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada,
+      ctxRotaId || '', ctxEmpresaId || ''
     );
     if (!temCache(k)) setLoading(true);
     try {
@@ -1817,7 +1833,7 @@ export default function LiberacoesPage() {
   useEffect(() => {
     carregarSolicitacoes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, filtroStatus, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada]);
+  }, [user, filtroStatus, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada, ctxRotaId, ctxEmpresaId]);
 
   // Contadores dos cards. Seguem os mesmos filtros da lista, EXCETO status:
   // trocar de empresa muda os números, mas clicar em "Pendentes" não pode
@@ -1829,7 +1845,8 @@ export default function LiberacoesPage() {
     const filtrosContagem = {
       tipo: filtroTipo || null,
       tipos: tiposDoFiltro,
-      empresa_id: filtroEmpresa || null,
+      empresa_id: filtroEmpresa || ctxEmpresaId,
+      rota_id: ctxRotaId,
       cliente: clienteAplicado || null,
       data_solicitada: filtroData || null,
       busca: buscaAplicada || null,
@@ -1838,7 +1855,8 @@ export default function LiberacoesPage() {
       const totais = await comCache(
         chave(
           'liberacoes:contadores', user.id, filtroTipo,
-          tiposDoFiltro || undefined, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada
+          tiposDoFiltro || undefined, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada,
+          ctxRotaId || '', ctxEmpresaId || ''
         ),
         () => solicitacoesService.contarCentral(user.id, filtrosContagem),
         { ttlMs: TTL_CURTO, forcar: opts?.forcar }
@@ -1847,7 +1865,7 @@ export default function LiberacoesPage() {
     } catch (err) {
       console.error('Erro ao carregar contadores:', err);
     }
-  }, [user, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada]);
+  }, [user, filtroTipo, tiposDoFiltro, filtroEmpresa, clienteAplicado, filtroData, buscaAplicada, ctxRotaId, ctxEmpresaId]);
 
   useEffect(() => { carregarContadores(); }, [carregarContadores]);
 
@@ -2172,6 +2190,31 @@ export default function LiberacoesPage() {
             )}
           </button>
         </div>
+
+        {ctxNome && (
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-gray-500">Mostrando só</span>
+            <span className="inline-flex items-center gap-1.5 pl-3 pr-1.5 py-1 rounded-full bg-blue-50 text-blue-700 font-medium border border-blue-200">
+              {ctxRotaId ? 'Rota' : 'Empresa'} {ctxNome}
+              <button
+                type="button"
+                onClick={() => setUsarContexto(false)}
+                className="p-0.5 rounded-full hover:bg-blue-100"
+                aria-label="Mostrar solicitações de todas as rotas"
+                title="Mostrar todas"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </span>
+          </div>
+        )}
+        {!usarContexto && (localizacao?.rota_id || localizacao?.empresa_id) && (
+          <div className="text-sm">
+            <button type="button" onClick={() => setUsarContexto(true)} className="text-blue-600 hover:underline">
+              Voltar a mostrar só {localizacao?.rota_id ? `a rota ${localizacao?.rota?.nome || ''}` : `a empresa ${localizacao?.empresa?.nome || ''}`}
+            </button>
+          </div>
+        )}
 
         {/* Filtros — no celular só quando pedidos. */}
         <div className={`${filtrosAbertos ? 'block' : 'hidden'} lg:block space-y-3`}>

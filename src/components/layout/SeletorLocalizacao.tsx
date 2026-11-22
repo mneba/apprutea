@@ -7,6 +7,38 @@ import { prefetchModulos } from '@/lib/prefetchModulos';
 import { usuariosService } from '@/services/usuarios';
 import { organizacaoService } from '@/services/organizacao';
 import type { Hierarquia, Cidade, Empresa, Rota } from '@/types/database';
+import { createClient } from '@/lib/supabase/client';
+import { formatarDataHoraCurto } from '@/utils/dateFormat';
+
+/**
+ * Situação do dia de cada rota, na lista de rotas do seletor (pedido do Julio,
+ * 11/11/2026): o admin via uma rota de cada vez para saber se estava aberta.
+ *
+ * `dia` é `data_liquidacao` — o dia OPERACIONAL, que é a régua do sistema. O
+ * `quando` é o instante (abertura, reabertura ou fechamento), timestamp UTC
+ * sem fuso, renderizado no fuso de quem olha. Os dois divergem em abertura
+ * retroativa e por isso o dia aparece quando difere da data do instante.
+ */
+interface SituacaoRota {
+  aberta: boolean;
+  reaberta: boolean;
+  dia: string;
+  quando: string | null;
+}
+
+const diaCurtoIso = (d: string) => {
+  const [, m, dd] = d.substring(0, 10).split('-');
+  return `${dd}/${m}`;
+};
+
+/** "aberto 22/11 08:14", ou "dia 21/11 · aberto 22/11 08:14" quando o dia difere. */
+function textoSituacao(st: SituacaoRota): string {
+  const acao = st.aberta ? (st.reaberta ? 'reaberto' : 'aberto') : 'fechado';
+  const inst = formatarDataHoraCurto(st.quando);
+  const dia = diaCurtoIso(st.dia);
+  if (!inst) return `dia ${dia} · ${acao}`;
+  return inst.startsWith(dia) ? `${acao} ${inst}` : `dia ${dia} · ${acao} ${inst}`;
+}
 
 // Normaliza para busca: minúsculas e sem acentos, para que "noreña"
 // encontre "Noreña" e "fenix" encontre "Fênix".
@@ -46,6 +78,7 @@ export function SeletorLocalizacao() {
   const [rotas, setRotas] = useState<Rota[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingRotas, setLoadingRotas] = useState(false);
+  const [situacaoRotas, setSituacaoRotas] = useState<Record<string, SituacaoRota | null>>({});
   // Busca GLOBAL de rotas — só aparece para SUPER_ADMIN. Procura em todas as
   // empresas de todos os países, porque quem administra costuma saber o nome
   // da rota mas não onde ela está pendurada.
@@ -209,6 +242,60 @@ export function SeletorLocalizacao() {
       setLoadingRotas(false);
     }
   };
+
+  // Situação do dia das rotas listadas. Só com o seletor ABERTO: é o único
+  // lugar que a mostra, e fechado não há o que pagar. Uma consulta para as
+  // abertas e uma por rota para o último fechamento — a lista é de UMA
+  // empresa (dezenas de rotas no máximo). Falha não derruba o seletor: a
+  // pílula só fica sem a linha de situação.
+  useEffect(() => {
+    if (!isOpen || rotas.length === 0) return;
+    let vivo = true;
+    const ids = rotas.map((r) => r.id);
+    (async () => {
+      try {
+        const supabase = createClient();
+        const mapa: Record<string, SituacaoRota | null> = {};
+        const { data: abertas, error } = await supabase
+          .from('liquidacoes_diarias')
+          .select('rota_id, status, data_liquidacao, data_abertura, data_reabertura')
+          .in('rota_id', ids)
+          .in('status', ['ABERTO', 'REABERTO'])
+          .order('data_liquidacao', { ascending: false });
+        if (error) throw error;
+        for (const l of abertas || []) {
+          if (mapa[l.rota_id]) continue; // a mais recente vence
+          const reaberta = l.status === 'REABERTO';
+          mapa[l.rota_id] = {
+            aberta: true,
+            reaberta,
+            dia: l.data_liquidacao,
+            quando: (reaberta ? l.data_reabertura : null) || l.data_abertura,
+          };
+        }
+        const fechadas = ids.filter((id) => !mapa[id]);
+        const ultimas = await Promise.all(fechadas.map((id) =>
+          supabase
+            .from('liquidacoes_diarias')
+            .select('rota_id, data_liquidacao, data_fechamento')
+            .eq('rota_id', id)
+            .eq('status', 'FECHADO')
+            .order('data_liquidacao', { ascending: false })
+            .limit(1)
+            .then((r) => ({ id, linha: r.data?.[0] ?? null }), () => ({ id, linha: null }))
+        ));
+        for (const { id, linha } of ultimas) {
+          mapa[id] = linha
+            ? { aberta: false, reaberta: false, dia: linha.data_liquidacao, quando: linha.data_fechamento }
+            : null;
+        }
+        if (vivo) setSituacaoRotas(mapa);
+      } catch (err) {
+        console.error('❌ Situação das rotas:', err);
+      }
+    })();
+    return () => { vivo = false; };
+  }, [isOpen, rotas]);
 
   // Países únicos
   const paises = [...new Set(hierarquias.map((h) => h.pais))];
@@ -881,21 +968,41 @@ export function SeletorLocalizacao() {
                     >
                       Todas
                     </button>
-                    {rotas.map((rota) => (
-                      <button
-                        key={rota.id}
-                        onClick={() => handleSelecionarRota(rota)}
-                        className={`
-                          px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                          ${localizacao.rota_id === rota.id
-                            ? 'bg-blue-600 text-white'
-                            : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'}
-                        `}
-                      >
-                        <Navigation className="w-3 h-3 inline mr-1" />
-                        {rota.nome}
-                      </button>
-                    ))}
+                    {rotas.map((rota) => {
+                      const sel = localizacao.rota_id === rota.id;
+                      const st = situacaoRotas[rota.id];
+                      // undefined = ainda carregando; null = nunca abriu um dia
+                      const cor = st === undefined ? 'bg-gray-300'
+                        : st === null ? 'bg-gray-400'
+                        : st.aberta ? 'bg-emerald-500' : 'bg-red-500';
+                      return (
+                        <button
+                          key={rota.id}
+                          onClick={() => handleSelecionarRota(rota)}
+                          title={st ? textoSituacao(st) : undefined}
+                          className={`
+                            px-3 py-1.5 rounded-xl text-xs font-medium transition-colors text-left
+                            ${sel
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white border border-gray-300 text-gray-700 hover:border-blue-400'}
+                          `}
+                        >
+                          <span className="flex items-center gap-1.5">
+                            <span
+                              className={`w-2 h-2 rounded-full flex-shrink-0 ${cor} ${sel ? 'ring-2 ring-white/70' : ''}`}
+                              aria-hidden="true"
+                            />
+                            <Navigation className="w-3 h-3 flex-shrink-0" />
+                            {rota.nome}
+                          </span>
+                          {st !== undefined && (
+                            <span className={`block text-[10.5px] font-normal mt-0.5 ${sel ? 'text-blue-100' : 'text-gray-500'}`}>
+                              {st ? textoSituacao(st) : 'sem liquidação'}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                 </>
               ) : (

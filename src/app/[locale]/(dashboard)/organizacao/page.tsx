@@ -33,6 +33,7 @@ import type { PreviaResetRota } from '@/services/organizacao';
 import { usuariosService } from '@/services/usuarios';
 import type { EmpresaResumo, RotaResumo, ResumoGeral, VendedorDisponivel, Socio, Cidade } from '@/types/organizacao';
 import ModalGerenciarCidades from '@/components/organizacao/ModalGerenciarCidades';
+import { ExcluirCadastro } from '@/components/ui/ExcluirCadastro';
 
 type ViewMode = 'empresas' | 'rotas';
 
@@ -1773,6 +1774,20 @@ export default function OrganizacaoPage() {
                   </button>
                 </div>
               )}
+
+              {/* Excluir rota sem movimentação (22/11/2026) — o bloco se
+                  esconde sozinho para quem não é SUPER_ADMIN */}
+              {rotaEditando && (
+                <ExcluirCadastro
+                  tipo="ROTA"
+                  id={rotaEditando.id}
+                  onExcluido={() => {
+                    setModalRota(false);
+                    invalidarCache('organizacao:');
+                    carregarDados({ forcar: true });
+                  }}
+                />
+              )}
               </div>
               </div>
             </div>
@@ -2394,6 +2409,20 @@ export default function OrganizacaoPage() {
                     O admin pode gerenciar usuários e definir permissões dentro desta empresa.
                   </p>
                 </div>
+              )}
+
+              {/* Excluir empresa sem movimentação (22/11/2026). Leva junto as
+                  rotas e os vendedores dela, pela mesma regra. */}
+              {empresaEditando && (
+                <ExcluirCadastro
+                  tipo="EMPRESA"
+                  id={empresaEditando.id}
+                  onExcluido={() => {
+                    setModalEmpresa(false);
+                    invalidarCache('organizacao:');
+                    carregarDados({ forcar: true });
+                  }}
+                />
               )}
             </div>
 
