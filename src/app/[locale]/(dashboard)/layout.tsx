@@ -32,6 +32,7 @@ import { lembrarSubmodulo, ultimoSubmodulo } from '@/lib/estadoTela';
 import { UserProvider, useUser } from '@/contexts/UserContext';
 import { MenuNotificacoes } from '@/components/layout/MenuNotificacoes';
 import { SeletorLocalizacao } from '@/components/layout/SeletorLocalizacao';
+import { AvisoDiaOperacional } from '@/components/layout/AvisoDiaOperacional';
 import { ModalGerenciarUsuario } from '@/components/usuarios';
 import { painelControleService } from '@/services/painelControle';
 
@@ -141,7 +142,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   // "Routing".
   const ehRelatorios = pathname.replace(/^\/(pt-BR|es)/, '').startsWith('/relatorios');
   const router = useRouter();
-  const { user, profile, localizacao, temPermissao } = useUser();
+  const { user, profile, localizacao, temPermissao, loading: carregandoContexto } = useUser();
   const temLocalizacao = !!localizacao.empresa_id;
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -261,7 +262,12 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50 overflow-hidden">
+    // `overflow-clip`, e não `overflow-hidden` (22/11/2026): caixa "hidden"
+    // ainda ROLA por programa — ao focar um item clicado o navegador a desloca
+    // para mostrá-lo, e sem barra o usuário não tem como voltar. Relato do
+    // Julio em 12/10: na Liquidação, clicar em Microseguro jogava a página
+    // para o lado e para baixo e o topo sumia. "clip" não rola nunca.
+    <div className="h-screen flex flex-col bg-gray-50 overflow-clip">
       {/* Sidebar Mobile Overlay */}
       {sidebarOpen && (
         <div 
@@ -402,12 +408,16 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Content Area */}
-      <div className={`flex flex-col h-full transition-all duration-300 ${recolhida ? 'lg:pl-16' : 'lg:pl-64'}`}>
+      <div className={`flex flex-col h-full min-w-0 transition-all duration-300 ${recolhida ? 'lg:pl-16' : 'lg:pl-64'}`}>
         {/* Header - Fixed */}
         <header className="flex-shrink-0 bg-white border-b border-gray-200 z-30">
-          <div className="flex items-center justify-between h-16 px-4 lg:px-6">
+          {/* A barra CABE na largura (22/11/2026): num notebook de 1054px o
+              seletor e o e-mail somavam mais que o espaço e a foto do usuário
+              saía cortada à direita. O lado esquerdo encolhe (o seletor corta
+              com "…"); o direito nunca. */}
+          <div className="flex items-center justify-between gap-3 h-16 px-4 lg:px-6 min-w-0">
             {/* Left side */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 min-w-0 flex-1">
               <button 
                 className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
                 onClick={() => setSidebarOpen(true)}
@@ -444,7 +454,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
             </div>
 
             {/* Right side */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-shrink-0">
               {/* Notificações */}
               <MenuNotificacoes />
 
@@ -454,8 +464,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                   className="flex items-center gap-2 p-2 hover:bg-gray-100 rounded-lg"
                   onClick={() => setUserMenuOpen(!userMenuOpen)}
                 >
-                  <span className="hidden sm:block text-sm text-gray-700">{userEmail}</span>
-                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden">
+                  {/* Só em tela larga: o e-mail é o que empurrava a foto
+                      para fora. Ele segue no menu que este botão abre. */}
+                  <span className="hidden xl:block text-sm text-gray-700 truncate max-w-[14rem]" title={userEmail || undefined}>{userEmail}</span>
+                  <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center overflow-hidden flex-shrink-0">
                     {(profile as any)?.url_foto_usuario ? (
                       <img src={(profile as any).url_foto_usuario} alt="" className="w-8 h-8 object-cover" />
                     ) : (
@@ -468,9 +480,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
                 {userMenuOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    <div className="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                       <div className="px-4 py-2 border-b border-gray-100">
                         <p className="text-sm font-medium text-gray-900">{profile?.nome || 'Usuário'}</p>
+                        {userEmail && <p className="text-xs text-gray-500 truncate" title={userEmail}>{userEmail}</p>}
                         <p className="text-xs text-gray-500">{profile?.tipo_usuario}</p>
                       </div>
                       <button
@@ -497,7 +510,24 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
 
         {/* Page Content - Scrollable */}
         <main className="flex-1 overflow-auto p-4 lg:p-6">
-          {children}
+          {/* Enquanto perfil, empresa e rota salvos ainda chegam, a página não
+              é montada (22/11/2026). Montada antes, ela via a empresa vazia e
+              mostrava "Selecione uma Empresa" por alguns segundos a cada F5 —
+              relato do Julio de 12/10. Um lugar só, vale para toda tela. */}
+          {carregandoContexto ? (
+            <div className="h-full flex items-center justify-center">
+              <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+            </div>
+          ) : (
+            // Coluna: a faixa ocupa a altura dela e a página fica com o RESTO,
+            // senão as telas `h-full` (Liquidação, Clientes...) passariam da
+            // moldura pela altura da faixa.
+            <div className="h-full flex flex-col">
+              {/* Dia aberto anterior ao hoje da rota (Julio, 12/10/2026) */}
+              <AvisoDiaOperacional rotaId={localizacao.rota_id} />
+              <div className="flex-1 min-h-0">{children}</div>
+            </div>
+          )}
         </main>
       </div>
 

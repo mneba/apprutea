@@ -1,5 +1,9 @@
 'use client';
 
+import { limitarCasas } from '@/utils/moeda';
+import { AvisoDiaOperacional } from '@/components/layout/AvisoDiaOperacional';
+import { hojeNoFuso, somarDias } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useRef } from 'react';
 import { 
   X, 
@@ -246,9 +250,9 @@ export function ModalNovaVenda({
       // verdade é a liquidação + 1 e chega no efeito que busca a liquidação
       // aberta da rota, logo abaixo. O relógio fica como último recurso para
       // rota sem dia aberto -- e aí a venda está bloqueada de qualquer forma.
-      const amanha = new Date();
-      amanha.setDate(amanha.getDate() + 1);
-      setDataPrimeiroVencimento(amanha.toISOString().split('T')[0]);
+      // Amanhã no fuso da ROTA (toISOString era o dia UTC: depois das 21h
+      // em São Paulo já sugeria depois de amanhã).
+      setDataPrimeiroVencimento(somarDias(hojeNoFuso(), 1));
       
       if (cliente) {
         setNome(cliente.nome);
@@ -928,7 +932,7 @@ export function ModalNovaVenda({
                       step="0.01"
                       min="0"
                       value={valorPrincipal}
-                      onChange={(e) => setValorPrincipal(e.target.value)}
+                      onChange={(e) => setValorPrincipal(limitarCasas(e.target.value))}
                       placeholder="0,00"
                       className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                     />
@@ -1109,7 +1113,7 @@ export function ModalNovaVenda({
                       step="0.01"
                       min="0"
                       value={valorMicroseguro}
-                      onChange={(e) => setValorMicroseguro(e.target.value)}
+                      onChange={(e) => setValorMicroseguro(limitarCasas(e.target.value))}
                       placeholder="Valor do microseguro"
                       className="w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500"
                     />
@@ -1160,31 +1164,31 @@ export function ModalNovaVenda({
                   <div>
                     <p className="text-blue-600">Valor Principal</p>
                     <p className="font-bold text-blue-900 text-lg">
-                      {valorPrincipalNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(valorPrincipalNum)}
                     </p>
                   </div>
                   <div>
                     <p className="text-blue-600">Juros ({taxaJuros}%)</p>
                     <p className="font-bold text-blue-900 text-lg">
-                      {valorJuros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(valorJuros)}
                     </p>
                   </div>
                   <div>
                     <p className="text-blue-600">Total a Pagar</p>
                     <p className="font-bold text-blue-900 text-lg">
-                      {valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(valorTotal)}
                     </p>
                   </div>
                   <div>
                     <p className="text-blue-600">Valor da Parcela</p>
                     <p className="font-bold text-blue-900 text-lg">
-                      {valorParcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(valorParcela)}
                     </p>
                   </div>
                 </div>
                 <div className="mt-4 pt-4 border-t border-blue-200 text-sm">
                   <p className="text-blue-700">
-                    <strong>{numeroParcelas}x</strong> de <strong>{valorParcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</strong> • 
+                    <strong>{numeroParcelas}x</strong> de <strong>{moeda(valorParcela)}</strong> • 
                     Frequência: <strong>{FREQUENCIAS.find(f => f.value === frequencia)?.label}</strong>
                   </p>
                   <p className="text-blue-600 mt-1">
@@ -1213,7 +1217,7 @@ export function ModalNovaVenda({
                 <div className="p-5 rounded-xl bg-purple-50 border border-purple-200">
                   <h3 className="font-semibold text-purple-900 mb-2">Microseguro</h3>
                   <p className="text-2xl font-bold text-purple-700">
-                    {valorMicroseguroNum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {moeda(valorMicroseguroNum)}
                   </p>
                 </div>
               )}
@@ -1222,7 +1226,7 @@ export function ModalNovaVenda({
               <div className="p-5 rounded-xl bg-green-50 border border-green-200">
                 <h3 className="font-semibold text-green-900 mb-2">Total Geral</h3>
                 <p className="text-3xl font-bold text-green-700">
-                  {(valorTotal + valorMicroseguroNum).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {moeda((valorTotal + valorMicroseguroNum))}
                 </p>
               </div>
             </div>
@@ -1263,6 +1267,10 @@ export function ModalNovaVenda({
             </button>
           )}
 
+          {/* Dia aberto anterior ao hoje da rota: a venda fica com a data dele (12/10/2026) */}
+          {activeTab === 'resumo' && (
+            <AvisoDiaOperacional rotaId={rotaId} variante="linha" className="mx-3 flex-1 min-w-0" />
+          )}
           {activeTab === 'resumo' && (
             <button
               onClick={handleSalvar}

@@ -22,6 +22,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { limitarCasas } from '@/utils/moeda';
 
 type PropsInput = Omit<
   React.InputHTMLAttributes<HTMLInputElement>,
@@ -40,9 +41,14 @@ interface Props extends PropsInput {
   vazio?: number;
   /** Trunca para inteiro, como o `parseInt` que estava no lugar. */
   inteiro?: boolean;
+  /**
+   * Máximo de casas decimais (campo de DINHEIRO: 2). A 3ª casa digitada é
+   * cortada na hora — ver `limitarCasas` em utils/moeda.ts (14/10/2026).
+   */
+  casas?: number;
 }
 
-export function InputNumero({ valor, onChange, vazio = 0, inteiro, ...resto }: Props) {
+export function InputNumero({ valor, onChange, vazio = 0, inteiro, casas, ...resto }: Props) {
   const [texto, setTexto] = useState(() =>
     typeof valor === 'number' && Number.isFinite(valor) ? String(valor) : ''
   );
@@ -83,7 +89,7 @@ export function InputNumero({ valor, onChange, vazio = 0, inteiro, ...resto }: P
         resto.onWheel?.(e);
       }}
       onChange={(e) => {
-        const t = e.target.value;
+        const t = casas != null ? limitarCasas(e.target.value, casas) : e.target.value;
         setTexto(t); // o que se vê é o que foi digitado, inclusive vazio
 
         const n = inteiro ? parseInt(t, 10) : parseFloat(t);

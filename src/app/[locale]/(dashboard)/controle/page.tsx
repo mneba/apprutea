@@ -24,6 +24,7 @@
 // SEM CACHE de módulo, de propósito: é tela de consulta rara, e o que ela
 // mostra (acesso de agora) envelhece em minutos.
 
+import { formatarDataHoraAno2 } from '@/utils/dateFormat';
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
@@ -58,17 +59,8 @@ const fmtData = (d: string | null) => {
   return `${dia}/${m}/${a}`;
 };
 
-/** Instante (timestamptz): o navegador mostra no fuso local. */
-const fmtInstante = (iso: string | null) =>
-  iso
-    ? new Date(iso).toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit',
-      })
-    : undefined;
+/** Instante (timestamptz) no fuso da rota (utils/dateFormat.ts). */
+const fmtInstante = (iso: string | null) => (iso ? formatarDataHoraAno2(iso) : undefined);
 
 /** Tempo decorrido desde um instante. É duração, não data de negócio. */
 const fmtHa = (iso: string | null) => {

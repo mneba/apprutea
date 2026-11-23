@@ -16,6 +16,7 @@
 // dashboard — que tem português no código — aqui a tradução é requisito: o
 // arquivo vai para o cliente final, que opera em espanhol.
 
+import { hojeNoFuso } from '@/utils/dateFormat';
 import type { ColunaPlanilha } from './xlsx';
 import type { LinhaExportacaoEmprestimo } from '@/types/clientes';
 
@@ -174,7 +175,7 @@ export function linhaTotal(
 
 /** Nome do arquivo, sem extensão. */
 export const nomeArquivoExportacao = (locale: string): string =>
-  `${R[ehEs(locale) ? 'es' : 'pt-BR'].arquivo}_${new Date().toISOString().split('T')[0]}`;
+  `${R[ehEs(locale) ? 'es' : 'pt-BR'].arquivo}_${hojeNoFuso()}`;
 
 /** Nome da aba da planilha. */
 export const nomeAbaExportacao = (locale: string): string =>

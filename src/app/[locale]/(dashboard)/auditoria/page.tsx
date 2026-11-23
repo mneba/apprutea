@@ -24,6 +24,7 @@
 // cada tecla no campo de usuário faria o banco varrer seis tabelas a cada
 // letra. O botão Buscar é deliberado: a tela só consulta quando se pede.
 
+import { formatarData, formatarHora } from '@/utils/dateFormat';
 import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
@@ -63,9 +64,8 @@ const fmtMoeda = (v: number | null) =>
       '$ ' +
       Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/** `momento` vem como timestamptz; o navegador já o mostra no fuso local. */
-const fmtDia = (iso: string) =>
-  new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+/** `momento` (timestamptz) no fuso da ROTA, a mesma régua das outras telas. */
+const fmtDia = (iso: string) => formatarData(iso);
 
 /**
  * `data_liquidacao` é DATE puro, sem fuso. Montá-la com `new Date('2026-09-18')`
@@ -78,8 +78,7 @@ const fmtDataLiq = (d: string | null) => {
   return `${dia}/${m}/${a}`;
 };
 
-const fmtHora = (iso: string) =>
-  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const fmtHora = (iso: string) => formatarHora(iso);
 
 /** A cor diz o que o evento é, não quanto vale. */
 const CORES: Record<string, string> = {

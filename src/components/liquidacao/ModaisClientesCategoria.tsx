@@ -1,5 +1,7 @@
 'use client';
 
+import { formatarHora as formatarHoraRegua } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect } from 'react';
 import {
   X,
@@ -37,17 +39,13 @@ interface EmprestimoCategoria {
 // =====================================================
 
 function formatarMoeda(valor: number | null | undefined): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
+  return moeda(valor || 0);
 }
 
+// `financeiro.created_at` é `timestamp without time zone` em UTC: sem a
+// régua, 23:24 aparecia 02:24 (Julio, 14/10/2026). Fuso da rota.
 function formatarHora(data: string): string {
-  return new Date(data).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarHoraRegua(data);
 }
 
 function formatarDataParcela(dataIso: string | null | undefined): string {

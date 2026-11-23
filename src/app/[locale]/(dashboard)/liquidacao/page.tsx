@@ -1,5 +1,8 @@
 'use client';
 
+import { limitarCasas } from '@/utils/moeda';
+import { formatarDataHora as formatarDataHoraRegua, hojeNoFuso } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Play,
@@ -68,18 +71,12 @@ import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
 // =====================================================
 
 function formatarMoeda(valor: number | null | undefined): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
+  return moeda(valor || 0);
 }
 
+// Timestamp do banco (UTC, às vezes sem fuso) -> fuso da rota.
 function formatarDataHora(data: string | null | undefined): string {
-  if (!data) return '-';
-  return new Date(data).toLocaleString('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-  });
+  return formatarDataHoraRegua(data) || '-';
 }
 
 function calcularPercentual(atual: number, meta: number): number {
@@ -196,13 +193,15 @@ function CardSaldo({
             <span className="text-[10px] text-gray-400">Final</span>
             <span className="text-sm font-bold text-gray-900 tabular-nums">{formatarMoeda(final)}</span>
           </div>
-        </div>
-        <div className={`flex flex-col items-end text-[11px] font-medium ${corDelta} flex-shrink-0`}>
-          <div className="flex items-center gap-0.5">
-            <IconDelta className="w-3 h-3" />
+          {/* A variação numa linha PRÓPRIA, embaixo (22/11/2026). Ela era uma
+              coluna à direita com valor em cima e % embaixo; quando "Final"
+              quebrava de linha, a % ficava na altura do valor final e parecia
+              pertencer a ele — relato do Julio de 12/10. */}
+          <div className={`flex items-center gap-1 mt-0.5 text-[11px] font-medium ${corDelta}`}>
+            <IconDelta className="w-3 h-3 flex-shrink-0" />
             <span className="tabular-nums">{subiu && '+'}{formatarMoeda(delta)}</span>
+            <span className="tabular-nums text-[10px] opacity-80">({subiu && '+'}{percent.toFixed(2).replace('.', ',')}%)</span>
           </div>
-          <span className="tabular-nums text-[10px]">{subiu && '+'}{percent.toFixed(2)}%</span>
         </div>
       </div>
       {rodape}
@@ -279,7 +278,7 @@ function SkeletonBlock({ className = '' }: { className?: string }) {
 
 function TelaSkeleton() {
   return (
-    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 p-1">
+    <div className="h-full flex flex-col gap-3 p-1 overflow-clip">
       <SkeletonBlock className="h-12 w-full" />
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[35%_65%] gap-4">
         <div className="space-y-3">
@@ -317,7 +316,7 @@ function ModalAbrirLiquidacao({
         </div>
         <div className="mb-6">
           <label className="block text-sm font-medium text-gray-700 mb-2">Caixa Inicial</label>
-          <input type="number" value={caixaInicial} onChange={(e) => setCaixaInicial(e.target.value)} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-semibold" placeholder="0,00" />
+          <input type="number" value={caixaInicial} onChange={(e) => setCaixaInicial(limitarCasas(e.target.value))} className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-lg font-semibold" placeholder="0,00" />
           <p className="mt-2 text-xs text-gray-500">Saldo sugerido: {formatarMoeda(saldoSugerido)}</p>
         </div>
         <div className="flex gap-3">
@@ -1564,15 +1563,21 @@ export default function LiquidacaoDiariaPage() {
     }
   }, [userId, rotaIdContexto, empresaId, profile, carregarDadosLiquidacao]);
 
+  // Só a resposta MAIS RECENTE escreve no calendário (22/11/2026). Ao trocar
+  // de rota, ou de mês rápido, a resposta antiga podia chegar depois da nova e
+  // pôr no calendário os dias de outra rota/mês — parte do relato do Julio de
+  // 05/11 ("o calendário não carrega as datas em que a rota já trabalhou").
+  const reqCalendarioRef = useRef(0);
   const carregarDadosCalendario = useCallback(async (rotaId: string, ano: number, mes: number) => {
+    const req = ++reqCalendarioRef.current;
     setLoadingCalendario(true);
     try {
       const liquidacoes = await liquidacaoService.buscarLiquidacoesMes(rotaId, ano, mes);
-      setLiquidacoesMes(liquidacoes);
+      if (req === reqCalendarioRef.current) setLiquidacoesMes(liquidacoes);
     } catch (error) {
       console.error('Erro ao carregar dados do calendário:', error);
     } finally {
-      setLoadingCalendario(false);
+      if (req === reqCalendarioRef.current) setLoadingCalendario(false);
     }
   }, []);
 
@@ -1659,12 +1664,17 @@ export default function LiquidacaoDiariaPage() {
   }, [carregarDados]);
 
   useEffect(() => { carregarDados(); }, [carregarDados]);
+  // Trocou de rota: o mês da rota ANTERIOR sai na hora, em vez de ficar na
+  // tela até a nova resposta chegar. O mês certo o próprio calendário pede ao
+  // abrir; este carregamento só adianta o mês corrente.
+  const rotaIdCalendario = rota?.id;
   useEffect(() => {
-    if (rota) {
+    setLiquidacoesMes([]);
+    if (rotaIdCalendario) {
       const agora = new Date();
-      carregarDadosCalendario(rota.id, agora.getFullYear(), agora.getMonth() + 1);
+      carregarDadosCalendario(rotaIdCalendario, agora.getFullYear(), agora.getMonth() + 1);
     }
-  }, [rota, carregarDadosCalendario]);
+  }, [rotaIdCalendario, carregarDadosCalendario]);
 
   // Data da ÚLTIMA liquidação FECHADA da rota (FECHADO ou APROVADO).
   // Serve para liberar a reabertura: só o último dia FECHADO pode ser
@@ -1743,7 +1753,7 @@ export default function LiquidacaoDiariaPage() {
         const { data: dataHojeResp } = await supabase.rpc('fn_data_hoje_rota', {
           p_rota_id: rota.id
         });
-        const hojeStr = dataHojeResp || new Date().toISOString().split('T')[0];
+        const hojeStr = dataHojeResp || hojeNoFuso();
         
         const { data, error } = await supabase.rpc('fn_proxima_liquidacao_info', {
           p_rota_id: rota.id,
@@ -2155,6 +2165,32 @@ export default function LiquidacaoDiariaPage() {
     setModalNotasLiquidacao(true);
   };
 
+  // Uma linha por cliente para a lista: a da parcela em pauta (abaixo).
+  const pautaPorCliente = useMemo(() => {
+    // A parcela "em pauta" é a MAIS ANTIGA em aberto do cliente — a que ele
+    // deve primeiro. `fn_clientes_da_liquidacao` devolve uma linha por parcela
+    // em aberto, ordenada pelo id da parcela (uuid, ou seja, sorteio), e pegar
+    // "a primeira linha" mostrava uma qualquer: relato do Julio de 12/10/2026,
+    // Cristiano Pereira com 14 de 20 pagas aparecendo "Não pagou parcela 19/20".
+    // Desempate: vencimento, depois número. Paga só entra sem nenhuma aberta.
+    // Número e total saem da MESMA linha (com dois empréstimos, não se mistura
+    // a parcela de um com o total do outro).
+    const mapa = new Map<string, typeof clientesDia[number]>();
+    const antes = (a: typeof clientesDia[number], b: typeof clientesDia[number]) => {
+      const abertaA = a.status_parcela !== 'PAGO', abertaB = b.status_parcela !== 'PAGO';
+      if (abertaA !== abertaB) return abertaA;
+      const va = a.data_vencimento || '9999-12-31', vb = b.data_vencimento || '9999-12-31';
+      if (va !== vb) return va < vb;
+      return (a.numero_parcela ?? Infinity) < (b.numero_parcela ?? Infinity);
+    };
+    for (const c of clientesDia) {
+      if (c.numero_parcela == null) continue;
+      const atual = mapa.get(c.cliente_id);
+      if (!atual || antes(c, atual)) mapa.set(c.cliente_id, c);
+    }
+    return mapa;
+  }, [clientesDia]);
+
   // Máscara de evento por cliente
   const eventosPorCliente = useMemo(() => {
     const mapa = new Map<string, EventoCliente>();
@@ -2194,15 +2230,20 @@ export default function LiquidacaoDiariaPage() {
     const naoPagosPorCliente = new Map<string, { numero: number; total: number }>();
 
     for (const c of clientesDia) {
-      if (c.numero_parcelas != null && !totalParcPorCliente.has(c.cliente_id)) {
-        totalParcPorCliente.set(c.cliente_id, c.numero_parcelas);
+      const pauta = pautaPorCliente.get(c.cliente_id);
+      if (!totalParcPorCliente.has(c.cliente_id)) {
+        const total = pauta?.numero_parcelas ?? c.numero_parcelas;
+        if (total != null) totalParcPorCliente.set(c.cliente_id, total);
       }
-      if (c.numero_parcela != null && !parcelaEmPauta.has(c.cliente_id)) {
-        parcelaEmPauta.set(c.cliente_id, c.numero_parcela);
+      if (pauta?.numero_parcela != null && !parcelaEmPauta.has(c.cliente_id)) {
+        parcelaEmPauta.set(c.cliente_id, pauta.numero_parcela);
       }
       // Não pagou = não entrou dinheiro dele no dia. Nada de status.
       if (!pagPorCliente.has(c.cliente_id) && !naoPagosPorCliente.has(c.cliente_id)) {
-        naoPagosPorCliente.set(c.cliente_id, { numero: c.numero_parcela ?? 0, total: c.numero_parcelas });
+        naoPagosPorCliente.set(c.cliente_id, {
+          numero: pauta?.numero_parcela ?? c.numero_parcela ?? 0,
+          total: pauta?.numero_parcelas ?? c.numero_parcelas,
+        });
       }
     }
 
@@ -2281,7 +2322,7 @@ export default function LiquidacaoDiariaPage() {
     // agora. Sem a dependência o memo não recalcula e a lista congela na
     // classificação do carregamento anterior, sem erro nenhum — é a mesma
     // armadilha que o resumo do mobile pagou (ver CLAUDE.md).
-  }, [clientesDia, emprestimosDoDia, resumoDia.porCliente, liquidacao?.id]);
+  }, [clientesDia, emprestimosDoDia, resumoDia.porCliente, liquidacao?.id, pautaPorCliente]);
 
   const clientesComEvento = useMemo(() => {
     const seen = new Set<string>();
@@ -2289,7 +2330,8 @@ export default function LiquidacaoDiariaPage() {
     for (const c of clientesDia) {
       if (seen.has(c.cliente_id)) continue;
       seen.add(c.cliente_id);
-      items.push({ cliente: c, evento: eventosPorCliente.get(c.cliente_id) });
+      // a linha da parcela em pauta, não a primeira que veio (ordem por uuid)
+      items.push({ cliente: pautaPorCliente.get(c.cliente_id) ?? c, evento: eventosPorCliente.get(c.cliente_id) });
     }
     for (const emp of emprestimosDoDia) {
       if (seen.has(emp.cliente_id)) continue;
@@ -2309,7 +2351,7 @@ export default function LiquidacaoDiariaPage() {
       items.push({ cliente: fake, evento: ev });
     }
     return items;
-  }, [clientesDia, emprestimosDoDia, eventosPorCliente, rota]);
+  }, [clientesDia, emprestimosDoDia, eventosPorCliente, rota, pautaPorCliente]);
 
   // ============================================================
   // ESCOPO DA LISTA: do dia x carregados
@@ -2495,7 +2537,14 @@ export default function LiquidacaoDiariaPage() {
   // page-content já tem padding do layout pai. Aqui criamos altura calculada e overflow-hidden.
 
   return (
-    <div className="h-[calc(100vh-7rem)] flex flex-col gap-3 overflow-x-auto overflow-y-hidden">
+    // `h-full` e `overflow-clip` (22/11/2026). A altura era uma conta fixa
+    // (100vh − 7rem) que só acerta com o padding de tela grande; agora é a da
+    // área, como em Clientes. E `overflow-x-auto overflow-y-hidden` deixava o
+    // navegador ROLAR esta caixa ao focar um botão de baixo (Microseguro): a
+    // página saía para o lado e para baixo, os botões do topo sumiam e não
+    // havia barra para voltar — relato do Julio de 12/10. "clip" não rola.
+    // Cada coluna continua com a sua rolagem própria.
+    <div className="h-full min-w-0 flex flex-col gap-3 overflow-clip">
 
       {/* Faixa de reabertura */}
       {isLiquidacaoReaberta && liquidacao && (

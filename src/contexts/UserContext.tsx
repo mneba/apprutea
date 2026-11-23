@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { definirFusoExibicao } from '@/utils/dateFormat';
 import type { UserProfile, Hierarquia, Cidade, Empresa, Rota, UserPermissao } from '@/types/database';
 
 interface LocalizacaoAtual {
@@ -135,10 +136,13 @@ export function UserProvider({ children }: { children: ReactNode }) {
         setProfile(profileData);
 
         if (profileData) {
-          await loadLocalizacaoSalva(profileData);
-
-          // Carregar permissões (SUPER_ADMIN tem tudo, não precisa buscar)
-          if (profileData.tipo_usuario !== 'SUPER_ADMIN') {
+          // Localização e permissões não dependem uma da outra: vão JUNTAS
+          // (22/11/2026). Em fila, somavam até 9 idas ao banco antes de a tela
+          // saber a empresa — relato do Julio de 12/10, "Selecione uma
+          // Empresa" por ~3 s a cada F5.
+          const carregarPermissoes = async () => {
+            // SUPER_ADMIN tem tudo, não precisa buscar
+            if (profileData.tipo_usuario === 'SUPER_ADMIN') return;
             const [{ data: permissoesData }, { data: modulosData }] = await Promise.all([
               supabase.from('user_permissoes').select('*').eq('user_id', user.id),
               supabase.from('modulos_sistema').select('id, codigo'),
@@ -155,7 +159,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
               if (codigo) map[codigo] = p; // por código
             });
             setPermissoes(map);
-          }
+          };
+
+          await Promise.all([loadLocalizacaoSalva(profileData), carregarPermissoes()]);
         }
       }
     } catch (err) {
@@ -190,82 +196,62 @@ export function UserProvider({ children }: { children: ReactNode }) {
     // Validar antes de carregar os dados relacionados
     const locValidada = validarLocalizacao(profileData, locBruta);
 
-    // Se a empresa mudou por causa da validação, salvar no banco
+    // Se a empresa mudou por causa da validação, salvar no banco. Não precisa
+    // esperar: ninguém lê de volta o que se grava aqui.
     if (locValidada.empresa_id !== locBruta.empresa_id || locValidada.rota_id !== locBruta.rota_id) {
       log('Localizacao ajustada pela validação, salvando no banco');
-      await supabase
+      supabase
         .from('user_profiles')
         .update({
           ultima_empresa_id: locValidada.empresa_id,
           ultima_rota_id: locValidada.rota_id,
         })
-        .eq('user_id', profileData.user_id);
+        .eq('user_id', profileData.user_id)
+        .then(() => {}, (e: any) => console.error('Erro ao salvar localização:', e));
     }
 
     const newLocalizacao = { ...locValidada };
 
-    // Carregar dados relacionados da localização validada
-    if (locValidada.hierarquia_id) {
-      const { data } = await supabase
-        .from('hierarquias')
-        .select('*')
-        .eq('id', locValidada.hierarquia_id)
-        .single();
-      newLocalizacao.hierarquia = data;
+    // As quatro leituras são independentes: vão JUNTAS (22/11/2026). Antes
+    // eram até seis em fila.
+    const porId = async (tabela: string, id: string | null) => {
+      if (!id) return null;
+      const { data } = await supabase.from(tabela).select('*').eq('id', id).single();
+      return data;
+    };
+    const [hierarquia, cidade, empresa, rota] = await Promise.all([
+      porId('hierarquias', locValidada.hierarquia_id),
+      porId('cidades', locValidada.cidade_id),
+      porId('empresas', locValidada.empresa_id),
+      porId('rotas', locValidada.rota_id),
+    ]);
+    newLocalizacao.hierarquia = hierarquia;
+    newLocalizacao.cidade = cidade;
+    newLocalizacao.empresa = empresa;
+    newLocalizacao.rota = rota;
+
+    // Auto-popular hierarquia e cidade a partir da empresa se estiverem vazias
+    // (só estes dependem da empresa, e vão juntos entre si).
+    const precisaHier = !!(empresa && !locValidada.hierarquia_id && empresa.hierarquia_id);
+    const precisaCidade = !!(empresa && !locValidada.cidade_id && empresa.cidade_id);
+    if (precisaHier || precisaCidade) {
+      const [h, c] = await Promise.all([
+        precisaHier ? porId('hierarquias', empresa.hierarquia_id) : Promise.resolve(null),
+        precisaCidade ? porId('cidades', empresa.cidade_id) : Promise.resolve(null),
+      ]);
+      if (precisaHier) { newLocalizacao.hierarquia_id = empresa.hierarquia_id; newLocalizacao.hierarquia = h; }
+      if (precisaCidade) { newLocalizacao.cidade_id = empresa.cidade_id; newLocalizacao.cidade = c; }
     }
 
-    if (locValidada.cidade_id) {
-      const { data } = await supabase
-        .from('cidades')
-        .select('*')
-        .eq('id', locValidada.cidade_id)
-        .single();
-      newLocalizacao.cidade = data;
-    }
-
-    if (locValidada.empresa_id) {
-      const { data } = await supabase
-        .from('empresas')
-        .select('*')
-        .eq('id', locValidada.empresa_id)
-        .single();
-      newLocalizacao.empresa = data;
-
-      // Auto-popular hierarquia e cidade a partir da empresa se estiverem vazias
-      if (data && !locValidada.hierarquia_id && data.hierarquia_id) {
-        newLocalizacao.hierarquia_id = data.hierarquia_id;
-        const { data: hierarquia } = await supabase
-          .from('hierarquias')
-          .select('*')
-          .eq('id', data.hierarquia_id)
-          .single();
-        newLocalizacao.hierarquia = hierarquia;
-      }
-      if (data && !locValidada.cidade_id && data.cidade_id) {
-        newLocalizacao.cidade_id = data.cidade_id;
-        const { data: cidade } = await supabase
-          .from('cidades')
-          .select('*')
-          .eq('id', data.cidade_id)
-          .single();
-        newLocalizacao.cidade = cidade;
-      }
-    }
-
-    if (locValidada.rota_id) {
-      const { data } = await supabase
-        .from('rotas')
-        .select('*')
-        .eq('id', locValidada.rota_id)
-        .single();
-      newLocalizacao.rota = data;
-    }
-
+    // O fuso da rota vem ANTES do estado: o primeiro render já formata
+    // datas no fuso certo (ver utils/dateFormat.ts).
+    definirFusoExibicao((newLocalizacao.empresa as any)?.timezone);
     setLocalizacaoState(newLocalizacao);
   };
 
   const setLocalizacao = async (loc: Partial<LocalizacaoAtual>) => {
     const newLocalizacao = { ...localizacao, ...loc };
+    definirFusoExibicao((newLocalizacao.empresa as any)?.timezone);
     setLocalizacaoState(newLocalizacao);
 
     if (user && profile) {

@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarHora as formatarHoraRegua, formatarDataHora as formatarDataHoraRegua } from '@/utils/dateFormat';
 import { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -205,12 +206,9 @@ function formatarMoeda(valor: number | null | undefined): string {
   }).format(valor || 0);
 }
 
+// Timestamp do banco (UTC, às vezes sem fuso) -> hora no fuso da rota.
 function formatarHora(data: string | null | undefined): string {
-  if (!data) return '';
-  return new Date(data).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarHoraRegua(data);
 }
 
 /**
@@ -221,14 +219,7 @@ function formatarHora(data: string | null | undefined): string {
  * local, e o selo mostraria o fechamento cinco horas fora na Colômbia.
  */
 function formatarDataHora(data: string | null | undefined): string {
-  if (!data) return '';
-  const utc = data.endsWith('Z') || data.includes('+') ? data : data + 'Z';
-  const dt = new Date(utc);
-  if (isNaN(dt.getTime())) return '';
-  return `${dt.toLocaleDateString('pt-BR')} ${dt.toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })}`;
+  return formatarDataHoraRegua(data).replace(',', '');
 }
 
 function formatarDataLiquidacaoBR(dataIso: string | null | undefined): string {

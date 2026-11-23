@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarHora as formatarHoraRegua } from '@/utils/dateFormat';
 import { useState, useEffect, useMemo } from 'react';
 import {
   X,
@@ -197,11 +198,10 @@ function formatarMoeda(valor: number | null | undefined): string {
   return `$ ${(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+// `financeiro.created_at` é `timestamp without time zone` em UTC: sem a
+// régua, 23:24 aparecia 02:24 (Julio, 14/10/2026). Fuso da rota.
 function formatarHora(data: string): string {
-  return new Date(data).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarHoraRegua(data);
 }
 
 function formatarCategoria(categoria: string): string {
@@ -254,6 +254,16 @@ interface ModalBaseProps {
 }
 
 function ModalBase({ isOpen, onClose, title, subtitle, icon, iconBgColor, children, maxWidth = 'max-w-lg' }: ModalBaseProps) {
+  // Esc fecha (pedido do Julio de 12/10/2026): Empréstimos, Despesas e
+  // Microseguro da Liquidação passam por esta moldura. O hook vem ANTES do
+  // retorno antecipado, senão a contagem de hooks muda ao abrir (React #310).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (

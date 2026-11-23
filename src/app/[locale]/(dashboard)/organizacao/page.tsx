@@ -298,39 +298,51 @@ export default function OrganizacaoPage() {
 
     if (!temCache(kResumo)) setLoading(true);
     try {
-      const resumo = await comCache(
+      // Resumo, empresa e rotas vão JUNTOS (22/11/2026): nenhum depende do
+      // outro, e em fila eram uma das razões dos ~9 s para abrir (Julio,
+      // 12/10). A empresa nula continua decidindo se a tela vai para rotas.
+      const pResumo = comCache(
         kResumo,
         () => organizacaoService.buscarResumoGeral(hierarquiaId || undefined, empresaIdParaResumo || undefined, rotasPermitidas),
         { forcar }
       );
-      setResumoGeral(resumo);
 
       // Se tem empresa selecionada no seletor master → ir para rotas
       if (empresaIdSelecionada) {
-        const empresa = await comCache(
-          chave('organizacao:empresa', empresaIdSelecionada),
-          () => organizacaoService.buscarEmpresa(empresaIdSelecionada),
-          { forcar }
-        );
-        if (empresa) {
-          setEmpresaSelecionada(empresa);
-          const rotasData = await comCache(
+        const [resumo, empresa, rotasData] = await Promise.all([
+          pResumo,
+          comCache(
+            chave('organizacao:empresa', empresaIdSelecionada),
+            () => organizacaoService.buscarEmpresa(empresaIdSelecionada),
+            { forcar }
+          ),
+          comCache(
             chave('organizacao:rotas', empresaIdSelecionada, rotasPermitidas),
             () => organizacaoService.listarRotasPorEmpresa(empresaIdSelecionada, rotasPermitidas),
             { forcar }
-          );
+          ),
+        ]);
+        setResumoGeral(resumo);
+        if (empresa) {
+          setEmpresaSelecionada(empresa);
           setRotas(rotasData);
           setViewMode('rotas');
         }
       } else if (hierarquiaId) {
         // Sem empresa selecionada → mostrar lista de empresas
-        const empresasData = await comCache(
-          chave('organizacao:empresas', hierarquiaId, rotasPermitidas),
-          () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId, rotasPermitidas),
-          { forcar }
-        );
+        const [resumo, empresasData] = await Promise.all([
+          pResumo,
+          comCache(
+            chave('organizacao:empresas', hierarquiaId, rotasPermitidas),
+            () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId, rotasPermitidas),
+            { forcar }
+          ),
+        ]);
+        setResumoGeral(resumo);
         setEmpresas(empresasData);
         setViewMode('empresas');
+      } else {
+        setResumoGeral(await pResumo);
       }
     } catch (err) {
       console.error('Erro ao carregar dados:', err);
@@ -1577,7 +1589,7 @@ export default function OrganizacaoPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setModalRota(false)} />
           
-          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[92vh] flex flex-col">
+          <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-4xl max-h-[calc(100dvh-2rem)] flex flex-col min-h-0">
             {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 flex-shrink-0">
               <h3 className="text-lg font-semibold text-gray-900">
@@ -1594,8 +1606,12 @@ export default function OrganizacaoPage() {
             {/* Body */}
             {/* Duas colunas a partir de md: à esquerda os dados da rota, à
                 direita o veículo e a zona de risco. Antes era uma coluna só
-                de max-w-md e o modal passava da altura da tela. */}
-            <div className="px-6 py-4 overflow-y-auto">
+                de max-w-md e o modal passava da altura da tela.
+                `flex-1 min-h-0` e o teto em `dvh` (22/11/2026, consolidação
+                do Julio de 12/10): o corpo é quem encolhe e rola, e o rodapé
+                com Salvar/Cancelar fica sempre visível, em qualquer altura de
+                notebook e sem mexer no zoom. */}
+            <div className="flex-1 min-h-0 px-6 py-4 overflow-y-auto overscroll-contain">
               {/* Badge indicando contexto */}
               <div className={`px-4 py-2.5 rounded-xl font-medium ${
                 rotaEditando 

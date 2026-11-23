@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarDataHoraAno2 } from '@/utils/dateFormat';
 import { useState, useEffect, type ElementType } from 'react';
 import {
   MessageSquare,
@@ -67,14 +68,11 @@ interface NotasClienteIconProps {
 // HELPERS
 // =====================================================
 
+// `notas.created_at` é `timestamp without time zone` em UTC: chega sem fuso,
+// e `new Date(data)` o lia como hora local -- 15:47 aparecia 18:47 (Julio,
+// 14/10/2026). A régua acrescenta o Z e mostra no fuso da rota.
 function formatarDataHora(data: string): string {
-  return new Date(data).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarDataHoraAno2(data);
 }
 
 /**

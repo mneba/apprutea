@@ -1,5 +1,6 @@
 'use client';
 
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useMemo } from 'react';
 import {
   ChevronLeft,
@@ -51,10 +52,7 @@ function formatarDataYmd(data: Date): string {
 }
 
 function formatarMoeda(valor: number | null | undefined): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
+  return moeda(valor || 0);
 }
 
 function gerarDiasDoMes(ano: number, mes: number): Date[] {
@@ -100,12 +98,24 @@ export function CalendarioLiquidacao({
   const hoje = useMemo(() => new Date(), []);
   const hojeStr = formatarDataYmd(hoje);
 
+  // O calendário PEDE o mês que está mostrando (22/11/2026). Antes quem
+  // carregava era a tela, pelo mês do RELÓGIO, e o calendário abria no mês do
+  // dia operacional: num dia de outro mês (retroativo) ele aparecia vazio,
+  // como se a rota não tivesse trabalhado, até trocar de mês ou clicar num dia
+  // — relato do Julio de 05/11. Ao montar (o modal monta ao abrir) e quando o
+  // dia selecionado muda de mês.
+  useEffect(() => {
+    onMesChange(anoAtual, mesAtual);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     const novoAno = dataSelecionada.getFullYear();
     const novoMes = dataSelecionada.getMonth() + 1;
     if (novoAno !== anoAtual || novoMes !== mesAtual) {
       setAnoAtual(novoAno);
       setMesAtual(novoMes);
+      onMesChange(novoAno, novoMes);
     }
   }, [dataSelecionada]);
 

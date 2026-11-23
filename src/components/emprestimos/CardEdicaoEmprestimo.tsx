@@ -1,5 +1,6 @@
 'use client';
 
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useMemo } from 'react';
 import {
   Save,
@@ -74,10 +75,7 @@ const DIAS_SEMANA = [
 // =====================================================
 
 function formatarMoeda(valor: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
+  return moeda(valor || 0);
 }
 
 // Data de hoje no fuso LOCAL (YYYY-MM-DD).
@@ -658,6 +656,7 @@ export function CardEdicaoEmprestimo({
                 <div className="relative">
                   <DollarSign className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                   <InputNumero
+                    casas={2}
                     valor={valorPrincipal}
                     onChange={setValorPrincipal}
                     min={0}

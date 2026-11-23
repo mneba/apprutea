@@ -1,5 +1,7 @@
 'use client';
 
+import { hojeNoFuso, somarDias } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Wallet, 
@@ -73,7 +75,140 @@ interface FiltroData {
 // COMPONENTES AUXILIARES
 // =====================================================
 
-function LinhaExtrato({ 
+/**
+ * Confirmação de anulação (22/11/2026). Substitui o `confirm` + `prompt` do
+ * navegador, que não mostravam O QUE se anulava e não travavam o duplo clique
+ * -- foi assim que o "TESTE QA gasolina" (Prueba Julio 1) anulou duas vezes.
+ * A trava de verdade é o FOR UPDATE no banco
+ * (sql/2026-11-22_anular_lancamento_com_trava.sql); esta janela é a conversa.
+ */
+function ModalAnularMovimentacao({
+  movimento,
+  categorias,
+  gravando,
+  erro,
+  onConfirmar,
+  onFechar,
+}: {
+  movimento: MovimentoFinanceiro;
+  categorias: CategoriaFinanceira[];
+  gravando: boolean;
+  erro: string | null;
+  onConfirmar: (motivo: string) => void;
+  onFechar: () => void;
+}) {
+  const [motivo, setMotivo] = useState('');
+
+  useEffect(() => {
+    const aoTeclar = (e: KeyboardEvent) => { if (e.key === 'Escape' && !gravando) onFechar(); };
+    window.addEventListener('keydown', aoTeclar);
+    return () => window.removeEventListener('keydown', aoTeclar);
+  }, [gravando, onFechar]);
+
+  const categoria = categorias.find(c => c.codigo === movimento.categoria);
+  const isEntrada = movimento.tipo === 'RECEBER';
+  const isTransferencia = movimento.tipo === 'TRANSFERENCIA';
+  const dia = (s?: string) => {
+    if (!s) return '-';
+    const [ano, mes, d] = s.split('T')[0].split('-');
+    return `${d}/${mes}/${ano}`;
+  };
+  const dataLiq = (movimento as any).data_liquidacao as string | undefined;
+  const conta = isTransferencia
+    ? `${movimento.conta_origem_nome || '-'} → ${movimento.conta_destino_nome || '-'}`
+    : isEntrada ? movimento.conta_destino_nome : movimento.conta_origem_nome;
+  const efeito = isTransferencia
+    ? 'O valor volta para a conta de origem e sai da de destino.'
+    : isEntrada
+      ? 'O valor sai do saldo da conta e do caixa da liquidação.'
+      : 'O valor volta ao saldo da conta e ao caixa da liquidação.';
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+         onClick={() => { if (!gravando) onFechar(); }}>
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[calc(100dvh-2rem)] flex flex-col"
+           onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-5 py-3 border-b">
+          <h3 className="text-base font-semibold text-gray-900 flex items-center gap-2">
+            <Ban className="w-4 h-4 text-red-600" /> Anular movimentação
+          </h3>
+          <button onClick={onFechar} disabled={gravando}
+                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-40" aria-label="Fechar">
+            <X className="w-4 h-4 text-gray-500" />
+          </button>
+        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-4 space-y-4">
+          <div className="rounded-lg border border-gray-200 p-3 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-sm font-medium text-gray-900 min-w-0 break-words">{movimento.descricao || '-'}</p>
+              <span className={`text-lg font-bold tabular-nums flex-shrink-0 ${
+                isTransferencia ? 'text-blue-600' : isEntrada ? 'text-green-600' : 'text-red-600'}`}>
+                {isTransferencia ? '↔' : isEntrada ? '+' : '-'}{moeda(movimento.valor)}
+              </span>
+            </div>
+            <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              <dt className="text-gray-500">Categoria</dt>
+              <dd className="text-gray-800">{categoria?.nome_pt || movimento.categoria}</dd>
+              <dt className="text-gray-500">Conta</dt>
+              <dd className="text-gray-800 break-words">{conta || '-'}</dd>
+              <dt className="text-gray-500">Lançado em</dt>
+              <dd className="text-gray-800 tabular-nums">{dia(movimento.data_lancamento)}</dd>
+              {dataLiq && (
+                <>
+                  <dt className="text-gray-500">Liquidação</dt>
+                  <dd className="text-gray-800 tabular-nums">{dia(dataLiq)}</dd>
+                </>
+              )}
+            </dl>
+          </div>
+
+          <p className="text-sm text-gray-600">
+            {efeito} O registro fica no histórico como <strong>ANULADO</strong> e não pode ser anulado de novo.
+          </p>
+
+          <div>
+            <label htmlFor="motivo-anulacao" className="block text-sm font-medium text-gray-700 mb-1">
+              Motivo da anulação <span className="font-normal text-gray-400">(opcional)</span>
+            </label>
+            <textarea
+              id="motivo-anulacao"
+              value={motivo}
+              onChange={e => setMotivo(e.target.value)}
+              disabled={gravando}
+              rows={3}
+              autoFocus
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-500 disabled:bg-gray-50"
+              placeholder="Ex.: lançado em duplicidade"
+            />
+          </div>
+
+          {erro && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <span className="min-w-0 break-words">{erro}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex justify-end gap-2 px-5 py-3 border-t">
+          <button onClick={onFechar} disabled={gravando}
+                  className="px-4 py-2 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-100 disabled:opacity-40">
+            Voltar
+          </button>
+          <button onClick={() => onConfirmar(motivo.trim())} disabled={gravando}
+                  className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-60 disabled:cursor-wait">
+            {gravando
+              ? <><Loader2 className="w-4 h-4 animate-spin" />Anulando…</>
+              : <><Ban className="w-4 h-4" />Anular {moeda(movimento.valor)}</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function LinhaExtrato({
   movimento, 
   categorias,
   podeAnular,
@@ -202,7 +337,7 @@ function LinhaExtrato({
           isTransferencia ? 'text-blue-600' : isEntrada ? 'text-green-600' : 'text-red-600'
         }`}>
           {isTransferencia ? '↔' : isEntrada ? '+' : '-'}
-          {movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+          {moeda(movimento.valor)}
         </span>
         <div className="flex items-center justify-end gap-1.5 mt-1">
           {comprovantesDe(movimento).length > 0 && (
@@ -294,7 +429,7 @@ function ModalVerTodas({
               <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                 <span className="text-sm text-gray-700 font-medium">{item.nome}</span>
                 <span className="text-sm font-semibold text-gray-900">
-                  {item.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {moeda(item.valor)}
                 </span>
               </div>
             ))}
@@ -306,7 +441,7 @@ function ModalVerTodas({
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-gray-600">Total</span>
             <span className="text-lg font-bold text-gray-900">
-              {total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+              {moeda(total)}
             </span>
           </div>
         </div>
@@ -376,10 +511,8 @@ function FiltroPeriodoCompacto({
 
 function rotuloDataLiquidacao(dataStr: string): string {
   if (!dataStr) return 'Selecionar dia';
-  const hoje = new Date();
-  const hojeStr = `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(hoje.getDate()).padStart(2, '0')}`;
-  const ontem = new Date(hoje); ontem.setDate(ontem.getDate() - 1);
-  const ontemStr = `${ontem.getFullYear()}-${String(ontem.getMonth() + 1).padStart(2, '0')}-${String(ontem.getDate()).padStart(2, '0')}`;
+  const hojeStr = hojeNoFuso();
+  const ontemStr = somarDias(hojeStr, -1);
   const d = dataStr.slice(0, 10);
   if (d === hojeStr) return 'Hoje';
   if (d === ontemStr) return 'Ontem';
@@ -404,13 +537,13 @@ export default function FinanceiroPage() {
   const [modalEscolhaTransacao, setModalEscolhaTransacao] = useState(false);
   const [filtroResumo, setFiltroResumo] = useEstadoTela<FiltroData>(`${chaveEstado}|filtroResumo`, {
     tipo: 'hoje',
-    dataInicio: new Date().toISOString().split('T')[0],
-    dataFim: new Date().toISOString().split('T')[0],
+    dataInicio: hojeNoFuso(),
+    dataFim: hojeNoFuso(),
   });
   const [filtroExtrato, setFiltroExtrato] = useEstadoTela<FiltroData>(`${chaveEstado}|filtroExtrato`, {
     tipo: 'hoje',
-    dataInicio: new Date().toISOString().split('T')[0],
-    dataFim: new Date().toISOString().split('T')[0],
+    dataInicio: hojeNoFuso(),
+    dataFim: hojeNoFuso(),
   });
   const [contaFiltro, setContaFiltro] = useEstadoTela<string>(`${chaveEstado}|contaFiltro`, '');
   const [seletorContaAberto, setSeletorContaAberto] = useState(false);
@@ -468,6 +601,9 @@ export default function FinanceiroPage() {
   // `anularMovimentacao` mais TRES recargas sem mexer um pixel, e o usuario
   // clicava de novo. Era a unica acao de linha do sistema sem trava.
   const [anulandoId, setAnulandoId] = useState<string | null>(null);
+  const [paraAnular, setParaAnular] = useState<MovimentoFinanceiro | null>(null);
+  const [erroAnulacao, setErroAnulacao] = useState<string | null>(null);
+  const anulandoRef = useRef(false);
   const [categorias, setCategorias] = useState<CategoriaFinanceira[]>([]);
   const [comprovante, setComprovante] = useState<string[] | null>(null);
 
@@ -704,31 +840,46 @@ export default function FinanceiroPage() {
     }
   }, [empresaId, filtroExtrato, contaFiltro, rotaId, modoFiltroTemporal, dataLiquidacao, carregarExtrato]);
 
-  const handleAnularMovimentacao = async (movimento: MovimentoFinanceiro) => {
-    if (!podeAnular) return;
-    if (anulandoId) return; // uma anulacao por vez: sao tres recargas cada
-    const confirmar = window.confirm(
-      `Anular esta movimentação de ${movimento.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}?\n\n` +
-      `Isto reverte o saldo da conta e o caixa da liquidação. O registro é mantido como ANULADO (histórico).`
-    );
-    if (!confirmar) return;
+  // Abre a janela; quem grava é `confirmarAnulacao`.
+  const handleAnularMovimentacao = (movimento: MovimentoFinanceiro) => {
+    if (!podeAnular || anulandoRef.current) return;
+    setErroAnulacao(null);
+    setParaAnular(movimento);
+  };
 
-    // Motivo é opcional — se o usuário cancelar o prompt, aborta; se deixar vazio, segue sem motivo.
-    const motivo = window.prompt('Motivo da anulação (opcional):', '');
-    if (motivo === null) return; // cancelou
+  const fecharAnulacao = useCallback(() => {
+    if (anulandoRef.current) return;
+    setParaAnular(null);
+    setErroAnulacao(null);
+  }, []);
 
+  const confirmarAnulacao = async (motivo: string) => {
+    const movimento = paraAnular;
+    // A trava é REF, não estado: dois cliques no mesmo quadro leem o mesmo
+    // `anulandoId` antigo e os dois passavam (Julio, 12/10/2026).
+    if (!movimento || anulandoRef.current) return;
+    anulandoRef.current = true;
     setAnulandoId(movimento.id);
+    setErroAnulacao(null);
     try {
       await financeiroService.anularMovimentacao(movimento.id, motivo || null, profile?.user_id || null);
-      // Gravou: o cache do módulo não vale mais
-    invalidarCache('financeiro:');
-    await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
     } catch (e: any) {
       console.error('Erro ao anular movimentação:', e);
-      alert(e?.message || 'Erro ao anular a movimentação. Tente novamente.');
+      setErroAnulacao(e?.message || 'Erro ao anular a movimentação. Tente novamente.');
+      anulandoRef.current = false;
+      setAnulandoId(null);
+      return;
+    }
+    // Gravou: fecha a janela e recarrega. Falha na recarga não é falha da
+    // anulação, então não volta para a janela.
+    setParaAnular(null);
+    invalidarCache('financeiro:');
+    try {
+      await Promise.all([carregarSaldos({ forcar: true }), carregarContas({ forcar: true }), carregarExtrato({ forcar: true })]);
+    } catch (e) {
+      console.error('Erro ao recarregar depois de anular:', e);
     } finally {
-      // `finally`: se a recarga falhar no meio, o botao nao pode ficar
-      // travado para sempre.
+      anulandoRef.current = false;
       setAnulandoId(null);
     }
   };
@@ -1071,7 +1222,7 @@ export default function FinanceiroPage() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-7rem)] gap-3">
+    <div className="flex flex-col h-full gap-3">
       <div className="flex items-start justify-between flex-shrink-0">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Financeiro</h1>
@@ -1217,7 +1368,9 @@ export default function FinanceiroPage() {
                   <div className="flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5">
                     <button
                       onClick={() => {
-                        const hoje = new Date().toISOString().split('T')[0];
+                        // Dia no fuso da rota. toISOString é o dia UTC, e às
+                        // 21h em São Paulo já é amanhã (Julio, 14/10/2026).
+                        const hoje = hojeNoFuso();
                         setModoFiltroTemporal('periodo');
                         setFiltroResumo({ tipo: 'hoje', dataInicio: hoje, dataFim: hoje });
                         setFiltroExtrato({ tipo: 'hoje', dataInicio: hoje, dataFim: hoje });
@@ -1226,8 +1379,7 @@ export default function FinanceiroPage() {
                     >Hoje</button>
                     <button
                       onClick={() => {
-                        const o = new Date(); o.setDate(o.getDate() - 1);
-                        const os = o.toISOString().split('T')[0];
+                        const os = somarDias(hojeNoFuso(), -1);
                         setModoFiltroTemporal('periodo');
                         setFiltroResumo({ tipo: 'ontem', dataInicio: os, dataFim: os });
                         setFiltroExtrato({ tipo: 'ontem', dataInicio: os, dataFim: os });
@@ -1438,10 +1590,10 @@ export default function FinanceiroPage() {
             <span className="text-xs text-gray-600">{movimentosFiltrados.length} registro(s)</span>
             <div className="flex items-center gap-4 text-xs">
               <span className="text-green-600 font-semibold tabular-nums">
-                entradas {totalEntradasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                entradas {moeda(totalEntradasFiltrado)}
               </span>
               <span className="text-red-600 font-semibold tabular-nums">
-                saídas {totalSaidasFiltrado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                saídas {moeda(totalSaidasFiltrado)}
               </span>
             </div>
           </div>
@@ -1484,7 +1636,7 @@ export default function FinanceiroPage() {
                   <p className="text-[10px] text-gray-400">ajustar saldo</p>
                 </div>
                 <span className={`text-base font-bold tabular-nums ${((contaSelecionada as any).saldo_atual ?? 0) < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                  {((contaSelecionada as any).saldo_atual ?? 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  {moeda(((contaSelecionada as any).saldo_atual ?? 0))}
                 </span>
               </button>
             ) : (
@@ -1501,7 +1653,7 @@ export default function FinanceiroPage() {
                       <p className="text-[10px] text-gray-500 uppercase font-semibold">Empresa</p>
                     </div>
                     <span className={`text-sm font-bold tabular-nums ${saldos.saldo_empresa < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {saldos.saldo_empresa.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(saldos.saldo_empresa)}
                     </span>
                     <ChevronRight className="w-4 h-4 text-gray-300" />
                   </button>
@@ -1544,7 +1696,7 @@ export default function FinanceiroPage() {
                         <p className="text-[10px] text-gray-400">ajustar saldo</p>
                       </div>
                       <span className={`text-sm font-bold tabular-nums flex-shrink-0 ${r.valor < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                        {r.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                        {moeda(r.valor)}
                       </span>
                       <ChevronRight className="w-4 h-4 text-gray-300 flex-shrink-0" />
                     </button>
@@ -1562,7 +1714,7 @@ export default function FinanceiroPage() {
                     <p className="text-[10px] text-gray-500 uppercase font-semibold">Microseguros</p>
                   </div>
                   <span className={`text-sm font-bold tabular-nums ${saldos.saldo_microseguros < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                    {saldos.saldo_microseguros.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                    {moeda(saldos.saldo_microseguros)}
                   </span>
                   {!modoRota && <ChevronRight className="w-4 h-4 text-gray-300" />}
                 </button>
@@ -1571,7 +1723,7 @@ export default function FinanceiroPage() {
                   <div className="px-3 py-2.5 bg-gray-50/60 flex items-center gap-2">
                     <p className="text-[10px] text-gray-500 uppercase font-semibold flex-1">Total consolidado</p>
                     <span className={`text-base font-bold tabular-nums ${saldos.total_consolidado < 0 ? 'text-red-600' : 'text-gray-900'}`}>
-                      {saldos.total_consolidado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(saldos.total_consolidado)}
                     </span>
                   </div>
                 )}
@@ -1622,7 +1774,7 @@ export default function FinanceiroPage() {
                       <p className="text-[10px] text-gray-400">{c.count} lançamento{c.count > 1 ? 's' : ''}</p>
                     </div>
                     <span className={`text-xs font-semibold tabular-nums ${ativa ? 'text-purple-700' : 'text-gray-900'}`}>
-                      {c.total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                      {moeda(c.total)}
                     </span>
                   </button>
                 );
@@ -1768,6 +1920,16 @@ export default function FinanceiroPage() {
       />
 
       {comprovante && <LightboxImagem urls={comprovante} onClose={() => setComprovante(null)} />}
+      {paraAnular && (
+        <ModalAnularMovimentacao
+          movimento={paraAnular}
+          categorias={categorias}
+          gravando={anulandoId === paraAnular.id}
+          erro={erroAnulacao}
+          onConfirmar={confirmarAnulacao}
+          onFechar={fecharAnulacao}
+        />
+      )}
     </div>
   );
 }

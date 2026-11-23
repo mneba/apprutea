@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarDataPura } from '@/utils/dateFormat';
 import { useState, useEffect, useRef } from 'react';
 import { 
   X, 
@@ -737,7 +738,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                                 <div className="text-right">
                                   <span className="text-xs text-purple-600">Válido até</span>
                                   <p className="text-sm font-medium text-purple-700">
-                                    {new Date(dataVencimento).toLocaleDateString('pt-BR')}
+                                    {formatarDataPura(dataVencimento) /* data PURA do input: new Date() a lia como meia-noite UTC, um dia antes */}
                                   </p>
                                 </div>
                               )}
@@ -1012,6 +1013,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           <span className="text-sm font-medium text-gray-700">Valor Máximo Vendas</span>
                         </label>
                         <InputNumero
+                          casas={2}
                           valor={restricoes.valor_max_vendas}
                           vazio={0}
                           onChange={(n) => updateRestricao('valor_max_vendas', n)}
@@ -1034,6 +1036,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           <span className="text-sm font-medium text-gray-700">Valor Máximo Gastos</span>
                         </label>
                         <InputNumero
+                          casas={2}
                           valor={restricoes.valor_max_gastos}
                           vazio={0}
                           onChange={(n) => updateRestricao('valor_max_gastos', n)}
@@ -1056,6 +1059,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                           <span className="text-sm font-medium text-gray-700">Valor Máximo Entradas</span>
                         </label>
                         <InputNumero
+                          casas={2}
                           valor={restricoes.valor_max_entradas}
                           vazio={0}
                           onChange={(n) => updateRestricao('valor_max_entradas', n)}
@@ -1329,6 +1333,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         Valor Pensão
                       </label>
                       <InputNumero
+                        casas={2}
                         valor={recibos.valor_pensao}
                         vazio={0}
                         onChange={(n) => updateRecibo('valor_pensao', n)}
@@ -1343,6 +1348,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         Valor Saúde
                       </label>
                       <InputNumero
+                        casas={2}
                         valor={recibos.valor_saude}
                         vazio={0}
                         onChange={(n) => updateRecibo('valor_saude', n)}

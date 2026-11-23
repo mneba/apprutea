@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarData } from '@/utils/dateFormat';
 import { useState, useEffect } from 'react';
 import {
   Search,
@@ -385,7 +386,7 @@ export default function VendedoresPage() {
                         <div className="flex items-center gap-1.5 text-sm text-gray-600">
                           <Calendar className="w-3.5 h-3.5" />
                           {vendedor.created_at
-                            ? new Date(vendedor.created_at).toLocaleDateString('pt-BR')
+                            ? formatarData(vendedor.created_at)
                             : '-'}
                         </div>
                       </td>

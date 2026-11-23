@@ -250,7 +250,7 @@ export const solicitacoesService = {
   async contarCentral(
     userId: string,
     filtros: Omit<FiltrosSolicitacoes, 'status' | 'limite' | 'offset'> = {}
-  ): Promise<{ pendentes: number; aprovadas: number; rejeitadas: number; total: number }> {
+  ): Promise<{ pendentes: number; aprovadas: number; rejeitadas: number; canceladas: number; total: number }> {
     const { data, error } = await supabase.rpc('fn_contar_solicitacoes_central', {
       p_user_id: userId,
       p_rota_id: filtros.rota_id || null,
@@ -264,15 +264,23 @@ export const solicitacoesService = {
 
     if (error) {
       console.error('Erro ao contar solicitações:', error);
-      return { pendentes: 0, aprovadas: 0, rejeitadas: 0, total: 0 };
+      return { pendentes: 0, aprovadas: 0, rejeitadas: 0, canceladas: 0, total: 0 };
     }
 
     const r = Array.isArray(data) ? data[0] : data;
+    const pendentes = Number(r?.pendentes || 0);
+    const aprovadas = Number(r?.aprovadas || 0);
+    const rejeitadas = Number(r?.rejeitadas || 0);
+    const total = Number(r?.total || 0);
+    // "Canceladas" é o RESTO do total (22/11/2026, pedido do Julio de 12/10:
+    // "Total 205, Aprovadas 144 + Rejeitadas 6 + Pendentes 0 = 150"). O total
+    // conta todo status e só três tinham quadro. Derivado em vez de contado à
+    // parte para o Total ser a soma dos quadros POR CONSTRUÇÃO. Inclui
+    // EXPIRADO, que o CHECK permite e hoje tem 0 linhas (medido em 22/11) —
+    // também é pedido encerrado sem decisão.
     return {
-      pendentes: Number(r?.pendentes || 0),
-      aprovadas: Number(r?.aprovadas || 0),
-      rejeitadas: Number(r?.rejeitadas || 0),
-      total: Number(r?.total || 0),
+      pendentes, aprovadas, rejeitadas, total,
+      canceladas: Math.max(total - pendentes - aprovadas - rejeitadas, 0),
     };
   },
 

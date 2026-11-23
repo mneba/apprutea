@@ -1,5 +1,7 @@
 'use client';
 
+import { limitarCasas } from '@/utils/moeda';
+import { AvisoDiaOperacional } from '@/components/layout/AvisoDiaOperacional';
 import { useState, useEffect } from 'react';
 import { useMenuFlutuante } from '@/hooks/useMenuFlutuante';
 
@@ -528,7 +530,7 @@ export function ModalNovaMovimentacao({
                   step="0.01"
                   min="0.01"
                   value={valor}
-                  onChange={(e) => setValor(e.target.value)}
+                  onChange={(e) => setValor(limitarCasas(e.target.value))}
                   onWheel={(e) => e.currentTarget.blur()}
                   placeholder="0,00"
                   className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -639,7 +641,11 @@ export function ModalNovaMovimentacao({
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+        <div className="flex flex-wrap items-center justify-end gap-3 px-6 py-4 border-t border-gray-200 bg-gray-50">
+          {/* Usando a liquidação aberta e ela é de um dia passado: diz a data junto do botão */}
+          {(!liquidacaoSelId || liquidacaoSelId === liquidacaoAberta?.id) && (
+            <AvisoDiaOperacional rotaId={rotaId} variante="linha" className="mr-auto" />
+          )}
           <button
             onClick={onClose}
             className="px-5 py-2.5 text-gray-700 hover:bg-gray-100 rounded-xl transition-colors font-medium"
@@ -854,7 +860,7 @@ export function ModalTransferencia({
                 min="0.01"
                 max={contaOrigemObj?.saldo_atual || undefined}
                 value={valor}
-                onChange={(e) => setValor(e.target.value)}
+                onChange={(e) => setValor(limitarCasas(e.target.value))}
                 onWheel={(e) => e.currentTarget.blur()}
                 placeholder="0,00"
                 className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -1172,7 +1178,7 @@ export function ModalAjusteSaldo({
                     type="number"
                     step="0.01"
                     value={saldoFinal}
-                    onChange={(e) => setSaldoFinal(e.target.value)}
+                    onChange={(e) => setSaldoFinal(limitarCasas(e.target.value))}
                     onWheel={(e) => e.currentTarget.blur()}
                     placeholder="0,00"
                     className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-amber-300 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 bg-white"

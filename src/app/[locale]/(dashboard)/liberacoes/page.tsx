@@ -1,11 +1,15 @@
 'use client';
 
+import { limitarCasas } from '@/utils/moeda';
+import { formatarDataHora as formatarDataHoraRegua } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   FileText, 
   Clock, 
   CheckCircle2, 
-  XCircle, 
+  XCircle,
+  Ban, 
   AlertTriangle,
   Filter,
   Search,
@@ -193,16 +197,8 @@ function ModalDetalhesSolicitacao({
     cor: 'gray'
   };
 
-  const formatarDataHora = (data: string | null) => {
-    if (!data) return '-';
-    return new Date(data).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  // Timestamp do banco -> fuso da rota (utils/dateFormat.ts).
+  const formatarDataHora = (data: string | null) => formatarDataHoraRegua(data) || '-';
 
   const formatarDataSimples = (data: string | null) => {
     if (!data) return '-';
@@ -228,7 +224,7 @@ function ModalDetalhesSolicitacao({
 
   const formatarMoeda = (valor: number | null) => {
     if (valor === null || valor === undefined) return '-';
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor);
+    return moeda(valor);
   };
 
   // Verificar tipo de solicitação
@@ -1158,6 +1154,7 @@ function ModalDetalhesSolicitacao({
                         <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
                         <InputNumero
                           step="0.01"
+                          casas={2}
                           valor={editVenda.valor_principal}
                           vazio={0}
                           onChange={(n) => setEditVenda({ ...editVenda, valor_principal: n })}
@@ -1217,7 +1214,7 @@ function ModalDetalhesSolicitacao({
                           type="number"
                           step="0.01"
                           value={editVenda.microseguro_valor ?? ''}
-                          onChange={(e) => setEditVenda({ ...editVenda, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                          onChange={(e) => setEditVenda({ ...editVenda, microseguro_valor: e.target.value === '' ? null : parseFloat(limitarCasas(e.target.value)) })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
@@ -1372,6 +1369,7 @@ function ModalDetalhesSolicitacao({
                         <label className="block text-xs text-gray-500 mb-1">Valor principal</label>
                         <InputNumero
                           step="0.01"
+                          casas={2}
                           valor={editRenovacao.valor_principal}
                           vazio={0}
                           onChange={(n) => setEditRenovacao({ ...editRenovacao, valor_principal: n })}
@@ -1445,7 +1443,7 @@ function ModalDetalhesSolicitacao({
                           type="number"
                           step="0.01"
                           value={editRenovacao.microseguro_valor ?? ''}
-                          onChange={(e) => setEditRenovacao({ ...editRenovacao, microseguro_valor: e.target.value === '' ? null : parseFloat(e.target.value) })}
+                          onChange={(e) => setEditRenovacao({ ...editRenovacao, microseguro_valor: e.target.value === '' ? null : parseFloat(limitarCasas(e.target.value)) })}
                           disabled={solicitacao.status !== 'PENDENTE'}
                           className="w-full px-3 py-2 rounded-lg border border-gray-200 text-sm disabled:bg-gray-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
@@ -1838,7 +1836,7 @@ export default function LiberacoesPage() {
   // Contadores dos cards. Seguem os mesmos filtros da lista, EXCETO status:
   // trocar de empresa muda os números, mas clicar em "Pendentes" não pode
   // zerar os outros cards. Antes eram contados sobre a lista já carregada.
-  const [contadores, setContadores] = useState({ pendentes: 0, aprovadas: 0, rejeitadas: 0, total: 0 });
+  const [contadores, setContadores] = useState({ pendentes: 0, aprovadas: 0, rejeitadas: 0, canceladas: 0, total: 0 });
 
   const carregarContadores = useCallback(async (opts?: { forcar?: boolean }) => {
     if (!user) return;
@@ -2026,15 +2024,7 @@ export default function LiberacoesPage() {
     ? (empresasDisponiveis.find((e) => e.id === filtroEmpresa)?.nome || 'Empresa selecionada')
     : '';
 
-  const formatarData = (data: string) => {
-    return new Date(data).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  };
+  const formatarData = (data: string) => formatarDataHoraRegua(data);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -2080,7 +2070,7 @@ export default function LiberacoesPage() {
         {/* Os cartões são do desktop. No celular a mesma informação está no
             seletor logo abaixo — quatro cartões custariam metade da altura
             útil para mostrar quatro números. */}
-        <div className="hidden lg:grid grid-cols-4 gap-4">
+        <div className="hidden lg:grid grid-cols-5 gap-4">
           <button
             onClick={() => setFiltroStatus('')}
             className={`p-4 rounded-xl border-2 transition-colors ${
@@ -2156,6 +2146,28 @@ export default function LiberacoesPage() {
               </div>
             </div>
           </button>
+
+          {/* Canceladas (22/11/2026): sem este quadro o Total não fechava com a
+              soma dos outros — as canceladas entravam no Total e em lugar
+              nenhum mais. */}
+          <button
+            onClick={() => setFiltroStatus('CANCELADO')}
+            className={`p-4 rounded-xl border-2 transition-colors ${
+              filtroStatus === 'CANCELADO'
+                ? 'border-gray-500 bg-gray-50'
+                : 'border-gray-200 bg-white hover:border-gray-400'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                <Ban className="w-5 h-5 text-gray-500" />
+              </div>
+              <div className="text-left">
+                <p className="text-2xl font-bold text-gray-600">{contadores.canceladas}</p>
+                <p className="text-sm text-gray-600">Canceladas</p>
+              </div>
+            </div>
+          </button>
         </div>
 
         {/* ── CELULAR: a barra de uma linha ───────────────────────────────
@@ -2173,6 +2185,7 @@ export default function LiberacoesPage() {
             <option value="PENDENTE">Pendentes ({contadores.pendentes})</option>
             <option value="APROVADO">Aprovadas ({contadores.aprovadas})</option>
             <option value="REJEITADO">Rejeitadas ({contadores.rejeitadas})</option>
+            <option value="CANCELADO">Canceladas ({contadores.canceladas})</option>
           </select>
 
           <button

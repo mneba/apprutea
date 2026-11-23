@@ -555,7 +555,7 @@ export function SeletorLocalizacao() {
   }
 
   return (
-    <div className="relative" ref={dropdownRef}>
+    <div className="relative min-w-0" ref={dropdownRef}>
       {/* Trigger Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}

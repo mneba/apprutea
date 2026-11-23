@@ -1,5 +1,6 @@
 'use client';
 
+import { formatarData } from '@/utils/dateFormat';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Search,
@@ -104,8 +105,10 @@ export default function UsuariosPage() {
   const [conviteStatus, setConviteStatus] = useState<string | null>(null);
   const [confirmarRenovacao, setConfirmarRenovacao] = useState(false);
 
-  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
-
+  const ehSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
+
+
+
   // Filtro de empresa com digitação. `empresaBusca` é o que foi digitado
   // e `empresaFiltro` é a escolha efetiva — separados de propósito: digitar
   // não filtra a lista de usuários, só a de empresas, e desistir no meio
@@ -450,7 +453,7 @@ export default function UsuariosPage() {
                         {/* Cadastro */}
                         <td className="px-4 py-3 text-gray-600">
                           {usuario.created_at
-                            ? new Date(usuario.created_at).toLocaleDateString('pt-BR')
+                            ? formatarData(usuario.created_at)
                             : '-'}
                         </td>
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { paraInstante, formatarData } from '@/utils/dateFormat';
 import { useState, useEffect, useRef } from 'react';
 import { Bell, X, Check, CheckCheck, User, AlertTriangle, Clock, ChevronRight, FileText } from 'lucide-react';
 import { usuariosService } from '@/services/usuarios';
@@ -175,7 +176,7 @@ export function MenuNotificacoes() {
   // Formatar data relativa
   const formatarDataRelativa = (data: string) => {
     const agora = new Date();
-    const dataMsg = new Date(data);
+    const dataMsg = paraInstante(data); // UTC às vezes sem fuso: sem isto, "3h" a mais
     const diffMs = agora.getTime() - dataMsg.getTime();
     const diffMin = Math.floor(diffMs / 60000);
     const diffHoras = Math.floor(diffMs / 3600000);
@@ -185,7 +186,7 @@ export function MenuNotificacoes() {
     if (diffMin < 60) return `${diffMin} min`;
     if (diffHoras < 24) return `${diffHoras}h`;
     if (diffDias < 7) return `${diffDias}d`;
-    return dataMsg.toLocaleDateString('pt-BR');
+    return formatarData(dataMsg);
   };
 
   // Total de notificações (mensagens + solicitações)

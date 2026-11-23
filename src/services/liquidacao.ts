@@ -4,6 +4,7 @@
 // ATUALIZADO: Inclui fecharLiquidacaoReaberta
 // =====================================================
 
+import { hojeNoFuso } from '@/utils/dateFormat';
 import { createClient } from '@/lib/supabase/client';
 import type {
   LiquidacaoDiaria,
@@ -613,7 +614,7 @@ export const liquidacaoService = {
   async buscarMetaRota(rotaId: string): Promise<number> {
     const supabase = createClient();
     
-    const hoje = new Date().toISOString().split('T')[0];
+    const hoje = hojeNoFuso(); // não toISOString: é o dia UTC, o seguinte às 21h
     
     const { data, error } = await supabase
       .from('emprestimo_parcelas')

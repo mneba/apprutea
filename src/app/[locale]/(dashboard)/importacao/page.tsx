@@ -22,6 +22,7 @@
 //
 // Por isso o botão de avançar fica DESABILITADO enquanto houver BLOQUEIA.
 
+import { formatarDataHora } from '@/utils/dateFormat';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle, ArrowRight, Ban, CheckCircle2, ChevronDown, ChevronRight,
@@ -670,7 +671,7 @@ export default function ImportacaoPage() {
                 {historico.map(h => (
                   <tr key={h.id} className="border-t border-gray-100">
                     <td className="px-4 py-2 text-xs text-gray-500">
-                      {new Date(h.criado_em).toLocaleString('pt-BR')}
+                      {formatarDataHora(h.criado_em)}
                     </td>
                     <td className="px-4 py-2">{h.rotas?.nome || '—'}</td>
                     <td className="px-4 py-2 text-xs text-gray-600">

@@ -1,5 +1,7 @@
 'use client';
 
+import { formatarDataHora as formatarDataHoraRegua, formatarDataHoraAno2, chaveDiaNoFuso, paraInstante } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useCallback } from 'react';
 import {
   X,
@@ -75,10 +77,7 @@ const EMAIL_OK = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 const emailInvalido = (v: string) => v.trim() !== '' && !EMAIL_OK.test(v.trim());
 
 function formatarMoeda(valor: number): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
+  return moeda(valor || 0);
 }
 
 function formatarData(data: string): string {
@@ -86,9 +85,9 @@ function formatarData(data: string): string {
   return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR');
 }
 
+// Timestamp do banco (UTC, às vezes sem fuso) -> fuso da rota.
 function formatarDataHora(data: string): string {
-  if (!data) return '-';
-  return new Date(data).toLocaleString('pt-BR');
+  return formatarDataHoraRegua(data) || '-';
 }
 
 /**
@@ -328,16 +327,7 @@ function fmtDataCurta(s?: string | null): string {
 
 // Data/hora de um created_at (timestamp) -> 'DD/MM/YY, HH:MM'
 function fmtDataHora(iso?: string | null): string {
-  if (!iso) return '';
-  try {
-    const d = new Date(iso);
-    const dia = String(d.getDate()).padStart(2, '0');
-    const mes = String(d.getMonth() + 1).padStart(2, '0');
-    const ano = String(d.getFullYear()).slice(2);
-    const h = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    return `${dia}/${mes}/${ano}, ${h}:${min}`;
-  } catch { return ''; }
+  return formatarDataHoraAno2(iso);
 }
 
 // Pontualidade: compara data de pagamento x vencimento por COMPONENTES YYYY-MM-DD
@@ -357,6 +347,30 @@ function pontualidade(dataPagamento?: string | null, dataVencimento?: string | n
   if (dias > 0) return { texto: `${dias} ${dias === 1 ? 'dia' : 'dias'} de atraso`, classe: 'text-red-600' };
   const n = Math.abs(dias);
   return { texto: `${n} ${n === 1 ? 'dia' : 'dias'} antes`, classe: 'text-green-600' };
+}
+
+// Dia em que a parcela FICOU PAGA (Julio, 12/10/2026): o dia da liquidação
+// do pagamento que completou o valor, somando os pagamentos vivos na ordem dos
+// dias. Antes a pontualidade lia `emprestimo_parcelas.data_pagamento`, que é o
+// ÚLTIMO toque na parcela — um crédito aplicado depois, ou o dinheiro a mais
+// de outro dia, empurrava o atraso para frente (parcela 7 do Cristiano Pereira
+// marcava 7 dias). E é o dia da LIQUIDAÇÃO, não o instante do registro: numa
+// liquidação retroativa o dinheiro entra no dia operado (CLAUDE.md, "A
+// liquidação é a régua do tempo"). Sem registro individual (importação), cai
+// em `data_pagamento` da parcela. Não paga → null (sem pontualidade).
+function diaQuitacao(parcela: any, ativos: any[]): string | null {
+  if (parcela?.status !== 'PAGO') return null;
+  const valorParcela = Number(parcela?.valor_parcela) || 0;
+  const dia = (p: any) => (p.liq_data || p.data_pagamento || '').slice(0, 10);
+  const ordenados = [...ativos]
+    .filter((p) => dia(p))
+    .sort((a, b) => dia(a).localeCompare(dia(b)) || String(a.created_at || '').localeCompare(String(b.created_at || '')));
+  let soma = 0;
+  for (const p of ordenados) {
+    soma += Number(p.valor) || 0;
+    if (soma >= valorParcela - 0.005) return dia(p);
+  }
+  return ordenados.length ? dia(ordenados[ordenados.length - 1]) : (parcela?.data_pagamento || null);
 }
 
 // Resumo da parcela a partir dos REGISTROS INDIVIDUAIS (não do agregado).
@@ -523,7 +537,7 @@ function CardEmprestimo({
                   const resumo = resumoPagamentosParcela(pags);
                   const obs = (parcela as any).observacoes;
                   const autoQuitacao = typeof obs === 'string' && obs.includes('[AUTO-QUITAÇÃO]');
-                  const pont = pontualidade((parcela as any).data_pagamento, parcela.data_vencimento);
+                  const pont = pontualidade(diaQuitacao(parcela, resumo.ativos), parcela.data_vencimento);
                   const saldo = Number(parcela.valor_saldo) || 0;
                   const estornados = (pags || []).filter((p: any) => p.estornado);
 
@@ -579,9 +593,22 @@ function CardEmprestimo({
                                 : rotuloFormaPagamento(pg.forma);
                               return (
                                 <div key={i} className="text-[12px] text-gray-600">
-                                  <span>Pago em: {fmtDataHora(pg.created_at)}</span>
-                                  {forma && <span> · {forma}</span>}
-                                  {pg.liq_data && <span className="text-indigo-500"> · Liq. {fmtDataCurta(pg.liq_data)}</span>}
+                                  {/* "Pago em" é o dia da LIQUIDAÇÃO em que o dinheiro entrou;
+                                      o instante do registro só aparece quando é outro dia
+                                      (liquidação retroativa) — Julio, 12/10/2026. */}
+                                  {(() => {
+                                    const diaPg = (pg.liq_data || pg.data_pagamento || '').slice(0, 10);
+                                    const diaReg = pg.created_at ? chaveDiaNoFuso(paraInstante(pg.created_at)) : '';
+                                    return (
+                                      <>
+                                        <span>Pago em: {diaPg ? fmtDataCurta(diaPg) : fmtDataHora(pg.created_at)}</span>
+                                        {forma && <span> · {forma}</span>}
+                                        {diaPg && diaReg && diaReg !== diaPg && (
+                                          <span className="text-gray-400"> · registrado {fmtDataHora(pg.created_at)}</span>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
                                   {pg.credito_usado > 0 && mostrarCredito && (
                                     <span className="block text-blue-600">crédito usado {formatarMoeda(pg.credito_usado)}</span>
                                   )}
@@ -1373,6 +1400,7 @@ export function ModalDetalhesCliente({
           credito_gerado: Number(p.valor_credito_gerado) || 0,
           forma: p.forma_pagamento || null,
           created_at: p.created_at,
+          data_pagamento: p.data_pagamento || null,
           estornado: !!p.estornado,
           liq_data: p.liquidacao_id ? (mapaDatas[p.liquidacao_id] || null) : null,
           motivo_estorno: p.motivo_estorno || null,

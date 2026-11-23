@@ -1,5 +1,7 @@
 'use client';
 
+import { formatarHora as formatarHoraRegua, formatarData as formatarDataRegua } from '@/utils/dateFormat';
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useRef } from 'react';
 import {
   X,
@@ -43,30 +45,17 @@ interface ExtratoData {
 // =====================================================
 
 function formatarMoeda(valor: number | null | undefined): string {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL',
-  }).format(valor || 0);
+  return moeda(valor || 0);
 }
 
+// Timestamps do banco (UTC, às vezes sem fuso) -> fuso da rota.
 function formatarHora(data: string | null | undefined): string {
-  if (!data) return '';
-  return new Date(data).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarHoraRegua(data);
 }
 
 function formatarDataCompleta(data: string | null | undefined): string {
   if (!data) return '';
-  return new Date(data).toLocaleDateString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }) + '  ' + new Date(data).toLocaleTimeString('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return formatarDataRegua(data) + '  ' + formatarHoraRegua(data);
 }
 
 function formatarCategoria(categoria: string): string {

@@ -1,5 +1,6 @@
 'use client';
 
+import { moeda } from '@/utils/moeda';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Search, 
@@ -71,16 +72,19 @@ function CardEstatistica({
   return (
     <button
       onClick={onClick}
-      className={`w-full text-left bg-white rounded-xl border p-3 hover:shadow-md transition-all ${
+      className={`w-full text-left bg-white rounded-lg border px-2.5 py-1.5 hover:shadow-md transition-all ${
         ativo ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200'
       }`}
     >
-      <div className="flex items-center gap-3">
-        <div className={`w-10 h-10 rounded-lg ${corFundo} flex items-center justify-center flex-shrink-0`}>
-          <Icone className={`w-5 h-5 ${corIcone}`} />
+      {/* Compacto desde 22/11/2026 (pedido do Julio): o topo da tela ocupava
+          tanta altura que um notebook mostrava 1 a 3 clientes. Mesma
+          informação — número e rótulo — numa linha só. */}
+      <div className="flex items-center gap-2">
+        <div className={`w-7 h-7 rounded-md ${corFundo} flex items-center justify-center flex-shrink-0`}>
+          <Icone className={`w-4 h-4 ${corIcone}`} />
         </div>
-        <div className="min-w-0">
-          <p className="text-xl font-bold text-gray-900">{valor}</p>
+        <div className="min-w-0 flex items-baseline gap-1.5">
+          <p className="text-lg font-bold text-gray-900 tabular-nums">{valor}</p>
           <p className="text-xs text-gray-500 truncate">{titulo}</p>
         </div>
       </div>
@@ -127,7 +131,7 @@ function TabelaClientes({
   truncada?: boolean;
 }) {
   const formatarMoeda = (valor: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor || 0);
+    return moeda(valor || 0);
   };
 
   // Pedido do Julio em 03/10/2026: o saldo total do filtro aplicado, no fim
@@ -143,7 +147,7 @@ function TabelaClientes({
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10">
             <tr className="bg-gray-50 border-b border-gray-200">
-              <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50 w-10"></th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50 w-10"></th>
               {/* DOZE colunas viraram OITO, e `px-4` virou `px-3`. Pedido do
                   cliente de eliminar o scroll horizontal; aprovado pelo
                   Mauricio em 22/10/2026.
@@ -157,14 +161,14 @@ function TabelaClientes({
                   diz QUE mudou e não O QUE mudou, então ninguém decide nada
                   por ela na lista — o histórico do cliente é que responde
                   isso. */}
-              <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Cliente</th>
-              <th className="px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Contato</th>
-              <th className="hidden lg:table-cell px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
-              <th className="px-3 py-3 text-right font-semibold text-gray-700 bg-gray-50">Saldo</th>
-              <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-50">Empr.</th>
-              <th className="px-3 py-3 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
-              <th className="hidden xl:table-cell px-3 py-3 text-left font-semibold text-gray-700 bg-gray-50">Alterado</th>
-              <th className="px-4 py-3 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50">Cliente</th>
+              <th className="px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50">Contato</th>
+              <th className="hidden lg:table-cell px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50">Rota</th>
+              <th className="px-3 py-2 text-right font-semibold text-gray-700 bg-gray-50">Saldo</th>
+              <th className="px-3 py-2 text-center font-semibold text-gray-700 bg-gray-50">Empr.</th>
+              <th className="px-3 py-2 text-center font-semibold text-gray-700 bg-gray-50">Status</th>
+              <th className="hidden xl:table-cell px-3 py-2 text-left font-semibold text-gray-700 bg-gray-50">Alterado</th>
+              <th className="px-4 py-2 text-center font-semibold text-gray-700 bg-gray-50">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -174,7 +178,7 @@ function TabelaClientes({
                 className="hover:bg-gray-50 transition-colors cursor-pointer"
                 onClick={() => onDetalhes(cliente)}
               >
-                <td className="px-3 py-3">
+                <td className="px-3 py-2">
                   <div className="relative w-8 h-8 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center text-xs font-semibold overflow-hidden">
                     <span>{cliente.nome?.charAt(0)?.toUpperCase() || '?'}</span>
                     {cliente.foto_url && (
@@ -191,7 +195,7 @@ function TabelaClientes({
                     `min-w-0` com `truncate` e o que faz a coluna ENCOLHER em
                     vez de empurrar a tabela -- sem ele, `truncate` nao tem
                     efeito dentro de celula de tabela. */}
-                <td className="px-3 py-3 min-w-0 max-w-[16rem]">
+                <td className="px-3 py-2 min-w-0 max-w-[16rem]">
                   <p className="font-medium text-gray-900 truncate">{cliente.nome}</p>
                   <p className="text-xs text-gray-500 truncate">
                     <span className="font-mono">#{cliente.codigo_cliente}</span>
@@ -201,7 +205,7 @@ function TabelaClientes({
                 {/* Contato: telefone em cima, endereco embaixo. O endereco e
                     a coluna que mais empurrava a largura -- texto livre, sem
                     limite. */}
-                <td className="px-3 py-3 min-w-0 max-w-[14rem]">
+                <td className="px-3 py-2 min-w-0 max-w-[14rem]">
                   <p className="text-gray-700 truncate">{cliente.telefone_celular || '-'}</p>
                   {cliente.endereco && (
                     <p className="text-xs text-gray-500 truncate" title={cliente.endereco}>
@@ -209,13 +213,13 @@ function TabelaClientes({
                     </p>
                   )}
                 </td>
-                <td className="hidden lg:table-cell px-3 py-3 text-gray-600 max-w-[10rem] truncate">
+                <td className="hidden lg:table-cell px-3 py-2 text-gray-600 max-w-[10rem] truncate">
                   {cliente.rotas_nomes || '-'}
                 </td>
-                <td className="px-3 py-3 text-right font-medium text-gray-900 whitespace-nowrap">
+                <td className="px-3 py-2 text-right font-medium text-gray-900 whitespace-nowrap">
                   {formatarMoeda(cliente.valor_saldo_devedor)}
                 </td>
-                <td className="px-3 py-3 text-center">
+                <td className="px-3 py-2 text-center">
                   <div className="inline-flex items-center gap-1 text-sm">
                     {(cliente.qtd_emprestimos_ativos || 0) > 0 && (
                       <span className="inline-flex items-center gap-0.5 text-green-600 font-medium">
@@ -246,17 +250,17 @@ function TabelaClientes({
                     </div>
                   )}
                 </td>
-                <td className="px-3 py-3 text-center">
+                <td className="px-3 py-2 text-center">
                   <BadgeStatus status={cliente.status} />
                 </td>
                 {/* Diz QUE mudou, não o quê — o que mudou está na aba
                     Histórico do cliente. A hora vem no title porque na
                     coluna só a data cabe sem apertar a tabela. */}
-                <td className="hidden xl:table-cell px-3 py-3 whitespace-nowrap text-gray-600"
+                <td className="hidden xl:table-cell px-3 py-2 whitespace-nowrap text-gray-600"
                     title={cliente.updated_at ? formatarDataHora(cliente.updated_at) : undefined}>
                   {cliente.updated_at ? formatarData(cliente.updated_at) : '—'}
                 </td>
-                <td className="px-3 py-3 text-center" onClick={(e) => e.stopPropagation()}>
+                <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
                   {podeNovaVenda && (
                     <button
                       onClick={() => onNovaVenda(cliente)}
@@ -282,8 +286,8 @@ function TabelaClientes({
                   coluna Saldo. Antes eram colSpan 6 e 4 sobre doze colunas
                   fixas; com `hidden lg:` e `hidden xl:` isso deixou de
                   valer. */}
-              <td className="px-3 py-3" />
-              <td className="px-3 py-3 whitespace-nowrap" colSpan={2}>
+              <td className="px-3 py-2" />
+              <td className="px-3 py-2 whitespace-nowrap" colSpan={2}>
                 {clientes.length} cliente{clientes.length === 1 ? '' : 's'} no filtro
                 {truncada && (
                   <span className="ml-2 font-normal text-xs text-amber-700">
@@ -291,14 +295,14 @@ function TabelaClientes({
                   </span>
                 )}
               </td>
-              <td className="hidden lg:table-cell px-3 py-3" />
-              <td className="px-3 py-3 text-right whitespace-nowrap tabular-nums">
+              <td className="hidden lg:table-cell px-3 py-2" />
+              <td className="px-3 py-2 text-right whitespace-nowrap tabular-nums">
                 {formatarMoeda(totalSaldo)}
               </td>
-              <td className="px-3 py-3" />
-              <td className="px-3 py-3" />
-              <td className="hidden xl:table-cell px-3 py-3" />
-              <td className="px-3 py-3" />
+              <td className="px-3 py-2" />
+              <td className="px-3 py-2" />
+              <td className="hidden xl:table-cell px-3 py-2" />
+              <td className="px-3 py-2" />
             </tr>
           </tfoot>
         </table>
@@ -561,38 +565,16 @@ export default function ClientesPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* ===== HEADER FIXO ===== */}
-      <div className="flex-shrink-0 space-y-4 pb-4 border-b border-gray-200">
-        {/* Título + Botão */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Clientes</h1>
-            <p className="text-gray-500 text-sm">
-              Gerencie seus clientes e empréstimos
-            </p>
-          </div>
-          
-          {podeNovoCliente && (
-            <button
-              onClick={() => handleNovaVenda()}
-              disabled={!temRotas}
-              title={!temRotas ? 'Cadastre pelo menos uma rota primeiro' : undefined}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium transition-colors ${
-                temRotas 
-                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
-                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-              }`}
-            >
-              <UserPlus className="w-5 h-5" />
-              Novo Cliente
-            </button>
-          )}
-        </div>
-
-        {/* Aviso sem rotas */}
-        {!temRotas && <AvisoSemRotas />}
+      {/* Topo compacto (22/11/2026, pedido do Julio de 12/10): título,
+          indicadores e "Novo Cliente" numa linha; filtros na seguinte. Antes
+          eram quatro blocos empilhados (~270px) e a lista ficava com 1 a 3
+          clientes num notebook. Mesmas informações e filtros. */}
+      <div className="flex-shrink-0 space-y-2 pb-2 border-b border-gray-200">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <h1 className="text-xl font-bold text-gray-900">Clientes</h1>
 
         {/* Cards de Estatísticas */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="order-3 w-full lg:order-none lg:w-auto lg:flex-1 grid grid-cols-2 sm:grid-cols-4 gap-2">
           <CardEstatistica
             titulo="Total"
             valor={estatisticas.total}
@@ -631,10 +613,30 @@ export default function ClientesPage() {
           />
         </div>
 
+          {podeNovoCliente && (
+            <button
+              onClick={() => handleNovaVenda()}
+              disabled={!temRotas}
+              title={!temRotas ? 'Cadastre pelo menos uma rota primeiro' : undefined}
+              className={`ml-auto lg:ml-0 flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                temRotas 
+                  ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <UserPlus className="w-4 h-4" />
+              Novo Cliente
+            </button>
+          )}
+        </div>
+
+        {/* Aviso sem rotas */}
+        {!temRotas && <AvisoSemRotas />}
+
         {/* Filtros e Controles
             `flex-wrap`: a linha tem seis controles de largura própria, e sem
             poder quebrar ela espremia o único que encolhe — a busca. */}
-        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+        <div className="flex flex-col sm:flex-row sm:flex-wrap gap-2">
           {/* Busca
               `min-w-[18rem]` é o conserto da reclamação do Julio em
               09/10/2026: *"ao digitar um nome, como Julio, aparece
@@ -643,13 +645,13 @@ export default function ClientesPage() {
               outros controles — e não sobrava nada. Com piso, ele deixa de
               encolher e a linha quebra no lugar de esmagá-lo. */}
           <div className="relative flex-1 min-w-[18rem]">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar por nome, documento, telefone..."
-              className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full pl-10 pr-4 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
           </div>
 
@@ -658,7 +660,7 @@ export default function ClientesPage() {
             <button
               type="button"
               onClick={() => setDropdownFreqAberto(v => !v)}
-              className="flex items-center gap-2 pl-4 pr-3 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
+              className="flex items-center gap-2 pl-4 pr-3 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 cursor-pointer whitespace-nowrap"
             >
               <span className="text-sm text-gray-700">
                 {frequenciasFiltro.length === FREQUENCIAS.length
@@ -710,7 +712,7 @@ export default function ClientesPage() {
               <select
                 value={rotaFiltro}
                 onChange={(e) => setRotaFiltro(e.target.value)}
-                className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                className="appearance-none pl-4 pr-10 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 cursor-pointer"
               >
                 <option value="">Todas as Rotas</option>
                 {rotas.map(r => (
@@ -731,7 +733,7 @@ export default function ClientesPage() {
             onClick={atualizar}
             disabled={loading}
             title="Recarregar do banco, ignorando o cache de 5 minutos"
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-xl
+            className="flex items-center gap-2 px-4 py-1.5 text-sm bg-white border border-gray-300 rounded-lg
                        hover:bg-gray-50 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -743,7 +745,7 @@ export default function ClientesPage() {
             <select
               value={ordenacao}
               onChange={(e) => setOrdenacao(e.target.value as TipoOrdenacao)}
-              className="appearance-none pl-4 pr-10 py-2.5 bg-white border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 cursor-pointer"
+              className="appearance-none pl-4 pr-10 py-1.5 text-sm bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 cursor-pointer"
             >
               <option value="nome_asc">Nome A-Z</option>
               <option value="nome_desc">Nome Z-A</option>
@@ -759,7 +761,7 @@ export default function ClientesPage() {
           <div className="relative">
             <button
               onClick={() => setMenuExportarAberto(!menuExportarAberto)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-300 rounded-xl hover:bg-gray-50 transition-colors"
+              className="flex items-center gap-2 px-4 py-1.5 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               <Download className="w-4 h-4" />
               Exportar
@@ -802,7 +804,7 @@ export default function ClientesPage() {
           {(busca || statusFiltro || rotaFiltro) && (
             <button
               onClick={limparFiltros}
-              className="flex items-center gap-2 px-4 py-2.5 text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
+              className="flex items-center gap-2 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
             >
               <X className="w-4 h-4" />
               Limpar
@@ -812,7 +814,7 @@ export default function ClientesPage() {
       </div>
 
       {/* ===== ÁREA DE CONTEÚDO COM SCROLL ===== */}
-      <div className="flex-1 overflow-auto pt-4">
+      <div className="flex-1 overflow-auto pt-2">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
