@@ -125,9 +125,12 @@ export const authService = {
   // tr_00_perfil_guarda_escopo agora recusa essa gravação, e quem confirma é
   // fn_confirmar_codigo_acesso, pelo auth.uid(). `userId` fica na assinatura
   // só para não mexer em quem chama.
+  // O campo MOSTRA maiúsculas (CSS `uppercase`), mas o valor é o que foi
+  // digitado: "tk574399" parece certo na tela e não casaria. Espaço nas
+  // pontas (comum ao colar do WhatsApp) também. Os dois saem aqui.
   async validarCodigo(_userId: string, codigo: string) {
     const { data, error } = await supabase.rpc('fn_confirmar_codigo_acesso', {
-      p_codigo: codigo,
+      p_codigo: codigo.trim().toUpperCase(),
     });
 
     if (error) throw error;
