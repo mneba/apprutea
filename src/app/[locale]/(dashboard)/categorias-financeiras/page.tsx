@@ -22,6 +22,8 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { InputNumero } from '@/components/ui/InputNumero';
+import { useCamposObrigatorios } from '@/hooks/useCamposObrigatorios';
+import { ErroCampo } from '@/components/ui/CampoObrigatorio';
 import { comCache, chave, temCache, invalidarCache, TTL_LONGO } from '@/lib/cacheDados';
 import { categoriasFinanceirasService } from '@/services/categoriasFinanceiras';
 import type { CategoriaFinanceira, CategoriaFinanceiraInput, TipoMovimento } from '@/types/categoriasFinanceiras';
@@ -57,7 +59,17 @@ export default function CategoriasFinanceirasPage() {
   const [formCorHex, setFormCorHex] = useState('');
   const [formIcone, setFormIcone] = useState('');
   const [formDescricao, setFormDescricao] = useState('');
-  
+
+  // Campo a campo, no lugar do alert genérico (Julio, 14/10/2026).
+  const obrig = useCamposObrigatorios({
+    codigo: !formCodigo.trim() && 'Informe o código',
+    nomePt: !formNomePt.trim() && 'Informe o nome em português',
+    nomeEs: !formNomeEs.trim() && 'Informe o nome em espanhol',
+  });
+  const borda = (campo: string) => obrig.erro(campo)
+    ? 'border-red-500 focus:ring-red-500 focus:border-red-500'
+    : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500';
+
   // Permissões
   const isSuperAdmin = profile?.tipo_usuario === 'SUPER_ADMIN';
 
@@ -119,6 +131,7 @@ export default function CategoriasFinanceirasPage() {
     setFormCorHex('');
     setFormIcone('');
     setFormDescricao('');
+    obrig.limpar();
     setModalAberto(true);
   };
 
@@ -135,6 +148,7 @@ export default function CategoriasFinanceirasPage() {
     setFormCorHex(categoria.cor_hex || '');
     setFormIcone(categoria.icone || '');
     setFormDescricao(categoria.descricao || '');
+    obrig.limpar();
     setModalAberto(true);
   };
 
@@ -144,10 +158,7 @@ export default function CategoriasFinanceirasPage() {
   };
 
   const handleSalvar = async () => {
-    if (!formCodigo.trim() || !formNomePt.trim() || !formNomeEs.trim()) {
-      alert('Preencha os campos obrigatórios');
-      return;
-    }
+    if (!obrig.conferir()) return;
 
     setSalvando(true);
     try {
@@ -474,7 +485,7 @@ export default function CategoriasFinanceirasPage() {
             {/* Body */}
             <div className="p-6 space-y-4">
               {/* Código */}
-              <div>
+              <div data-campo="codigo">
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
                   Código <span className="text-red-500">*</span>
                 </label>
@@ -483,13 +494,14 @@ export default function CategoriasFinanceirasPage() {
                   value={formCodigo}
                   onChange={(e) => setFormCodigo(e.target.value.toUpperCase())}
                   placeholder="EX: GASOLINA"
-                  className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono"
+                  className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 font-mono ${borda('codigo')}`}
                 />
+                <ErroCampo mensagem={obrig.erro('codigo')} />
               </div>
 
               {/* Nomes */}
               <div className="grid grid-cols-2 gap-4">
-                <div>
+                <div data-campo="nomePt">
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Nome (PT) <span className="text-red-500">*</span>
                   </label>
@@ -498,10 +510,11 @@ export default function CategoriasFinanceirasPage() {
                     value={formNomePt}
                     onChange={(e) => setFormNomePt(e.target.value)}
                     placeholder="Gasolina"
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 ${borda('nomePt')}`}
                   />
+                  <ErroCampo mensagem={obrig.erro('nomePt')} />
                 </div>
-                <div>
+                <div data-campo="nomeEs">
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">
                     Nome (ES) <span className="text-red-500">*</span>
                   </label>
@@ -510,8 +523,9 @@ export default function CategoriasFinanceirasPage() {
                     value={formNomeEs}
                     onChange={(e) => setFormNomeEs(e.target.value)}
                     placeholder="Gasolina"
-                    className="w-full px-4 py-2.5 rounded-xl border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className={`w-full px-4 py-2.5 rounded-xl border focus:ring-2 ${borda('nomeEs')}`}
                   />
+                  <ErroCampo mensagem={obrig.erro('nomeEs')} />
                 </div>
               </div>
 

@@ -806,9 +806,15 @@ export function SeletorLocalizacao() {
                     {paisSelecionado === pais && (
                       <div className="ml-4 mt-1 space-y-1">
                         {estadosDoPais.map((hierarquia) => {
-                          // Quantidade de empresas ativas deste estado
-                          const totalEmpresas = (hierarquia as any).total_empresas_ativas || 0;
                           const cidadesAqui = cidadesDaHierarquia(hierarquia.id);
+                          // Empresas deste estado QUE A PESSOA ENXERGA. Era
+                          // `hierarquias.total_empresas_ativas`, contagem do
+                          // sistema inteiro: o Juan (4 empresas PrimeCred) via
+                          // "24 empresas" em São Paulo (Julio, 24/11/2026).
+                          // Contar da lista já filtrada é a mesma régua da árvore.
+                          const totalEmpresas = cidadesAqui.reduce(
+                            (acc, c) => acc + empresasDaCidade(c.id).length, 0
+                          );
                           const expandido = hierarquiaIdSelecionada === hierarquia.id;
 
                           return (

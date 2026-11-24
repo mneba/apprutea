@@ -171,23 +171,10 @@ export const usuariosService = {
     throw new Error('Resposta vazia da function');
   },
 
-  // Validar token de acesso usando function existente do Supabase
-  // Function: fn_validar_token_acesso(p_user_id uuid, p_token varchar)
-  // Retorna: jsonb
-  async validarTokenAcesso(userId: string, token: string): Promise<boolean> {
-    const { data, error } = await supabase.rpc('fn_validar_token_acesso', {
-      p_user_id: userId,
-      p_token: token,
-    });
-
-    if (error) {
-      console.error('Erro ao validar token:', error);
-      throw error;
-    }
-
-    // Verificar resultado do jsonb retornado
-    return data?.sucesso === true || data?.valido === true;
-  },
+  // validarTokenAcesso (fn_validar_token_acesso) SAIU em 24/11/2026: ninguém o
+  // chamava, e a função perdeu o EXECUTE de anon e authenticated — era um
+  // oráculo de código. Quem confirma o código é authService.validarCodigo,
+  // via fn_confirmar_codigo_acesso (auth.uid()).
 
   // ============================================
   // HIERARQUIA E EMPRESAS
@@ -517,10 +504,13 @@ export const usuariosService = {
         novasEmpresas.length === 0 && adminAtual.tipo_usuario === 'ADMIN'
           ? 'USUARIO_PADRAO'
           : adminAtual.tipo_usuario;
-      await supabase
+      // Erro OLHADO (24/11/2026): o gatilho tr_00_perfil_guarda_escopo pode
+      // recusar, e sem isto a titularidade nao mudava e a tela dizia que sim.
+      const { error: erroAnterior } = await supabase
         .from('user_profiles')
         .update({ admin_empresa_ids: novasEmpresas, tipo_usuario: novoTipo })
         .eq('user_id', adminAtual.user_id);
+      if (erroAnterior) throw erroAnterior;
     }
 
     // Adiciona empresa ao novo admin e promove para ADMIN
@@ -535,13 +525,14 @@ export const usuariosService = {
       ? adminEmpresas
       : [...adminEmpresas, empresaId];
 
-    await supabase
+    const { error: erroNovo } = await supabase
       .from('user_profiles')
       .update({
         admin_empresa_ids: novasEmpresas,
         tipo_usuario: 'ADMIN',
       })
       .eq('user_id', userId);
+    if (erroNovo) throw erroNovo;
   },
 
   // ============================================

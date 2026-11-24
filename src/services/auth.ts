@@ -119,30 +119,21 @@ export const authService = {
   },
 
   // Validar código de acesso
-  async validarCodigo(userId: string, codigo: string) {
-    // Buscar perfil do usuário
-    const { data: profile, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .single();
+  // A conferência é do BANCO (24/11/2026). Antes o código era comparado aqui,
+  // no navegador, e `token_validado` gravado direto — então qualquer logado
+  // marcava o próprio código como validado sem sabê-lo. O gatilho
+  // tr_00_perfil_guarda_escopo agora recusa essa gravação, e quem confirma é
+  // fn_confirmar_codigo_acesso, pelo auth.uid(). `userId` fica na assinatura
+  // só para não mexer em quem chama.
+  async validarCodigo(_userId: string, codigo: string) {
+    const { data, error } = await supabase.rpc('fn_confirmar_codigo_acesso', {
+      p_codigo: codigo,
+    });
 
     if (error) throw error;
-
-    // Verificar se o código está correto
-    if (profile.token_acesso !== codigo) {
+    if (data !== true) {
       throw new Error('Código de acesso inválido');
     }
-
-    // Atualizar token_validado para true
-    const { error: updateError } = await supabase
-      .from('user_profiles')
-      .update({
-        token_validado: true,
-      })
-      .eq('user_id', userId);
-
-    if (updateError) throw updateError;
 
     return true;
   },

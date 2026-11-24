@@ -290,6 +290,13 @@ export default function OrganizacaoPage() {
     [isSuperAdmin, profile]
   );
 
+  // E as EMPRESAS (24/11/2026). `null` = SUPER_ADMIN, sem recorte; para os
+  // outros a lista vale como está — vazia quer dizer nenhuma, não todas.
+  const empresasPermitidas: string[] | null = useMemo(
+    () => (isSuperAdmin ? null : (profile?.empresas_ids || [])),
+    [isSuperAdmin, profile]
+  );
+
   const carregarDados = async (opts?: { forcar?: boolean }) => {
     const forcar = opts?.forcar;
     // SUPER_ADMIN: resumo geral | Outros: resumo da própria empresa
@@ -301,11 +308,15 @@ export default function OrganizacaoPage() {
       // Resumo, empresa e rotas vão JUNTOS (22/11/2026): nenhum depende do
       // outro, e em fila eram uma das razões dos ~9 s para abrir (Julio,
       // 12/10). A empresa nula continua decidindo se a tela vai para rotas.
-      const pResumo = comCache(
-        kResumo,
-        () => organizacaoService.buscarResumoGeral(hierarquiaId || undefined, empresaIdParaResumo || undefined, rotasPermitidas),
-        { forcar }
-      );
+      // Sem empresa, quem não é SUPER_ADMIN cairia no resumo do SISTEMA
+      // inteiro (o ramo sem `empresaId` do serviço). Zero, não o total alheio.
+      const pResumo = !isSuperAdmin && !empresaIdParaResumo
+        ? Promise.resolve({ total_empresas: 0, total_rotas_ativas: 0, total_clientes: 0, total_emprestimos_ativos: 0 })
+        : comCache(
+            kResumo,
+            () => organizacaoService.buscarResumoGeral(hierarquiaId || undefined, empresaIdParaResumo || undefined, rotasPermitidas),
+            { forcar }
+          );
 
       // Se tem empresa selecionada no seletor master → ir para rotas
       if (empresaIdSelecionada) {
@@ -333,8 +344,8 @@ export default function OrganizacaoPage() {
         const [resumo, empresasData] = await Promise.all([
           pResumo,
           comCache(
-            chave('organizacao:empresas', hierarquiaId, rotasPermitidas),
-            () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId, rotasPermitidas),
+            chave('organizacao:empresas', hierarquiaId, rotasPermitidas, empresasPermitidas),
+            () => organizacaoService.listarEmpresasPorHierarquia(hierarquiaId, rotasPermitidas, empresasPermitidas),
             { forcar }
           ),
         ]);

@@ -331,7 +331,7 @@ export function CardEdicaoEmprestimo({
         // E não é o status: `PARCIAL` é parcela com pagamento e entra aqui.
         const { data: todas } = await supabase
           .from('emprestimo_parcelas')
-          .select('valor_pago, valor_saldo, pagamentos_parcelas(id)')
+          .select('valor_pago, valor_saldo, valor_parcela, saldo_excedente, pagamentos_parcelas(id)')
           .eq('emprestimo_id', emprestimo.id);
         const parc = (todas || []).filter(
           (p: any) =>
@@ -341,7 +341,13 @@ export function CardEdicaoEmprestimo({
         if (!cancelado && Array.isArray(todas)) {
           setRedistrib({
             qtdFicam: parc.length,
-            jaPago: parc.reduce((s, p: any) => s + Number(p.valor_pago || 0), 0),
+            // O que JÁ ABATEU a dívida: face coberta + crédito parado — o
+            // mesmo `v_valor_ja_pago` da função desde 23/11/2026. Somar
+            // `valor_pago` contava o crédito duas vezes (caso Alberto, 2.7
+            // Artemis). Ver sql/2026-11-23_alteracao_sem_credito_em_dobro.sql
+            jaPago: parc.reduce((s, p: any) =>
+              s + Math.max(Number(p.valor_parcela || 0) - Number(p.valor_saldo || 0), 0)
+                + Number(p.saldo_excedente || 0), 0),
             saldoFicam: parc.reduce((s, p: any) => s + Number(p.valor_saldo || 0), 0),
           });
         }

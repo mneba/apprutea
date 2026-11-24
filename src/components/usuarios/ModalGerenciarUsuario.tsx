@@ -156,12 +156,24 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
   // Chave: "tipo|empresa_id|rota_id_ou_null" → boolean
   const [liberacoes, setLiberacoes] = useState<Record<LiberacaoKey, boolean>>({});
 
+  // Escopo do EDITOR (24/11/2026, relato do Julio): quem não é SUPER_ADMIN
+  // só dá — ou tira — acesso às empresas que ele mesmo tem. Antes a cascata
+  // listava as 39 empresas do sistema, e um ADMIN podia pôr outro usuário
+  // dentro de empresa que não é dele. Lista vazia = NENHUMA, nunca "todas".
+  // `todasEmpresas` segue inteira só para dar NOME às seleções existentes.
+  const empresasDoEditor = editorProfile?.empresas_ids || [];
+  const podeMexerEmpresa = (empresaId: string) =>
+    editorIsSuperAdmin || empresasDoEditor.includes(empresaId);
+  const empresasAlcance = todasEmpresas.filter((e) => podeMexerEmpresa(e.id));
+  const cidadesAlcance = todasCidades.filter((c) => empresasAlcance.some((e) => e.cidade_id === c.id));
+  const hierarquiasAlcance = hierarquias.filter((h) => cidadesAlcance.some((c) => c.hierarquia_id === h.id));
+
   // Derivados para seleção cascata
-  const paises = [...new Set(hierarquias.map((h) => h.pais))];
-  const estadosDoPais = hierarquias.filter((h) => h.pais === novoPais);
-  const cidadesDaHierarquia = todasCidades.filter((c) => c.hierarquia_id === novaHierarquiaId);
+  const paises = [...new Set(hierarquiasAlcance.map((h) => h.pais))];
+  const estadosDoPais = hierarquiasAlcance.filter((h) => h.pais === novoPais);
+  const cidadesDaHierarquia = cidadesAlcance.filter((c) => c.hierarquia_id === novaHierarquiaId);
   const cidadeUnicaDaHierarquia = cidadesDaHierarquia.length === 1;
-  const empresasDaCidade = todasEmpresas.filter((e) => e.cidade_id === novaCidadeId);
+  const empresasDaCidade = empresasAlcance.filter((e) => e.cidade_id === novaCidadeId);
   const rotasDaEmpresa = (() => {
     const empresa = todasEmpresas.find((e) => e.id === novaEmpresaId);
     if (!empresa?.rotas_ids) return [];
@@ -575,7 +587,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       onStatusChange?.(); // atualiza a lista sem fechar o modal
     } catch (err) {
       console.error('Erro ao alterar status:', err);
-      alert('Erro ao alterar status. Tente novamente.');
+      alert(`Erro ao alterar status: ${(err as any)?.message || 'tente novamente.'}`);
     }
   };
 
@@ -605,7 +617,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       onStatusChange?.();
     } catch (err) {
       console.error('Erro ao definir admin titular:', err);
-      alert('Erro ao definir admin titular. Tente novamente.');
+      alert(`Erro ao definir admin titular: ${(err as any)?.message || 'tente novamente.'}`);
     }
   };
   const handleMudarTipoUsuario = async (novoTipo: 'ADMIN' | 'USUARIO_PADRAO') => {
@@ -650,8 +662,10 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       const cidadesIds = [...new Set(selecoes.map((s) => s.cidade_id).filter(Boolean))];
 
       // Auto-associar única rota se empresa tem só 1 rota e nenhuma foi selecionada
+      // Só nas empresas de quem edita: completar rota em empresa alheia é dar
+      // acesso fora do escopo, e o banco recusa (tr_00_perfil_guarda_escopo).
       const selecoesComRotas = selecoes.map((s) => {
-        if (s.rotas_ids.length === 0) {
+        if (s.rotas_ids.length === 0 && podeMexerEmpresa(s.empresa_id)) {
           const empresa = todasEmpresas.find((e) => e.id === s.empresa_id);
           const rotasDaEmpresa = todasRotas.filter((r) =>
             empresa?.rotas_ids?.includes(r.id)
@@ -722,7 +736,9 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
       onSave();
     } catch (err) {
       console.error('Erro ao salvar:', err);
-      alert('Erro ao salvar. Tente novamente.');
+      // O banco diz o motivo quando recusa acesso fora do escopo
+      // (tr_00_perfil_guarda_escopo); "tente novamente" esconderia isso.
+      alert(`Erro ao salvar: ${(err as any)?.message || 'tente novamente.'}`);
     } finally {
       setSaving(false);
     }
@@ -1154,7 +1170,7 @@ export function ModalGerenciarUsuario({ usuario, onClose, onSave, onStatusChange
                                 )}
                               </div>
                             </div>
-                            {!modoProprioPerfil && (
+                            {!modoProprioPerfil && podeMexerEmpresa(selecao.empresa_id) && (
                             <button
                               onClick={() => handleRemoverSelecao(index)}
                               className="p-2 text-red-500 hover:bg-red-50 rounded-lg flex-shrink-0"

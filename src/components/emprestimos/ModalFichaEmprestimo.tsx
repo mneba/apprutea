@@ -24,7 +24,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   X, FileText, ShieldCheck, AlertTriangle, Loader2, Paperclip,
   ChevronDown, ChevronUp, ArrowRightLeft, Banknote, CreditCard,
-  Download, CheckCheck, CloudDownload, Circle,
+  Download, CheckCheck, CloudDownload, Circle, Pencil, Wrench,
 } from 'lucide-react';
 import { buscarFicha, type Ficha, type EventoFicha } from '@/services/fichaEmprestimo';
 import { AnexosCliente } from '@/components/clientes/AnexosCliente';
@@ -75,7 +75,12 @@ const ROTULO_EVENTO: Record<string, string> = {
   QUITACAO: 'Quitação',
   CREDITO_CASCATA: 'Crédito aplicado',
   IMPORTACAO: 'Importação',
+  ALTERACAO: 'Empréstimo alterado',
+  CORRECAO: 'Correção',
 };
+
+/** Eventos de audit_logs (23/11/2026): sem valor nem saldo, só o texto. */
+const ehAjuste = (tipo: string) => tipo === 'ALTERACAO' || tipo === 'CORRECAO';
 
 const COR_EVENTO: Record<string, string> = {
   CONCESSAO: 'text-indigo-600 bg-indigo-50',
@@ -83,6 +88,8 @@ const COR_EVENTO: Record<string, string> = {
   QUITACAO: 'text-emerald-700 bg-emerald-50',
   CREDITO_CASCATA: 'text-indigo-700 bg-indigo-50',
   IMPORTACAO: 'text-gray-600 bg-gray-100',
+  ALTERACAO: 'text-amber-700 bg-amber-50',
+  CORRECAO: 'text-sky-700 bg-sky-50',
 };
 
 const ICONE_EVENTO: Record<string, React.ElementType> = {
@@ -91,6 +98,8 @@ const ICONE_EVENTO: Record<string, React.ElementType> = {
   QUITACAO: CheckCheck,
   CREDITO_CASCATA: CreditCard,
   IMPORTACAO: CloudDownload,
+  ALTERACAO: Pencil,
+  CORRECAO: Wrench,
 };
 
 const ROTULO_STATUS: Record<string, string> = {
@@ -547,17 +556,25 @@ export function ModalFichaEmprestimo({
                               {ev.autor ? ` · ${ev.autor}` : ''}
                             </p>
                           </div>
-                          <p className={`text-sm font-bold tabular-nums shrink-0 ${
-                            ev.estornado ? 'text-gray-400 line-through' : 'text-gray-900'
-                          }`}>
-                            {moeda(ev.tipo === 'CONCESSAO' ? ev.valor_emprestado : ev.aplicado)}
-                          </p>
+                          {!ehAjuste(ev.tipo) && (
+                            <p className={`text-sm font-bold tabular-nums shrink-0 ${
+                              ev.estornado ? 'text-gray-400 line-through' : 'text-gray-900'
+                            }`}>
+                              {moeda(ev.tipo === 'CONCESSAO' ? ev.valor_emprestado : ev.aplicado)}
+                            </p>
+                          )}
                         </div>
+
+                        {ehAjuste(ev.tipo) && !!ev.descricao && (
+                          <p className="mt-2 pl-12 text-xs text-gray-700 whitespace-pre-line">
+                            {ev.descricao}
+                          </p>
+                        )}
 
                         {/* Composição: dinheiro e crédito separados. É o que
                             faltava no extrato — a quitação da Paloma mostrava
                             360 sem dizer que outros 120 vieram de crédito. */}
-                        {ev.tipo !== 'CONCESSAO' && (
+                        {ev.tipo !== 'CONCESSAO' && !ehAjuste(ev.tipo) && (
                           <div className="mt-2 pl-12 space-y-1.5">
                             {!!ev.parcelas?.length && (
                               <p className="text-xs text-gray-600">

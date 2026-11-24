@@ -171,18 +171,31 @@ export const organizacaoService = {
   // `total_clientes` sai da soma de `quantidade_clientes` das rotas, então ele
   // acompanha o recorte sozinho — sem isso, a empresa mostraria os clientes
   // de rotas que o usuário não vê.
-  async listarEmpresasPorHierarquia(hierarquiaId: string, rotasPermitidas?: string[]): Promise<EmpresaResumo[]> {
+  //
+  // `empresasPermitidas`: `null` = sem restrição (SUPER_ADMIN); lista = só
+  // essas, e lista VAZIA = nenhuma. Antes não havia esse recorte, e quem não é
+  // SUPER_ADMIN via todas as empresas do estado (as 24 de São Paulo), só com
+  // as rotas zeradas (Julio, 24/11/2026). Aqui o vazio NÃO quer dizer "todas"
+  // — esse atalho é de `rotasPermitidas`, e numa lista de empresas ele
+  // abriria o sistema inteiro para um perfil sem empresa.
+  async listarEmpresasPorHierarquia(
+    hierarquiaId: string,
+    rotasPermitidas?: string[],
+    empresasPermitidas: string[] | null = null,
+  ): Promise<EmpresaResumo[]> {
     const recortar = (rotasPermitidas?.length ?? 0) > 0;
+    if (empresasPermitidas && empresasPermitidas.length === 0) return [];
     // Buscar empresas com cidade
-    const { data: empresas, error } = await supabase
+    let qEmpresas = supabase
       .from('empresas')
       .select(`
         id, nome, cnpj, telefone, email, endereco, cidade_id,
         cidades ( nome )
       `)
       .eq('hierarquia_id', hierarquiaId)
-      .eq('status', 'ATIVA')
-      .order('nome');
+      .eq('status', 'ATIVA');
+    if (empresasPermitidas) qEmpresas = qEmpresas.in('id', empresasPermitidas);
+    const { data: empresas, error } = await qEmpresas.order('nome');
 
     if (error) {
       console.error('Erro ao listar empresas:', error);

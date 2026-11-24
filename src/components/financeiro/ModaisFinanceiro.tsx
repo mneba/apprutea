@@ -4,6 +4,8 @@ import { limitarCasas } from '@/utils/moeda';
 import { AvisoDiaOperacional } from '@/components/layout/AvisoDiaOperacional';
 import { useState, useEffect } from 'react';
 import { useMenuFlutuante } from '@/hooks/useMenuFlutuante';
+import { useCamposObrigatorios } from '@/hooks/useCamposObrigatorios';
+import { Obrigatorio, ErroCampo, cartaoCampo } from '@/components/ui/CampoObrigatorio';
 
 // As cinco categorias que `fn_criar_movimentacao` NAO vincula a liquidacao:
 // ela desliga o vinculo para elas e grava `liquidacao_id` nulo de proposito.
@@ -139,6 +141,15 @@ export function ModalNovaMovimentacao({
     estiloPainel: estiloForma,
   } = useMenuFlutuante(seletorFormaAberto, () => setSeletorFormaAberto(false));
 
+  // O que falta, campo a campo. O botão não se desliga mais por isso: ao
+  // clicar, os campos que faltam ficam vermelhos (Julio, 14/10/2026).
+  const obrig = useCamposObrigatorios({
+    conta:     !contaId && 'Escolha a conta',
+    categoria: !categoria && 'Escolha a categoria',
+    valor:     !(Number(valor) > 0) && 'Informe o valor',
+    descricao: !descricao.trim() && 'Informe a descrição',
+  });
+
   const contaSelecionada = contas.find(c => c.id === contaId);
   const categoriasFiltradas = categorias.filter(c => {
     if (c.tipo_movimento !== 'AMBOS' && c.tipo_movimento !== tipo) return false;
@@ -161,7 +172,9 @@ export function ModalNovaMovimentacao({
       setComprovanteFile(null);
       setComprovantePreview('');
       setLiquidacaoSelId('');
+      obrig.limpar();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, contaPadraoId]);
 
   // Buscar liquidações da rota (o modal busca sozinho)
@@ -188,11 +201,9 @@ export function ModalNovaMovimentacao({
   }, [isOpen, rotaId]);
 
   const handleSalvar = async () => {
-    if (!contaId || !categoria || !descricao || !valor) {
-      setErro('Preencha todos os campos obrigatórios');
-      return;
-    }
-    
+    if (!obrig.conferir()) return;
+    setErro('');
+
 
     // -- Guardas de liquidacao, em conta de ROTA ------------------------
     // `fn_criar_movimentacao` NAO verifica status de liquidacao: ela so
@@ -408,10 +419,10 @@ export function ModalNovaMovimentacao({
           </div>
 
           {/* Conta */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+          <div data-campo="conta" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('conta'))}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <Wallet className="w-4 h-4 text-gray-500" />
-              Conta *
+              <span>Conta<Obrigatorio /></span>
             </label>
             {/*
               ⚠ Menu proprio, nao um <select> nativo.
@@ -496,14 +507,15 @@ export function ModalNovaMovimentacao({
                 <span>Saldo atual: <strong>{moeda(contaSelecionada.saldo_atual)}</strong></span>
               </div>
             )}
+            <ErroCampo mensagem={obrig.erro('conta')} />
           </div>
 
           {/* Categoria e Valor */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+            <div data-campo="categoria" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('categoria'))}`}>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                 <FileText className="w-4 h-4 text-gray-500" />
-                Categoria *
+                <span>Categoria<Obrigatorio /></span>
               </label>
               <select
                 value={categoria}
@@ -516,12 +528,13 @@ export function ModalNovaMovimentacao({
                   <option key={c.id} value={c.codigo}>{c.nome_pt}</option>
                 ))}
               </select>
+              <ErroCampo mensagem={obrig.erro('categoria')} />
             </div>
 
-            <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+            <div data-campo="valor" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('valor'))}`}>
               <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
                 <DollarSign className={`w-4 h-4 ${tipo === 'RECEBER' ? 'text-green-500' : 'text-red-500'}`} />
-                Valor *
+                <span>Valor<Obrigatorio /></span>
               </label>
               <div className="relative">
                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
@@ -536,12 +549,13 @@ export function ModalNovaMovimentacao({
                   className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
+              <ErroCampo mensagem={obrig.erro('valor')} />
             </div>
           </div>
 
           {/* Descrição */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
-            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição *</label>
+          <div data-campo="descricao" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('descricao'))}`}>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Descrição<Obrigatorio /></label>
             <input
               type="text"
               value={descricao}
@@ -549,6 +563,7 @@ export function ModalNovaMovimentacao({
               placeholder="Ex: Pagamento parcela 5/24 - João Silva"
               className="w-full px-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             />
+            <ErroCampo mensagem={obrig.erro('descricao')} />
           </div>
 
           {/* Forma de Pagamento e Observações */}
@@ -654,7 +669,7 @@ export function ModalNovaMovimentacao({
           </button>
           <button
             onClick={handleSalvar}
-            disabled={salvando || !contaId || !categoria || !descricao || !valor}
+            disabled={salvando}
             className={`flex items-center gap-2 px-6 py-2.5 text-white rounded-xl transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
               tipo === 'RECEBER' 
                 ? 'bg-green-600 hover:bg-green-700' 
@@ -710,6 +725,18 @@ export function ModalTransferencia({
   const contaDestinoObj = contas.find(c => c.id === contaDestino);
   const contasDestinoFiltradas = contas.filter(c => c.id !== contaOrigem);
 
+  // Campo a campo (Julio, 14/10/2026). O saldo insuficiente também é do
+  // campo Valor: é ali que se corrige.
+  const valorNum = parseFloat(valor);
+  const obrig = useCamposObrigatorios({
+    origem:  !contaOrigem && 'Escolha a conta de origem',
+    destino: !contaDestino && 'Escolha a conta de destino',
+    valor:   !(valorNum > 0)
+      ? 'Informe o valor'
+      : (contaOrigemObj && valorNum > contaOrigemObj.saldo_atual)
+        && `Maior que o saldo da conta de origem (${moeda(contaOrigemObj.saldo_atual)})`,
+  });
+
   useEffect(() => {
     if (isOpen) {
       setContaOrigem('');
@@ -718,21 +745,14 @@ export function ModalTransferencia({
       setDescricao('');
       setObservacoes('');
       setErro('');
+      obrig.limpar();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen]);
 
   const handleSalvar = async () => {
-    if (!contaOrigem || !contaDestino || !valor) {
-      setErro('Preencha todos os campos obrigatórios');
-      return;
-    }
-    
-    const valorNum = parseFloat(valor);
-    if (contaOrigemObj && valorNum > contaOrigemObj.saldo_atual) {
-      setErro('Saldo insuficiente na conta de origem');
-      return;
-    }
-    
+    if (!obrig.conferir()) return;
+
     setSalvando(true);
     setErro('');
     try {
@@ -789,10 +809,10 @@ export function ModalTransferencia({
           )}
 
           {/* Conta de Origem */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+          <div data-campo="origem" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('origem'))}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <Wallet className="w-4 h-4 text-red-500" />
-              Conta de Origem (Saída) *
+              <span>Conta de Origem (Saída)<Obrigatorio /></span>
             </label>
             <select
               value={contaOrigem}
@@ -811,6 +831,7 @@ export function ModalTransferencia({
                 Saldo disponível: <strong className="text-gray-700">{moeda(contaOrigemObj.saldo_atual)}</strong>
               </p>
             )}
+            <ErroCampo mensagem={obrig.erro('origem')} />
           </div>
 
           {/* Seta visual */}
@@ -821,10 +842,10 @@ export function ModalTransferencia({
           </div>
 
           {/* Conta de Destino */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+          <div data-campo="destino" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('destino'))}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <Wallet className="w-4 h-4 text-green-500" />
-              Conta de Destino (Entrada) *
+              <span>Conta de Destino (Entrada)<Obrigatorio /></span>
             </label>
             <select
               value={contaDestino}
@@ -844,13 +865,14 @@ export function ModalTransferencia({
                 Saldo atual: <strong className="text-gray-700">{moeda(contaDestinoObj.saldo_atual)}</strong>
               </p>
             )}
+            <ErroCampo mensagem={obrig.erro('destino')} />
           </div>
 
           {/* Valor */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+          <div data-campo="valor" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('valor'))}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <DollarSign className="w-4 h-4 text-blue-500" />
-              Valor da Transferência *
+              <span>Valor da Transferência<Obrigatorio /></span>
             </label>
             <div className="relative">
               <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
@@ -866,6 +888,7 @@ export function ModalTransferencia({
                 className="sem-spinner w-full pl-12 pr-4 py-2.5 rounded-lg border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
             </div>
+            <ErroCampo mensagem={obrig.erro('valor')} />
           </div>
 
           {/* Descrição e Observações */}
@@ -921,7 +944,7 @@ export function ModalTransferencia({
           </button>
           <button
             onClick={handleSalvar}
-            disabled={salvando || !contaOrigem || !contaDestino || !valor}
+            disabled={salvando}
             className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 text-white rounded-xl hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
@@ -996,6 +1019,17 @@ export function ModalAjusteSaldo({
   const saldoFinalNum = parseFloat(saldoFinal) || 0;
   const diferenca = saldoFinalNum - saldoAtual;
 
+  // Campo a campo (Julio, 14/10/2026). Saldo igual ao atual também é do
+  // campo: o botão ficava cinza sem dizer que era isso — e o campo NASCE
+  // com o saldo atual, então era o caso de todo modal recém-aberto.
+  const obrig = useCamposObrigatorios({
+    conta:  !contaId && 'Escolha a conta',
+    saldo:  !!contaSelecionada && (saldoFinal === ''
+      ? 'Informe o saldo final'
+      : diferenca === 0 && 'Igual ao saldo atual: digite o saldo que a conta deve ter'),
+    motivo: !motivo && 'Escolha o motivo',
+  });
+
   useEffect(() => {
     if (isOpen) {
       setContaId(contaPadraoId || '');
@@ -1003,7 +1037,9 @@ export function ModalAjusteSaldo({
       setMotivo('');
       setObservacoes('');
       setErro('');
+      obrig.limpar();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   // `contaPadraoId` nas dependencias: trocar a conta no seletor
     // com o modal aberto faz ele acompanhar, como ModalNovaMovimentacao
     // ja fazia.
@@ -1017,16 +1053,8 @@ export function ModalAjusteSaldo({
   }, [contaSelecionada]);
 
   const handleSalvar = async () => {
-    if (!contaId || saldoFinal === '' || !motivo) {
-      setErro('Preencha todos os campos obrigatórios');
-      return;
-    }
+    if (!obrig.conferir()) return;
 
-    if (diferenca === 0) {
-      setErro('O saldo final é igual ao saldo atual. Nenhum ajuste necessário.');
-      return;
-    }
-    
     setSalvando(true);
     setErro('');
     try {
@@ -1096,10 +1124,10 @@ export function ModalAjusteSaldo({
           </div>
 
           {/* Conta */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+          <div data-campo="conta" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('conta'))}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <Wallet className="w-4 h-4 text-amber-500" />
-              Conta *
+              <span>Conta<Obrigatorio /></span>
             </label>
             {contaTravada && contaSelecionada ? (
               /* Travada: linha fixa, sem seletor. Ver a prop `contaTravada`. */
@@ -1155,6 +1183,7 @@ export function ModalAjusteSaldo({
                 )}
               </div>
             )}
+            <ErroCampo mensagem={obrig.erro('conta')} />
           </div>
 
           {/* Saldos */}
@@ -1167,10 +1196,13 @@ export function ModalAjusteSaldo({
                 </p>
               </div>
 
-              <div className="p-4 rounded-xl border-2 border-amber-200 bg-amber-50">
+              <div
+                data-campo="saldo"
+                className={`p-4 rounded-xl border-2 ${obrig.erro('saldo') ? cartaoCampo(obrig.erro('saldo')) : 'border-amber-200 bg-amber-50'}`}
+              >
                 <label className="flex items-center gap-2 text-sm font-medium text-amber-700 mb-2">
                   <DollarSign className="w-4 h-4" />
-                  Saldo final da conta *
+                  <span>Saldo final da conta<Obrigatorio /></span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-medium">$</span>
@@ -1187,6 +1219,7 @@ export function ModalAjusteSaldo({
                 <p className="text-xs text-amber-700 mt-1.5">
                   É este o valor que a conta vai passar a ter.
                 </p>
+                <ErroCampo mensagem={obrig.erro('saldo')} />
               </div>
             </div>
           )}
@@ -1219,10 +1252,10 @@ export function ModalAjusteSaldo({
           )}
 
           {/* Motivo */}
-          <div className="p-4 rounded-xl border-2 border-gray-200 bg-white">
+          <div data-campo="motivo" className={`p-4 rounded-xl border-2 ${cartaoCampo(obrig.erro('motivo'))}`}>
             <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
               <FileText className="w-4 h-4 text-gray-500" />
-              Motivo do Ajuste *
+              <span>Motivo do Ajuste<Obrigatorio /></span>
             </label>
             <select
               value={motivo}
@@ -1237,6 +1270,7 @@ export function ModalAjusteSaldo({
               <option value="AUDITORIA">Auditoria</option>
               <option value="OUTRO">Outro motivo</option>
             </select>
+            <ErroCampo mensagem={obrig.erro('motivo')} />
           </div>
 
           {/* Observações */}
@@ -1262,7 +1296,7 @@ export function ModalAjusteSaldo({
           </button>
           <button
             onClick={handleSalvar}
-            disabled={salvando || !contaId || saldoFinal === '' || !motivo || diferenca === 0}
+            disabled={salvando}
             className="flex items-center gap-2 px-6 py-2.5 bg-amber-600 text-white rounded-xl hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
           >
             {salvando && <Loader2 className="w-4 h-4 animate-spin" />}
