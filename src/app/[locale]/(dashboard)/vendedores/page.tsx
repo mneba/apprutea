@@ -21,7 +21,7 @@ import { Input } from '@/components/ui';
 import { comCache, chave, temCache, invalidarCache } from '@/lib/cacheDados';
 import { vendedoresService } from '@/services/vendedores';
 import { useUser } from '@/contexts/UserContext';
-import { ModalVendedor } from '@/components/vendedores';
+import { ModalVendedor, ModalCodigoAcesso } from '@/components/vendedores';
 import type { VendedorComRota } from '@/types/vendedores';
 
 const statusConfig: Record<string, { label: string; color: string; icon: any }> = {
@@ -39,6 +39,11 @@ export default function VendedoresPage() {
   // Modal
   const [modalAberto, setModalAberto] = useState(false);
   const [vendedorSelecionado, setVendedorSelecionado] = useState<VendedorComRota | null>(null);
+  const [codigoAberto, setCodigoAberto] = useState<{ id: string; nome: string } | null>(null);
+
+  // Mesma régua de fn_pode_ver_codigo_vendedor; o banco confere de novo
+  // (ADMIN só da empresa dele). Aqui decide só se o botão aparece.
+  const podeVerCodigo = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
 
   // Verificar se tem empresa selecionada
   const empresaSelecionada = localizacao?.empresa_id;
@@ -211,9 +216,11 @@ export default function VendedoresPage() {
             </div>
             <div>
               <p className="text-2xl font-bold text-gray-900">
-                {vendedores.filter((v) => v.codigo_acesso).length}
+                {/* Quem tem login no app. O código não vem mais na lista
+                    (é a senha), então a contagem é pelo vínculo do login. */}
+                {vendedores.filter((v) => v.user_id).length}
               </p>
-              <p className="text-sm text-gray-500">Com Código</p>
+              <p className="text-sm text-gray-500">Com Acesso</p>
             </div>
           </div>
         </div>
@@ -374,12 +381,21 @@ export default function VendedoresPage() {
                         </span>
                       </td>
                       <td className="px-3 py-4">
-                        {vendedor.codigo_acesso ? (
-                          <code className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-sm font-mono">
-                            {vendedor.codigo_acesso}
-                          </code>
-                        ) : (
+                        {/* O código é a SENHA do app: não vem na lista. Quem
+                            pode (SUPER_ADMIN, ADMIN da empresa) pede ao banco
+                            num clique; o banco confere e registra. */}
+                        {!vendedor.user_id ? (
                           <span className="text-gray-400 text-sm">-</span>
+                        ) : podeVerCodigo ? (
+                          <button
+                            onClick={() => setCodigoAberto({ id: vendedor.id, nome: `${vendedor.nome ?? ''} ${vendedor.apellidos ?? ''}`.trim() })}
+                            className="inline-flex items-center gap-1.5 px-2 py-1 rounded text-sm font-medium text-purple-700 bg-purple-50 hover:bg-purple-100"
+                          >
+                            <Key className="w-3.5 h-3.5" />
+                            Ver código
+                          </button>
+                        ) : (
+                          <span className="text-gray-500 text-sm font-mono">••••••</span>
                         )}
                       </td>
                       <td className="hidden xl:table-cell px-3 py-4">
@@ -407,6 +423,14 @@ export default function VendedoresPage() {
           </table>
         </div>
       </div>
+
+      {codigoAberto && (
+        <ModalCodigoAcesso
+          vendedorId={codigoAberto.id}
+          vendedorNome={codigoAberto.nome}
+          onFechar={() => setCodigoAberto(null)}
+        />
+      )}
 
       {/* Modal */}
       {modalAberto && (

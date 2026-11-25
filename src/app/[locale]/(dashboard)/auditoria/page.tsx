@@ -40,6 +40,7 @@ import {
 } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
 import { ComboBuscavel } from '@/components/auditoria/ComboBuscavel';
+import { ModalCondicoesEmprestimo } from '@/components/auditoria/ModalCondicoesEmprestimo';
 import { relatoriosService } from '@/services/relatorios';
 import { auditoriaService, TIPOS_AUDITORIA, type EventoAuditoria } from '@/services/auditoria';
 import type { EstruturaVisivel } from '@/types/relatorios';
@@ -152,6 +153,7 @@ export default function AuditoriaPage() {
   const [pagina, setPagina] = useState(0);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [emprestimoAberto, setEmprestimoAberto] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => setEstrutura(await relatoriosService.buscarEstrutura()))();
@@ -450,6 +452,15 @@ export default function AuditoriaPage() {
                           {ev.cliente}
                         </p>
                       )}
+                      {/* Nos dois tipos `referencia_id` é o id do empréstimo. */}
+                      {(ev.tipo === 'EMPRESTIMO' || ev.tipo === 'ALTERACAO') && ev.referencia_id && (
+                        <button
+                          onClick={() => setEmprestimoAberto(ev.referencia_id)}
+                          className="mt-1 text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          Ver condições
+                        </button>
+                      )}
                     </div>
 
                     <div className="shrink-0 text-right">
@@ -499,6 +510,10 @@ export default function AuditoriaPage() {
             Escolha o período e clique em Buscar.
           </p>
         </div>
+      )}
+
+      {emprestimoAberto && (
+        <ModalCondicoesEmprestimo emprestimoId={emprestimoAberto} onFechar={() => setEmprestimoAberto(null)} />
       )}
     </div>
   );

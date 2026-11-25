@@ -9,6 +9,13 @@ import type {
 
 const supabase = createClient();
 
+// As colunas de `vendedores` que o web lê — TODAS menos `codigo_acesso`.
+// O código é a SENHA do app: não vem em lista nem em cadastro, só por
+// `verCodigoAcesso`, quando alguém clica "Ver código" (25/11/2026). Coluna
+// nova na tabela entra aqui à mão; `select('*')` traria o código de volta.
+// Um literal só (sem `+`): o cliente do Supabase tipa o retorno lendo o texto.
+const COLUNAS_VENDEDOR = 'id, nome, codigo_vendedor, telefone, documento, endereco, email, status, data_admissao, created_at, updated_at, empresa_id, apellidos, estado_acesso, hierarquia_id, user_id, foto_url';
+
 export const vendedoresService = {
   // ============================================
   // CRUD DE VENDEDORES
@@ -19,7 +26,7 @@ export const vendedoresService = {
     // Buscar vendedores
     const { data: vendedores, error: errVendedores } = await supabase
       .from('vendedores')
-      .select('*')
+      .select(COLUNAS_VENDEDOR)
       .eq('empresa_id', empresaId)
       .order('nome');
 
@@ -63,7 +70,7 @@ export const vendedoresService = {
   async listarVendedores(empresaId: string): Promise<Vendedor[]> {
     const { data, error } = await supabase
       .from('vendedores')
-      .select('*')
+      .select(COLUNAS_VENDEDOR)
       .eq('empresa_id', empresaId)
       .order('nome');
 
@@ -110,7 +117,7 @@ export const vendedoresService = {
   async buscarVendedor(vendedorId: string): Promise<Vendedor | null> {
     const { data, error } = await supabase
       .from('vendedores')
-      .select('*')
+      .select(COLUNAS_VENDEDOR)
       .eq('id', vendedorId)
       .single();
 
@@ -129,7 +136,7 @@ export const vendedoresService = {
     const { data, error } = await supabase
       .from('vendedores')
       .insert(dados)
-      .select()
+      .select(COLUNAS_VENDEDOR)
       .single();
 
     if (error) {
@@ -165,6 +172,16 @@ export const vendedoresService = {
       console.error('Erro ao inativar vendedor:', error);
       throw error;
     }
+  },
+
+  // O código de acesso, só para quem pode (SUPER_ADMIN ou ADMIN da empresa).
+  // O banco confere e registra quem viu.
+  async verCodigoAcesso(vendedorId: string): Promise<string | null> {
+    const { data, error } = await supabase.rpc('fn_codigo_acesso_vendedor', {
+      p_vendedor_id: vendedorId,
+    });
+    if (error) throw new Error(error.message);
+    return (data as string | null) ?? null;
   },
 
   // Regerar o código de ACESSO (6 dígitos) do vendedor — chama a RPC no banco.

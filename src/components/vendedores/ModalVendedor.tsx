@@ -21,6 +21,7 @@ import {
   Trash2,
   Calendar,
   RefreshCw,
+  Key,
   Info,
   Users,
   Percent,
@@ -35,6 +36,8 @@ import { InputNumero } from '@/components/ui/InputNumero';
 import { ExcluirCadastro } from '@/components/ui/ExcluirCadastro';
 import { AnexosVendedor } from './AnexosVendedor';
 import { vendedoresService } from '@/services/vendedores';
+import { ModalCodigoAcesso } from './ModalCodigoAcesso';
+import { useUser } from '@/contexts/UserContext';
 import {
   EditorModeloRecibo,
   MODELO_RECIBO_PADRAO,
@@ -70,6 +73,45 @@ const DDIS = [
   { codigo: '+593', pais: 'Equador', bandeira: '🇪🇨' },
   { codigo: '+58', pais: 'Venezuela', bandeira: '🇻🇪' },
 ];
+
+// Quantos dígitos o número tem em cada país, SEM o DDI (25/11/2026, pedido
+// do Julio). Conta dígitos e mais nada: não consulta operadora nem DDD.
+const DIGITOS_POR_DDI: Record<string, { min: number; max: number; exemplo: string }> = {
+  '+55': { min: 10, max: 11, exemplo: '11 91234-5678' },
+  '+57': { min: 10, max: 10, exemplo: '300 123 4567' },
+  '+51': { min: 8, max: 9, exemplo: '912 345 678' },
+  '+58': { min: 10, max: 10, exemplo: '412 123 4567' },
+  '+54': { min: 10, max: 11, exemplo: '11 1234-5678' },
+  '+56': { min: 9, max: 9, exemplo: '9 1234 5678' },
+  '+598': { min: 8, max: 8, exemplo: '91 234 567' },
+  '+595': { min: 7, max: 9, exemplo: '981 123 456' },
+  '+591': { min: 8, max: 8, exemplo: '7123 4567' },
+  '+593': { min: 9, max: 9, exemplo: '99 123 4567' },
+};
+
+/** Mensagem do que está errado no telefone, ou null se está certo/vazio. */
+function erroTelefone(ddi: string, numero: string): string | null {
+  const d = numero.replace(/\D/g, '');
+  if (!d) return null;
+  const regra = DIGITOS_POR_DDI[ddi];
+  if (!regra) {
+    return d.length >= 7 && d.length <= 15 ? null : 'O telefone deve ter entre 7 e 15 dígitos.';
+  }
+  const pais = DDIS.find((x) => x.codigo === ddi)?.pais ?? ddi;
+  if (d.length < regra.min || d.length > regra.max) {
+    const qtd = regra.min === regra.max ? `${regra.min}` : `${regra.min} ou ${regra.max}`;
+    const repetiuDdi = d.startsWith(ddi.slice(1)) && d.length > regra.max;
+    return `${pais}: o número tem ${qtd} dígitos, sem o ${ddi}.`
+      + (repetiuDdi ? ` Não repita o ${ddi.slice(1)} no número.` : '')
+      + ` Ex.: ${regra.exemplo}`;
+  }
+  if (ddi === '+55' && d.length === 11 && d[2] !== '9') {
+    return `Brasil: celular é DDD + 9 + 8 dígitos. Ex.: ${regra.exemplo}`;
+  }
+  return null;
+}
+
+const EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 // Taxas de juros padrão
 const TAXAS_PADRAO = [5, 10, 15, 20, 25];
@@ -128,6 +170,9 @@ const RECIBOS_PADRAO: Partial<ConfiguracaoRecibo> = {
 };
 
 export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
+  const { profile } = useUser();
+  // Mesma régua de fn_pode_ver_codigo_vendedor (o banco confere de novo).
+  const podeVerCodigo = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const [activeTab, setActiveTab] = useState<TabType>('dados');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -145,10 +190,15 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
   // Abre vazio, como o cadastro de cliente: sem país se não tiver país.
   const [ddi, setDdi] = useState('');
   const [telefoneNumero, setTelefoneNumero] = useState('');
+  // Erros de e-mail e telefone, mostrados embaixo de cada campo.
+  const [errosContato, setErrosContato] = useState<{ email?: string; telefone?: string }>({});
   const [endereco, setEndereco] = useState('');
   const [fotoUrl, setFotoUrl] = useState('');
   const [dataVencimento, setDataVencimento] = useState('');
-  const [codigoAcesso, setCodigoAcesso] = useState('');
+  // O código de acesso NÃO fica no formulário (é a senha do app): abre num
+  // modal próprio, pedido ao banco só quando se clica (25/11/2026).
+  // `novo` = o código que o Regerar acabou de devolver.
+  const [codigoModal, setCodigoModal] = useState<{ novo: string | null } | null>(null);
   const [regerando, setRegerando] = useState(false);
 
   // === ABA CONFIGURAÇÕES ===
@@ -183,7 +233,6 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       setDocumento(vendedor.documento || '');
       setEndereco(vendedor.endereco || '');
       setFotoUrl(vendedor.foto_url || '');
-      setCodigoAcesso(vendedor.codigo_acesso || '');
 
       // Extrair DDI do telefone
       if (vendedor.telefone) {
@@ -439,11 +488,13 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
     setRegerando(true);
     try {
       const { codigo_novo } = await vendedoresService.regerarCodigoAcesso(vendedor.id);
-      setCodigoAcesso(codigo_novo);
-      alert(`Novo código de acesso: ${codigo_novo}`);
+      setCodigoModal({ novo: codigo_novo });
     } catch (e) {
       console.error('Erro ao regerar código de acesso:', e);
-      alert('Erro ao regerar o código de acesso. Tente novamente.');
+      // O banco recusa quem não pode, com mensagem própria; o erro do
+      // Supabase não é `Error`, mas tem `message`.
+      const msg = (e as { message?: string } | null)?.message;
+      alert(msg || 'Erro ao regerar o código de acesso. Tente novamente.');
     } finally {
       setRegerando(false);
     }
@@ -462,9 +513,27 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
       return;
     }
 
+    // E-mail e telefone: confere só o que foi ALTERADO. Medido em 25/11/2026,
+    // 14 telefones e 4 e-mails antigos já estão fora do padrão; travar o
+    // Salvar por eles impediria mexer em qualquer outra coisa do cadastro.
+    const telefoneCompleto = telefoneNumero ? `${ddi}${telefoneNumero.replace(/\D/g, '')}` : '';
+    const emailLimpo = email.trim();
+    const erros: { email?: string; telefone?: string } = {};
+    if (emailLimpo && emailLimpo !== (vendedor?.email || '').trim() && !EMAIL_VALIDO.test(emailLimpo)) {
+      erros.email = 'E-mail inválido. Ex.: nome@empresa.com';
+    }
+    if (telefoneCompleto !== (vendedor?.telefone || '')) {
+      const e = erroTelefone(ddi, telefoneNumero);
+      if (e) erros.telefone = e;
+    }
+    setErrosContato(erros);
+    if (erros.email || erros.telefone) {
+      setActiveTab('dados');
+      return;
+    }
+
     setSaving(true);
     try {
-      const telefoneCompleto = telefoneNumero ? `${ddi}${telefoneNumero.replace(/\D/g, '')}` : '';
 
       // Buscar hierarquia_id da empresa
       const hierarquiaId = await vendedoresService.buscarHierarquiaEmpresa(empresaId);
@@ -473,7 +542,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
         codigo_vendedor: codigoVendedor,
         nome,
         apellidos,
-        email,
+        email: emailLimpo,
         documento,
         telefone: telefoneCompleto,
         endereco,
@@ -722,16 +791,21 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       </div>
 
                       {/* Código de Acesso (somente leitura + regerar) */}
-                      {isEdicao && codigoAcesso && (
+                      {isEdicao && vendedor?.user_id && podeVerCodigo && (
                         <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
                           <div className="flex items-center justify-between gap-3">
                             <div>
                               <label className="block text-xs font-medium text-purple-700 mb-1">
                                 Código de Acesso (App Móvel)
                               </label>
-                              <code className="text-xl font-mono text-purple-700 font-bold tracking-widest">
-                                {codigoAcesso}
-                              </code>
+                              <button
+                                type="button"
+                                onClick={() => setCodigoModal({ novo: null })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-purple-700 bg-white border border-purple-300 rounded-lg hover:bg-purple-100 transition-colors"
+                              >
+                                <Key className="w-4 h-4" />
+                                Ver código
+                              </button>
                             </div>
                             <div className="flex items-center gap-3">
                               {dataVencimento && (
@@ -755,6 +829,14 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                             </div>
                           </div>
                         </div>
+                      )}
+                      {codigoModal && vendedor && (
+                        <ModalCodigoAcesso
+                          vendedorId={vendedor.id}
+                          vendedorNome={`${vendedor.nome ?? ''} ${vendedor.apellidos ?? ''}`.trim()}
+                          codigoNovo={codigoModal.novo}
+                          onFechar={() => setCodigoModal(null)}
+                        />
                       )}
                     </div>
                   </div>
@@ -794,10 +876,11 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       <input
                         type="email"
                         value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        onChange={(e) => { setEmail(e.target.value); setErrosContato((x) => ({ ...x, email: undefined })); }}
+                        className={`w-full px-4 py-3 rounded-xl border focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errosContato.email ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
                         placeholder="email@exemplo.com"
                       />
+                      {errosContato.email && <p className="mt-1 text-xs text-red-600">{errosContato.email}</p>}
                     </div>
 
                     <div>
@@ -820,7 +903,7 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                       <div className="flex">
                         <select
                           value={ddi}
-                          onChange={(e) => setDdi(e.target.value)}
+                          onChange={(e) => { setDdi(e.target.value); setErrosContato((x) => ({ ...x, telefone: undefined })); }}
                           className="px-3 py-3 rounded-l-xl border border-r-0 border-gray-200 bg-gray-50 text-sm focus:ring-2 focus:ring-blue-500 min-w-[110px]"
                         >
                           {/* Sem pais e escolha legitima: o numero fica como foi
@@ -835,11 +918,12 @@ export function ModalVendedor({ vendedor, empresaId, onClose, onSave }: Props) {
                         <input
                           type="tel"
                           value={telefoneNumero}
-                          onChange={(e) => setTelefoneNumero(e.target.value)}
-                          className="flex-1 px-4 py-3 rounded-r-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                          placeholder="11999999999"
+                          onChange={(e) => { setTelefoneNumero(e.target.value); setErrosContato((x) => ({ ...x, telefone: undefined })); }}
+                          className={`flex-1 px-4 py-3 rounded-r-xl border focus:ring-2 focus:ring-blue-500 focus:border-transparent ${errosContato.telefone ? 'border-red-400 bg-red-50' : 'border-gray-200'}`}
+                          placeholder={DIGITOS_POR_DDI[ddi]?.exemplo ?? '11999999999'}
                         />
                       </div>
+                      {errosContato.telefone && <p className="mt-1 text-xs text-red-600">{errosContato.telefone}</p>}
                     </div>
                   </div>
 

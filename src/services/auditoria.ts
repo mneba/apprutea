@@ -83,4 +83,78 @@ export const auditoriaService = {
     }
     return (data ?? []) as EventoAuditoria[];
   },
+
+  /** As condições do empréstimo: originais, atuais e cada alteração. */
+  async condicoesEmprestimo(emprestimoId: string): Promise<CondicoesEmprestimo | null> {
+    const { data, error } = await supabase.rpc('fn_auditoria_emprestimo', {
+      p_emprestimo_id: emprestimoId,
+    });
+    if (error) {
+      console.error('Erro na auditoria do empréstimo:', error);
+      throw error;
+    }
+    return (data ?? null) as CondicoesEmprestimo | null;
+  },
 };
+
+// =====================================================================
+// AS CONDIÇÕES DE UM EMPRÉSTIMO (fn_auditoria_emprestimo, 24/11/2026)
+// =====================================================================
+// Pedido do Julio de 03/11: reconstruir como o empréstimo foi configurado e
+// comparar com as alterações. O "original" é o ANTES da primeira alteração
+// (desde 14/10/2026 a alteração grava as condições inteiras); sem alteração,
+// é o próprio registro. `data_primeiro_vencimento` e `vencimentos` só passaram
+// a ser gravados na alteração em 24/11/2026 — em alteração mais velha eles
+// não existem no "antes", e a tela diz "não registrado".
+
+/** Campos de condição. Todos opcionais: registro antigo não tem todos. */
+export interface Condicoes {
+  valor_principal?: number | null;
+  taxa_juros?: number | null;
+  numero_parcelas?: number | null;
+  frequencia_pagamento?: string | null;
+  dia_semana_cobranca?: number | null;
+  dias_semana_cobranca?: number[] | null;
+  dia_mes_cobranca?: number | null;
+  dias_mes_cobranca?: number[] | null;
+  data_primeiro_vencimento?: string | null;
+  vencimentos?: string[] | null;
+  credito_absorvido?: number | null;
+  [outra: string]: unknown;
+}
+
+export interface AlteracaoEmprestimo {
+  momento: string;
+  /** ALTERACAO (pela tela) ou CORRECAO (reparo por script). */
+  acao: 'ALTERACAO' | 'CORRECAO';
+  usuario: string | null;
+  antes: Condicoes | null;
+  depois: Condicoes | null;
+  resumo: string | null;
+  descricao: string | null;
+}
+
+export interface CondicoesEmprestimo {
+  emprestimo: {
+    id: string;
+    cliente: string | null;
+    codigo_cliente: number | null;
+    rota: string | null;
+    tipo_emprestimo: string | null;
+    status: string | null;
+    data_emprestimo: string | null;
+    dia_liquidacao: string | null;
+    criado_em: string | null;
+    criado_por: string | null;
+    valor_total: number | null;
+    valor_parcela: number | null;
+  };
+  original: Condicoes;
+  fonte_original: 'REGISTRO' | 'PRIMEIRA_ALTERACAO';
+  atual: Condicoes;
+  alteracoes: AlteracaoEmprestimo[];
+  /** Condições do empréstimo anterior, na renovação/renegociação. */
+  origem: (Condicoes & { id: string; data_emprestimo: string | null; status: string | null }) | null;
+  /** Criado antes de 14/10/2026: pode ter sido alterado sem deixar rastro. */
+  antes_do_registro: boolean;
+}
