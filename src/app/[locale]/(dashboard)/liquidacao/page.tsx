@@ -939,6 +939,9 @@ export default function LiquidacaoDiariaPage() {
   const [modalAjustes, setModalAjustes] = useState(false);
   const [ajustesDia, setAjustesDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
   const [modalCobrancas, setModalCobrancas] = useState(false);
+  // Busca por cliente dentro de "Cobranças do Dia" (Julio, 14/11/2026): é por
+  // essa lista que se acha o pagamento a estornar. Zera ao abrir o modal.
+  const [buscaCobrancas, setBuscaCobrancas] = useState('');
   const [estornandoId, setEstornandoId] = useState<string | null>(null);
   const [resetandoId, setResetandoId] = useState<string | null>(null);
   const [cobrancasDia, setCobrancasDia] = useState<{ total: number; qtd: number; itens: any[] }>({ total: 0, qtd: 0, itens: [] });
@@ -2883,7 +2886,7 @@ export default function LiquidacaoDiariaPage() {
                 <h3 className="text-xs font-semibold text-gray-900 uppercase tracking-wide">Movimentos do Dia</h3>
               </div>
               <div className="divide-y divide-gray-100">
-                <button onClick={() => setModalCobrancas(true)} className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left">
+                <button onClick={() => { setBuscaCobrancas(''); setModalCobrancas(true); }} className="w-full px-3 py-2.5 hover:bg-emerald-50/50 transition-colors flex items-center gap-2 text-left">
                   <div className="w-7 h-7 bg-emerald-50 rounded-md flex items-center justify-center flex-shrink-0">
                     <Banknote className="w-3.5 h-3.5 text-emerald-600" />
                   </div>
@@ -3389,14 +3392,46 @@ export default function LiquidacaoDiariaPage() {
                     <X className="w-5 h-5" />
                   </button>
                 </div>
+                {/* Busca pelo nome do cliente: sem acento nem maiúscula ("joao"
+                    acha "João"), filtra enquanto digita. */}
+                {cobrancasDia.itens.length > 0 && (
+                  <div className="px-4 pt-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        id="busca-cobrancas-dia"
+                        type="text"
+                        autoFocus
+                        value={buscaCobrancas}
+                        onChange={(e) => setBuscaCobrancas(e.target.value)}
+                        placeholder="Buscar cliente..."
+                        className="w-full pl-9 pr-9 py-2 rounded-lg border border-gray-200 text-sm focus:ring-2 focus:ring-emerald-500 focus:border-transparent"
+                      />
+                      {buscaCobrancas && (
+                        <button
+                          onClick={() => setBuscaCobrancas('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                          aria-label="Limpar busca"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 <div className="flex-1 overflow-y-auto p-4">
                   {cobrancasDia.itens.length > 0 ? (
                     <div className="space-y-3">
                       {(() => {
+                        const semAcento = (s: string) =>
+                          s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+                        const termo = semAcento(buscaCobrancas);
                         // Agrupar por cliente (chave: emprestimo_id, senão cliente_nome)
                         const grupos: { chave: string; nome: string; itens: any[] }[] = [];
                         const idx: Record<string, number> = {};
-                        cobrancasDia.itens.forEach((c: any) => {
+                        cobrancasDia.itens
+                          .filter((c: any) => !termo || semAcento(String(c.cliente_nome || c.descricao || '')).includes(termo))
+                          .forEach((c: any) => {
                           const chave = c.ref_emprestimo_id || c.cliente_nome || c.id;
                           if (idx[chave] === undefined) {
                             idx[chave] = grupos.length;
@@ -3406,6 +3441,14 @@ export default function LiquidacaoDiariaPage() {
                         });
                         // Ordena parcelas dentro do grupo por número
                         grupos.forEach(g => g.itens.sort((a, b) => (a.numero_parcela || 0) - (b.numero_parcela || 0)));
+
+                        if (grupos.length === 0) {
+                          return (
+                            <p className="text-center py-6 text-sm text-gray-500">
+                              Nenhuma cobrança de cliente com &quot;{buscaCobrancas.trim()}&quot;.
+                            </p>
+                          );
+                        }
 
                         return grupos.map((g) => {
                           const totalGrupo = g.itens.reduce((s, c) => s + Number(c.valor || 0), 0);

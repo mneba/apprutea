@@ -1271,8 +1271,16 @@ export function ModalNotasLiquidacao({
                             <span className="text-sm text-gray-500 truncate">{nota.nota}</span>
                           )}
                         </div>
-                        <div className="flex items-center gap-2 text-[11px] text-gray-400">
-                          <span>{formatarDataHora(nota.created_at)}</span>
+                        {/* O dia da LIQUIDAÇÃO vem primeiro; o instante vai como
+                            "registrada". Relato do Julio de 24/11/2026: nota
+                            lançada em 24/11 na liquidação de 18/11 estava gravada
+                            18/11, mas aqui o destaque era o `created_at`. */}
+                        <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-gray-400">
+                          <span className="font-medium text-gray-600">
+                            {nota.data_referencia ? `Liquidação ${formatarDataCurta(nota.data_referencia)}` : 'Sem liquidação'}
+                          </span>
+                          <span>·</span>
+                          <span>registrada {formatarDataHora(nota.created_at)}</span>
                           <span>·</span>
                           <span className="truncate">{nota.autor_nome}</span>
                           {nota.prioridade !== 'NORMAL' && (
