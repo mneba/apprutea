@@ -62,16 +62,6 @@ export function SeletorLocalizacao() {
   );
   const [isOpen, setIsOpen] = useState(false);
 
-  // O campo de busca recebe o foco quando o seletor abre: quem clica ali
-  // está procurando alguma coisa, e obrigar um segundo clique no campo é
-  // cobrar pedágio. `requestAnimationFrame` porque o input só existe
-  // depois que o painel foi desenhado.
-  const campoBusca = useRef<HTMLInputElement>(null);
-  useEffect(() => {
-    if (!isOpen) { setBuscaRota(''); return; }
-    const id = requestAnimationFrame(() => campoBusca.current?.focus());
-    return () => cancelAnimationFrame(id);
-  }, [isOpen]);
   const [hierarquias, setHierarquias] = useState<Hierarquia[]>([]);
   const [cidades, setCidades] = useState<Cidade[]>([]);
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
@@ -356,6 +346,25 @@ export function SeletorLocalizacao() {
     // de um usuário comum contém apenas as rotas das empresas dele.
   }, [rotasTodas, empresas, cidades, hierarquias]);
 
+  // O campo de busca recebe o foco quando o seletor abre: quem clica ali
+  // está procurando alguma coisa, e obrigar um segundo clique no campo é
+  // cobrar pedágio. `requestAnimationFrame` porque o input só existe
+  // depois que o painel foi desenhado.
+  //
+  // ⚠ O campo só é MONTADO depois que `carregarDados` termina (ele exige
+  // `indiceRotas.length > 1`), então focar na abertura não bastava: o
+  // `requestAnimationFrame` corria antes de o input existir e o foco se
+  // perdia (relato do Mauricio, 26/11/2026). O efeito depende também de o
+  // campo existir, e foca no quadro em que ele aparece.
+  const campoBusca = useRef<HTMLInputElement>(null);
+  const temCampoBusca = indiceRotas.length > 1;
+  useEffect(() => {
+    if (!isOpen) { setBuscaRota(''); return; }
+    if (!temCampoBusca) return;
+    const id = requestAnimationFrame(() => campoBusca.current?.focus());
+    return () => cancelAnimationFrame(id);
+  }, [isOpen, temCampoBusca]);
+
   // Índice de EMPRESAS, para a busca achar a empresa mesmo quando o termo não
   // bate com nenhuma rota — inclusive empresa sem rota nenhuma, que pelo
   // índice de rotas seria invisível.
@@ -609,7 +618,7 @@ export function SeletorLocalizacao() {
           {/* Busca de rotas. Era exclusiva do SUPER_ADMIN; agora é de quem
               tiver mais de uma rota para procurar — que é justamente quem
               precisa. Com uma rota só, procurar não faz sentido. */}
-          {indiceRotas.length > 1 && (
+          {temCampoBusca && (
             <div className="px-3 pt-3">
               <div className="relative">
                 <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
