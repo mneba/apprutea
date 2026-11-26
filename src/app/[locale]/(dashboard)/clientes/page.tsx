@@ -261,7 +261,9 @@ function TabelaClientes({
                   {cliente.updated_at ? formatarData(cliente.updated_at) : '—'}
                 </td>
                 <td className="px-3 py-2 text-center" onClick={(e) => e.stopPropagation()}>
-                  {podeNovaVenda && (
+                  {/* Suspenso não vende: a função recusaria no fim; o admin
+                      reativa antes (o motivo da suspensão fica registrado). */}
+                  {podeNovaVenda && cliente.status !== 'SUSPENSO' && (
                     <button
                       onClick={() => onNovaVenda(cliente)}
                       className="px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors"
@@ -345,7 +347,15 @@ function AvisoSemRotas() {
 
 export default function ClientesPage() {
   const { localizacao, profile, isSuperAdmin, permissoes } = useUser();
-  const podeNovoCliente = isSuperAdmin || permissoes?.['GESTAO_CLIENTES']?.pode_guardar === true;
+  // Venda pelo web (Novo Cliente / Nova Venda) é permissão PRÓPRIA desde
+  // 26/11/2026 (relato do Julio de 12/10): antes vinha com o Salvar de
+  // Gestão de Clientes, e quem corrigia telefone também vendia. A régua do
+  // banco é `fn_pode_venda_web` (as funções de venda a consultam); aqui a
+  // leitura é a mesma — permissão VENDA_WEB (todos/guardar) — só para
+  // decidir se o botão aparece. Editar cadastro continua com GESTAO_CLIENTES.
+  const podeNovoCliente = isSuperAdmin
+    || permissoes?.['VENDA_WEB']?.pode_todos === true
+    || permissoes?.['VENDA_WEB']?.pode_guardar === true;
   const empresaId = localizacao?.empresa_id;
   // Idioma da sessão — só a exportação usa: o arquivo vai para o cliente
   // final, que opera em espanhol. O resto desta tela tem português no código.
@@ -841,7 +851,7 @@ export default function ClientesPage() {
                 ? 'Tente ajustar os filtros de busca.'
                 : 'Comece cadastrando seu primeiro cliente.'}
             </p>
-            {!busca && !statusFiltro && !rotaFiltro && temRotas && (
+            {!busca && !statusFiltro && !rotaFiltro && temRotas && podeNovoCliente && (
               <button
                 onClick={() => handleNovaVenda()}
                 className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700"

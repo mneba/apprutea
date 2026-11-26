@@ -127,8 +127,22 @@ export function ModalNovaVenda({
     const ddiSugerido = DDIS.find(d => d.pais === localizacao?.hierarquia?.pais)?.codigo || '';
   
     const isNovoCliente = !cliente;
-  const temEmprestimoAtivo = cliente && 'qtd_emprestimos_ativos' in cliente && cliente.qtd_emprestimos_ativos > 0;
-  
+
+  // O TIPO da venda sai dos empréstimos do cliente NAQUELA ROTA, lidos ao
+  // escolher a rota (efeito abaixo) — ADICIONAL se há conta aberta (ATIVO ou
+  // VENCIDO), RENOVAÇÃO se não há, NOVO sem cliente. É a mesma pergunta que
+  // `fn_nova_venda_adicional` e `fn_renovar_emprestimo` fazem.
+  //
+  // ⚠ Até 26/11/2026 decidia por `cliente.qtd_emprestimos_ativos > 0`, que
+  // conta só `status = 'ATIVO'` e em TODAS as rotas: 395 clientes com conta
+  // aberta só em VENCIDO caíam em "Renovação" e a função recusava ("Cliente
+  // possui empréstimo em aberto. Quite primeiro."). Status mente; a data e a
+  // rota não. Sem leitura (falhou) o tipo fica null e o Confirmar não abre.
+  type TipoVenda = 'NOVO' | 'ADICIONAL' | 'RENOVACAO';
+  const [tipoVenda, setTipoVenda] = useState<TipoVenda | null>(null);
+  const [checandoTipo, setChecandoTipo] = useState(false);
+  const [erroTipo, setErroTipo] = useState(false);
+
   const [activeTab, setActiveTab] = useState<TabType>('cliente');
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState('');
@@ -340,6 +354,58 @@ export function ModalNovaVenda({
   const rotaSelecionada = rotas.find(r => r.id === rotaId);
   const vendedorId = rotaSelecionada?.vendedor_id;
 
+  // Cliente de outra rota da empresa: a venda pelo web INCLUI a rota no
+  // cadastro (`fn_venda_web_incluir_rota`, dentro da função de venda). No app
+  // o vendedor pede e o admin aprova (20/11/2026); aqui quem vende é quem
+  // aprovaria, então não há a quem pedir — a tela só avisa.
+  const clienteForaDaRota = !!cliente && !!rotaId
+    && Array.isArray(cliente.rotas_ids) && !cliente.rotas_ids.includes(rotaId);
+
+  // Tipo da venda + condições do último empréstimo da rota.
+  useEffect(() => {
+    if (!isOpen) return;
+    if (!cliente) { setTipoVenda('NOVO'); setErroTipo(false); return; }
+    if (!rotaId) { setTipoVenda(null); setErroTipo(false); return; }
+    let cancelado = false;
+    (async () => {
+      setChecandoTipo(true);
+      setErroTipo(false);
+      try {
+        const supabase = createClient();
+        const { data, error } = await supabase
+          .from('emprestimos')
+          .select('status, numero_parcelas, taxa_juros, frequencia_pagamento, dia_semana_cobranca, dias_semana_cobranca, dia_mes_cobranca, dias_mes_cobranca, iniciar_proximo_mes, created_at')
+          .eq('cliente_id', cliente.id)
+          .eq('rota_id', rotaId)
+          .order('created_at', { ascending: false });
+        if (cancelado) return;
+        if (error) { setTipoVenda(null); setErroTipo(true); return; }
+        const lista = (data || []) as any[];
+        const temAberto = lista.some(e => e.status === 'ATIVO' || e.status === 'VENCIDO');
+        setTipoVenda(temAberto ? 'ADICIONAL' : 'RENOVACAO');
+
+        // Como no app: renovação e adicional abrem com as condições do
+        // último empréstimo da rota, em vez de 30 / 20% / diário fixos.
+        const ult = lista[0];
+        if (ult) {
+          if (ult.numero_parcelas) setNumeroParcelas(String(ult.numero_parcelas));
+          if (ult.taxa_juros != null) setTaxaJuros(String(ult.taxa_juros));
+          if (ult.frequencia_pagamento) setFrequencia(ult.frequencia_pagamento);
+          if (Array.isArray(ult.dias_semana_cobranca) && ult.dias_semana_cobranca.length) setDiasSemanaCobranca(ult.dias_semana_cobranca);
+          else if (ult.dia_semana_cobranca != null) setDiasSemanaCobranca([ult.dia_semana_cobranca]);
+          if (ult.dia_mes_cobranca) setDiaMesCobranca(ult.dia_mes_cobranca);
+          if (Array.isArray(ult.dias_mes_cobranca)) setDiasMesCobranca(ult.dias_mes_cobranca);
+          setIniciarProximoMes(!!ult.iniciar_proximo_mes);
+        }
+      } catch {
+        if (!cancelado) { setTipoVenda(null); setErroTipo(true); }
+      } finally {
+        if (!cancelado) setChecandoTipo(false);
+      }
+    })();
+    return () => { cancelado = true; };
+  }, [isOpen, cliente, rotaId]);
+
   // Verifica se a rota tem liquidação aberta (aviso no modal; a FN também valida no backend)
   useEffect(() => {
     if (!isOpen || !rotaId) {
@@ -479,7 +545,9 @@ export function ModalNovaVenda({
         if (!result.success) {
           throw new Error(result.error || 'Erro ao criar venda');
         }
-      } else if (temEmprestimoAtivo) {
+      } else if (tipoVenda === null) {
+        throw new Error('Não foi possível ler os empréstimos do cliente nesta rota. Tente de novo.');
+      } else if (tipoVenda === 'ADICIONAL') {
         // Empréstimo adicional
         const result = await clientesService.vendaAdicional({
           cliente_id: cliente!.id,
@@ -572,7 +640,10 @@ export function ModalNovaVenda({
             )}
             <div>
               <h2 className="text-xl font-semibold text-white">
-                {isNovoCliente ? 'Novo Cliente' : temEmprestimoAtivo ? 'Venda Adicional' : 'Renovação'}
+                {isNovoCliente ? 'Novo Cliente'
+                  : tipoVenda === 'ADICIONAL' ? 'Venda Adicional'
+                  : tipoVenda === 'RENOVACAO' ? 'Renovação'
+                  : 'Nova Venda'}
               </h2>
               {cliente && (
                 <div className="flex items-center gap-2 text-blue-100 text-sm">
@@ -639,6 +710,24 @@ export function ModalNovaVenda({
             <AlertCircle className="w-5 h-5 text-amber-500 flex-shrink-0" />
             <p className="text-sm text-amber-800">
               Esta rota não tem uma liquidação aberta. É necessário abrir o dia (liquidação) antes de registrar a venda.
+            </p>
+          </div>
+        )}
+
+        {clienteForaDaRota && (
+          <div className="mx-6 mt-4 flex items-center gap-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
+            <AlertCircle className="w-5 h-5 text-blue-500 flex-shrink-0" />
+            <p className="text-sm text-blue-800">
+              Este cliente não é desta rota. Ao confirmar, a rota passa a fazer parte do cadastro dele.
+            </p>
+          </div>
+        )}
+
+        {erroTipo && !checandoTipo && (
+          <div className="mx-6 mt-4 flex items-center gap-3 p-4 bg-red-50 rounded-xl border border-red-200">
+            <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+            <p className="text-sm text-red-700">
+              Não foi possível ler os empréstimos do cliente nesta rota. Sem isso a tela não sabe se é renovação ou adicional — troque a rota ou tente de novo.
             </p>
           </div>
         )}
@@ -1274,8 +1363,9 @@ export function ModalNovaVenda({
           {activeTab === 'resumo' && (
             <button
               onClick={handleSalvar}
-              disabled={saving || liquidacaoAberta === false}
-              title={liquidacaoAberta === false ? 'É necessário ter uma liquidação aberta nesta rota para registrar a venda' : undefined}
+              disabled={saving || liquidacaoAberta === false || (!!cliente && (checandoTipo || tipoVenda === null))}
+              title={liquidacaoAberta === false ? 'É necessário ter uma liquidação aberta nesta rota para registrar a venda'
+                : (!!cliente && tipoVenda === null) ? 'Aguardando a leitura dos empréstimos do cliente nesta rota' : undefined}
               className="flex items-center gap-2 px-6 py-2.5 bg-green-600 text-white rounded-xl hover:bg-green-700 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {saving ? (
