@@ -3229,7 +3229,16 @@ export default function LiquidacaoDiariaPage() {
         </div>
       )}
       <ModalReabrirLiquidacao isOpen={modalReabrir} onClose={() => setModalReabrir(false)} onConfirmar={handleReabrirLiquidacao} loading={loadingAcao} dataLiquidacao={diaOperacional(liquidacao)} diaPosteriorAberto={diaPosteriorAberto} />
-      <ModalExtratoLiquidacao isOpen={modalExtrato} onClose={() => setModalExtrato(false)} liquidacao={liquidacao} rotaNome={rota?.nome || ''} vendedorNome={vendedor?.nome} empresaNome={empresaNome} />
+      <ModalExtratoLiquidacao
+        isOpen={modalExtrato}
+        onClose={() => setModalExtrato(false)}
+        liquidacao={liquidacao}
+        rotaNome={rota?.nome || ''}
+        vendedorNome={vendedor?.nome}
+        empresaNome={empresaNome}
+        // estorno de quitação pelo extrato (27/11/2026): o dia mudou, a tela recarrega
+        onDiaAlterado={() => { if (liquidacao && rota) carregarDadosLiquidacao(liquidacao, rota.id, { forcar: true }); }}
+      />
       <ModalDetalhesCliente isOpen={modalClienteAberto} onClose={() => { setModalClienteAberto(false); setClienteSelecionado(null); }} cliente={clienteSelecionado} />
 
       {liquidacao && rota && vendedor && (

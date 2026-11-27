@@ -24,6 +24,7 @@ import {
 import { createClient } from '@/lib/supabase/client';
 import type { LiquidacaoDiaria } from '@/types/liquidacao';
 import { useTrabalhaCredito } from '@/hooks/useTrabalhaCredito';
+import { useUser } from '@/contexts/UserContext';
 
 // =====================================================
 // TIPOS
@@ -301,6 +302,8 @@ interface ModalExtratoLiquidacaoProps {
   rotaNome: string;
   vendedorNome?: string;
   empresaNome?: string;
+  /** Chamado depois de uma ação que mudou o dia (estorno de quitação): a página recarrega. */
+  onDiaAlterado?: () => void;
 }
 
 export function ModalExtratoLiquidacao({
@@ -310,7 +313,20 @@ export function ModalExtratoLiquidacao({
   rotaNome,
   vendedorNome,
   empresaNome,
+  onDiaAlterado,
 }: ModalExtratoLiquidacaoProps) {
+  // ESTORNO DE QUITAÇÃO (27/11/2026). Pedido do Julio de 13/11: a quitação
+  // ("Quitar tudo") não se desfazia pelo web. O estorno por parcela recusa
+  // recebimento de várias parcelas de propósito; quem desfaz a OPERAÇÃO
+  // inteira é `fn_estornar_quitacao`, só com o dia REABERTO (regra do
+  // Resetar cliente) e só enquanto o empréstimo for o último do cliente — o
+  // banco decide e nomeia o que bloqueia. Aqui só SUPER_ADMIN e ADMIN veem o
+  // botão; a permissão de verdade é `fn_pode_estornar_quitacao`, no banco.
+  const { profile, isSuperAdmin } = useUser();
+  const podeEstornarQuitacao = isSuperAdmin || profile?.tipo_usuario === 'ADMIN';
+  const [estornoQuit, setEstornoQuit] = useState<{ op: string; nome: string; valor: number; sub: string } | null>(null);
+  const [motivoEstornoQuit, setMotivoEstornoQuit] = useState('');
+  const [estornandoQuit, setEstornandoQuit] = useState(false);
   const [loading, setLoading] = useState(false);
   const [gerando, setGerando] = useState(false);
   // Rota sem crédito à vista: as frases de crédito saem. O dinheiro de cada
@@ -848,6 +864,38 @@ export function ModalExtratoLiquidacao({
   // empréstimo sem dado de contrato; sem resumo operacional; sem clientes
   // que faltam. ⚠ Os totais não mudam: saem das contas de cima.
   const diaAberto = ['ABERTO', 'REABERTO'].includes(String(liqDb?.status || liquidacao?.status || '').toUpperCase());
+  // O botão de estornar quitação só em REABERTO: "reabrir o dia existe PARA corrigir".
+  const diaReaberto = String(liqDb?.status || liquidacao?.status || '').toUpperCase() === 'REABERTO';
+
+  const confirmarEstornoQuitacao = async () => {
+    if (!estornoQuit || estornandoQuit) return;
+    const motivo = motivoEstornoQuit.trim();
+    if (!motivo) { alert('Informe o motivo do estorno.'); return; }
+    setEstornandoQuit(true);
+    try {
+      const supabase = createClient();
+      const { data, error } = await supabase.rpc('fn_estornar_quitacao', {
+        p_operacao_id: estornoQuit.op,
+        p_motivo: motivo,
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (!res || res.sucesso === false) {
+        alert(res?.mensagem || 'Não foi possível estornar a quitação.');
+        return;
+      }
+      alert(res.mensagem || 'Quitação estornada.');
+      setEstornoQuit(null);
+      setMotivoEstornoQuit('');
+      await carregarExtrato();
+      onDiaAlterado?.();
+    } catch (e: any) {
+      console.error('Erro ao estornar quitação:', e);
+      alert(e?.message || 'Erro ao estornar a quitação. Tente novamente.');
+    } finally {
+      setEstornandoQuit(false);
+    }
+  };
   const plural = (n: number, um: string, varios: string) => `${n} ${n === 1 ? um : varios}`;
 
   type LinhaCob = {
@@ -855,6 +903,8 @@ export function ModalExtratoLiquidacao({
     quitacao: boolean; usado: number; gerado: number; nota: string; soCredito: number;
     /** "parcela 5 parcial: faltam $ 100,00" / "completou a parcela 5 (…)". */
     parcial: string;
+    /** A operação da quitação, para o botão Estornar (null quando a linha não tem uma). */
+    opQuitacao: string | null;
   };
   const linhasCobranca: LinhaCob[] = (() => {
     const subParcelas = (nums: number[]) => (nums.length === 1 ? `parcela ${nums[0]}` : fraseParcelas(nums));
@@ -870,6 +920,7 @@ export function ModalExtratoLiquidacao({
       nota: rec.linhas.map((pg) => fraseCredito(creditoLiquido(pg), mostrarCredito)).join('').replace(/^ · /, ''),
       soCredito: 0,
       parcial: fraseParcial(rec.linhas),
+      opQuitacao: rec.linhas.find((pg) => pg.tipo_operacao === 'QUITACAO')?.operacao_id || null,
     }));
     // Recebimento SÓ de crédito, de empréstimo sem linha em dinheiro no dia:
     // sem isto ele sumia. Aparece com 0,00 e fora da cobrança.
@@ -893,6 +944,7 @@ export function ModalExtratoLiquidacao({
         quitacao: ls.some((pg) => pg.tipo_operacao === 'QUITACAO'),
         usado: 0, gerado: 0, nota: '', parcial: '',
         soCredito: ls.reduce((s, pg) => s + Number(pg.valor_credito_usado || pg.valor_pago_atual || 0), 0),
+        opQuitacao: ls.find((pg) => pg.tipo_operacao === 'QUITACAO')?.operacao_id || null,
       });
     }
     return out.sort((a, b) => (a.criado < b.criado ? -1 : a.criado > b.criado ? 1 : 0));
@@ -1307,6 +1359,17 @@ export function ModalExtratoLiquidacao({
                       </div>
                     )}
                     {!!l.nota && <p className="text-xs text-gray-500 mt-0.5">{l.nota}</p>}
+                    {diaReaberto && podeEstornarQuitacao && l.opQuitacao && (
+                      <div className="mt-1.5 flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => { setMotivoEstornoQuit(''); setEstornoQuit({ op: l.opQuitacao!, nome: l.nome, valor: l.valor, sub: l.sub }); }}
+                          className="text-xs font-medium text-violet-800 hover:text-violet-900 underline underline-offset-2"
+                        >
+                          Estornar quitação
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
                 {linhasCobVisiveis.length === 0 && (
@@ -1451,6 +1514,45 @@ export function ModalExtratoLiquidacao({
           )}
         </div>
       </div>
+
+      {/* Motivo do estorno de quitação. O texto NÃO menciona backup nem
+          "pode ser desfeito" (decisão de 09/11 no reset de rota). */}
+      {estornoQuit && (
+        <div className="absolute inset-0 z-10 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={() => !estornandoQuit && setEstornoQuit(null)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-md p-5">
+            <h3 className="text-base font-semibold text-gray-900">Estornar quitação</h3>
+            <p className="text-sm text-gray-700 mt-2">
+              <span className="font-medium">{estornoQuit.nome}</span> · {estornoQuit.sub} · {formatarMoeda(estornoQuit.valor)}
+            </p>
+            <p className="text-xs text-gray-600 mt-2">
+              As parcelas voltam a aberto, o empréstimo volta a ativo, o lançamento é anulado e o dinheiro sai do caixa deste dia.
+              Os dias seguintes são reencadeados. A execução fica registrada com seu usuário.
+            </p>
+            <label htmlFor="motivo-estorno-quitacao" className="block text-xs font-medium text-gray-700 mt-3 mb-1">Motivo</label>
+            <textarea
+              id="motivo-estorno-quitacao"
+              value={motivoEstornoQuit}
+              onChange={(e) => setMotivoEstornoQuit(e.target.value)}
+              rows={3}
+              autoFocus
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500"
+              placeholder="Ex.: cliente desistiu da renovação; a quitação não aconteceu"
+            />
+            <div className="mt-4 flex justify-end gap-2">
+              <button type="button" onClick={() => setEstornoQuit(null)} disabled={estornandoQuit}
+                className="px-3 py-2 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                Voltar
+              </button>
+              <button type="button" onClick={confirmarEstornoQuitacao} disabled={estornandoQuit}
+                className="px-3 py-2 text-sm rounded-lg bg-violet-700 text-white hover:bg-violet-800 disabled:opacity-50 inline-flex items-center gap-2">
+                {estornandoQuit && <Loader2 className="w-4 h-4 animate-spin" />}
+                Estornar quitação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
