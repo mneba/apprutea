@@ -1068,23 +1068,30 @@ function FormularioEdicao({
         />
       </div>
 
-      {/* Toggle Empréstimo Adicional */}
+      {/* Toggle Empréstimo Adicional. Até 27/11/2026 ficava travado com atraso
+          ("Cliente possui parcelas em atraso"). Pedido do Julio de 27/10: o admin
+          autoriza ciente da situação, e o atraso vira AVISO, não trava. Só no web
+          (decisão do Mauricio, 27/11): o popup do app segue oferecendo adicional
+          apenas em dia; cliente em atraso autorizado aqui é vendido pelo web.
+          `fn_nova_venda_adicional` nunca olhou atraso, só a marca. */}
       <div className={`flex items-center justify-between p-4 rounded-xl border ${
-        temEmprestimoEmDia 
-          ? 'bg-blue-50 border-blue-100' 
-          : 'bg-gray-50 border-gray-200'
+        !temEmprestimoAtivo
+          ? 'bg-gray-50 border-gray-200'
+          : temParcelaEmAtraso
+            ? 'bg-amber-50 border-amber-200'
+            : 'bg-blue-50 border-blue-100'
       }`}>
         <div className="flex items-center gap-3">
           <ShieldCheck className={`w-5 h-5 ${
-            temEmprestimoEmDia ? 'text-blue-600' : 'text-gray-400'
+            !temEmprestimoAtivo ? 'text-gray-400' : temParcelaEmAtraso ? 'text-amber-600' : 'text-blue-600'
           }`} />
           <div>
             <p className="font-medium text-gray-900">Permite Empréstimo Adicional</p>
-            <p className="text-sm text-gray-500">
+            <p className={`text-sm ${temEmprestimoAtivo && temParcelaEmAtraso ? 'text-amber-700' : 'text-gray-500'}`}>
               {!temEmprestimoAtivo
                 ? 'Cliente não possui empréstimo ativo'
-                : !temEmprestimoEmDia
-                  ? 'Cliente possui parcelas em atraso'
+                : temParcelaEmAtraso
+                  ? 'Atenção: cliente com parcelas em atraso. Autorize ciente disso.'
                   : 'Autoriza novo empréstimo mesmo com outro ativo'}
             </p>
           </div>
@@ -1092,7 +1099,7 @@ function FormularioEdicao({
         <Toggle
           checked={form.permite_emprestimo_adicional}
           onChange={(value) => handleChange('permite_emprestimo_adicional', value)}
-          disabled={!temEmprestimoEmDia}
+          disabled={!temEmprestimoAtivo}
         />
       </div>
 
