@@ -973,6 +973,10 @@ export default function LiquidacaoDiariaPage() {
 
   const podeReabrir = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
   const isLiquidacaoReaberta = liquidacao?.status === 'REABERTO';
+  // Estorno de quitação (27/11/2026): dia ABERTO ou REABERTO, só SUPER_ADMIN e
+  // ADMIN veem o botão; `fn_pode_estornar_quitacao` decide de verdade no banco.
+  const diaAbertoOuReaberto = liquidacao?.status === 'ABERTO' || liquidacao?.status === 'REABERTO';
+  const podeEstornarQuitacao = profile?.tipo_usuario === 'SUPER_ADMIN' || profile?.tipo_usuario === 'ADMIN';
 
   // Joga um payload (recém-buscado ou vindo do cache) nos states da tela
   const aplicarDadosLiquidacao = useCallback((d: DadosLiquidacaoCache) => {
@@ -1309,6 +1313,67 @@ export default function LiquidacaoDiariaPage() {
   }, [aplicarDadosLiquidacao]);
 
   // Estornar uma cobrança (parcela paga) — versão WEB (permite liquidação fechada)
+  // ESTORNO DE QUITAÇÃO (27/11/2026). A linha de quitação em Cobranças do Dia
+  // é UM lançamento sem `ref_parcela_id`; o estorno por parcela a recusa de
+  // propósito. `fn_estornar_quitacao` desfaz a OPERAÇÃO inteira: anula o
+  // lançamento uma vez, reabre as parcelas, devolve o crédito, volta o
+  // empréstimo a ativo e reencadeia os dias seguintes. Bloqueia, nomeando, se
+  // o cliente já tem empréstimo posterior na rota. A operação sai dos
+  // pagamentos que apontam para este lançamento.
+  const handleEstornarQuitacao = useCallback(async (c: any) => {
+    const supabase = (await import('@/lib/supabase/client')).createClient();
+    const desc = c.cliente_nome || c.descricao || 'quitação';
+    let operacaoId: string | null = null;
+    try {
+      const { data: pgs, error } = await supabase
+        .from('pagamentos_parcelas')
+        .select('operacao_id')
+        .eq('financeiro_id', c.id)
+        .eq('estornado', false)
+        .limit(1);
+      if (error) throw error;
+      operacaoId = pgs?.[0]?.operacao_id ?? null;
+    } catch (e: any) {
+      alert('Não foi possível identificar a quitação deste lançamento. ' + (e?.message || ''));
+      return;
+    }
+    if (!operacaoId) {
+      alert('Este lançamento não tem pagamento ativo ligado a ele (já foi estornado?).');
+      return;
+    }
+    if (!confirm(
+      `Estornar a quitação de ${desc} (${formatarMoeda(Number(c.valor || 0))})?\n\n` +
+      `As parcelas voltam a aberto, o empréstimo volta a ativo, o lançamento é anulado e o dinheiro sai do caixa deste dia. ` +
+      `Os dias seguintes são reencadeados.\n\nA execução fica registrada com seu usuário.`
+    )) return;
+    const motivo = prompt('Motivo do estorno (obrigatório):');
+    if (motivo === null) return;
+    if (!motivo.trim()) { alert('O motivo é obrigatório para estornar.'); return; }
+
+    setEstornandoId(c.id);
+    try {
+      const { data, error } = await supabase.rpc('fn_estornar_quitacao', {
+        p_operacao_id: operacaoId,
+        p_motivo: motivo.trim(),
+      });
+      if (error) throw error;
+      const res = Array.isArray(data) ? data[0] : data;
+      if (!res || res.sucesso === false) {
+        alert(res?.mensagem || 'Não foi possível estornar a quitação.');
+        return;
+      }
+      alert(res.mensagem || 'Quitação estornada.');
+      if (liquidacao && rota) {
+        await carregarDadosLiquidacao(liquidacao, rota.id, { forcar: true });
+      }
+    } catch (e: any) {
+      console.error('Erro ao estornar quitação:', e);
+      alert(e?.message || 'Erro ao estornar a quitação. Tente novamente.');
+    } finally {
+      setEstornandoId(null);
+    }
+  }, [liquidacao, rota, carregarDadosLiquidacao]);
+
   const handleEstornarCobranca = useCallback(async (c: any) => {
     if (!c?.ref_parcela_id) {
       alert('Esta cobrança não está vinculada a uma parcela e não pode ser estornada por aqui.');
@@ -3484,20 +3549,33 @@ export default function LiquidacaoDiariaPage() {
                                           : (c.descricao || 'Cobrança')}
                                       </p>
                                       <p className="text-[11px] text-gray-400">{c.forma_pagamento || 'Dinheiro'}</p>
-                                      {/* Quitação de várias parcelas = UM lançamento sem ref_parcela_id. Não há
-                                          estorno por parcela (a função recusa); o caminho é Resetar o cliente.
-                                          Sem este aviso o usuário procura o botão aqui e não entende (16/11/2026). */}
-                                      {!c.ref_parcela_id && (
+                                      {/* Quitação de várias parcelas = UM lançamento sem ref_parcela_id. O estorno
+                                          por parcela recusa; desde 27/11/2026 o caminho é "Estornar quitação"
+                                          (fn_estornar_quitacao), com o dia aberto ou reaberto. Sem dia aberto, ou sem
+                                          ser admin, fica o aviso (16/11/2026). */}
+                                      {!c.ref_parcela_id && !(diaAbertoOuReaberto && podeEstornarQuitacao) && (
                                         <p className="mt-1 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1">
-                                          Recebimento de várias parcelas: não se estorna aqui.{' '}
-                                          {isLiquidacaoReaberta
-                                            ? 'Para desfazê-lo, use "Resetar" na linha do cliente em Clientes do Dia.'
-                                            : 'Para desfazê-lo, reabra o dia e use "Resetar" na linha do cliente em Clientes do Dia.'}
+                                          Recebimento de várias parcelas: não se estorna por parcela.{' '}
+                                          {diaAbertoOuReaberto
+                                            ? 'Um administrador pode estornar a quitação inteira aqui.'
+                                            : 'Para desfazê-lo, reabra o dia e use "Estornar quitação" aqui.'}
                                         </p>
                                       )}
                                     </div>
                                     <div className="flex items-center gap-2 flex-shrink-0">
                                       <span className="text-sm font-bold text-emerald-700 tabular-nums whitespace-nowrap">{formatarMoeda(Number(c.valor || 0))}</span>
+                                      {!c.ref_parcela_id && diaAbertoOuReaberto && podeEstornarQuitacao && (
+                                        <button
+                                          onClick={() => handleEstornarQuitacao(c)}
+                                          disabled={estornandoId === c.id}
+                                          className="px-2 py-1 rounded-lg text-xs font-medium text-violet-800 bg-violet-50 hover:bg-violet-100 border border-violet-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                          title="Estornar a quitação inteira"
+                                        >
+                                          {estornandoId === c.id
+                                            ? <Loader2 className="w-4 h-4 animate-spin" />
+                                            : 'Estornar quitação'}
+                                        </button>
+                                      )}
                                       {c.ref_parcela_id && (
                                         <button
                                           onClick={() => handleEstornarCobranca(c)}

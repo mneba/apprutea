@@ -864,8 +864,9 @@ export function ModalExtratoLiquidacao({
   // empréstimo sem dado de contrato; sem resumo operacional; sem clientes
   // que faltam. ⚠ Os totais não mudam: saem das contas de cima.
   const diaAberto = ['ABERTO', 'REABERTO'].includes(String(liqDb?.status || liquidacao?.status || '').toUpperCase());
-  // O botão de estornar quitação só em REABERTO: "reabrir o dia existe PARA corrigir".
-  const diaReaberto = String(liqDb?.status || liquidacao?.status || '').toUpperCase() === 'REABERTO';
+  // O botão de estornar quitação em dia ABERTO ou REABERTO (a função do banco
+  // aceita os dois); em dia fechado, reabrir primeiro.
+  const diaReaberto = diaAberto;
 
   const confirmarEstornoQuitacao = async () => {
     if (!estornoQuit || estornandoQuit) return;
